@@ -16,7 +16,10 @@ export default function TagsPage() {
     try {
       const data = await getTags()
       setTags(data || [])
-    } catch { setTags([]) }
+    } catch (err) {
+      console.error('Failed to load tags:', err)
+      setTags([])
+    }
     setLoading(false)
   }
 

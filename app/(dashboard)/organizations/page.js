@@ -79,9 +79,18 @@ export default function OrganizationsPage() {
   }, [search, typeFilter])
 
   useEffect(() => {
-    loadOrgs()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let active = true
+    setLoading(true)
+    getOrganizations({ search })
+      .then(data => {
+        if (active) {
+          setOrgs((data || []).filter(o => !typeFilter || o.type === typeFilter))
+        }
+      })
+      .catch(() => { if (active) setOrgs([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [search, typeFilter])
 
   return (
     <div className="p-6 space-y-5">

@@ -67,16 +67,15 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
 
-  const loadContacts = useCallback(async () => {
+  useEffect(() => {
+    let active = true
     setLoading(true)
-    try {
-      const data = await getContacts({ search })
-      setContacts(data || [])
-    } catch { setContacts([]) }
-    setLoading(false)
+    getContacts({ search })
+      .then(data => { if (active) setContacts(data || []) })
+      .catch(() => { if (active) setContacts([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [search])
-
-  useEffect(() => { loadContacts() }, [loadContacts])
 
   return (
     <div className="p-6 space-y-5">

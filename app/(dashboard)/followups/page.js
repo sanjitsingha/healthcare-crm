@@ -7,6 +7,21 @@ import { format, isToday, isTomorrow, isPast, isThisWeek } from 'date-fns'
 import clsx from 'clsx'
 
 const TYPE_ICONS = { Call: Phone, Email: Mail, Meeting: Users, Demo: Video, 'Site Visit': MapPin, Other: Bell }
+
+function Section({ title, items, color, onUpdate }) {
+  if (items.length === 0) return null
+  return (
+    <div>
+      <h2 className="text-xs font-700 mb-3 flex items-center gap-2" style={{ color }}>
+        <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
+        {title} ({items.length})
+      </h2>
+      <div className="space-y-2">
+        {items.map(f => <FollowupCard key={f.id} followup={f} onUpdate={onUpdate} />)}
+      </div>
+    </div>
+  )
+}
 const FOLLOWUP_TYPES = ['Call', 'Email', 'Meeting', 'Demo', 'Site Visit', 'Other']
 
 function CreateFollowupModal({ open, onClose, onCreated }) {
@@ -174,16 +189,15 @@ export default function FollowupsPage() {
   const [filter, setFilter] = useState('Scheduled')
   const [createOpen, setCreateOpen] = useState(false)
 
-  const loadFollowups = useCallback(async () => {
+  useEffect(() => {
+    let active = true
     setLoading(true)
-    try {
-      const data = await getFollowups({ status: filter !== 'All' ? filter : '' })
-      setFollowups(data || [])
-    } catch { setFollowups([]) }
-    setLoading(false)
+    getFollowups({ status: filter !== 'All' ? filter : '' })
+      .then(data => { if (active) setFollowups(data || []) })
+      .catch(() => { if (active) setFollowups([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [filter])
-
-  useEffect(() => { loadFollowups() }, [loadFollowups])
 
   const handleUpdate = async (id, updates) => {
     const updated = await updateFollowup(id, updates)
@@ -204,18 +218,6 @@ export default function FollowupsPage() {
     return !isThisWeek(d) && !isPast(d)
   })
   const completed = followups.filter(f => f.status !== 'Scheduled' && f.status !== 'Rescheduled')
-
-  const Section = ({ title, items, color }) => items.length === 0 ? null : (
-    <div>
-      <h2 className="text-xs font-700 mb-3 flex items-center gap-2" style={{ color }}>
-        <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
-        {title} ({items.length})
-      </h2>
-      <div className="space-y-2">
-        {items.map(f => <FollowupCard key={f.id} followup={f} onUpdate={handleUpdate} />)}
-      </div>
-    </div>
-  )
 
   return (
     <div className="p-6 space-y-5">
@@ -266,12 +268,12 @@ export default function FollowupsPage() {
           action={<Button onClick={() => setCreateOpen(true)}><Plus size={14} /> Schedule Follow-up</Button>} />
       ) : (
         <div className="space-y-6">
-          <Section title="OVERDUE" items={overdue} color="#ef4444" />
-          <Section title="TODAY" items={today} color="var(--color-brand)" />
-          <Section title="TOMORROW" items={tomorrow} color="#3b82f6" />
-          <Section title="THIS WEEK" items={thisWeek} color="#8b5cf6" />
-          <Section title="LATER" items={later} color="#9ca3af" />
-          <Section title="COMPLETED / MISSED" items={completed} color="#d1d5db" />
+          <Section title="OVERDUE" items={overdue} color="#ef4444" onUpdate={handleUpdate} />
+          <Section title="TODAY" items={today} color="var(--color-brand)" onUpdate={handleUpdate} />
+          <Section title="TOMORROW" items={tomorrow} color="#3b82f6" onUpdate={handleUpdate} />
+          <Section title="THIS WEEK" items={thisWeek} color="#8b5cf6" onUpdate={handleUpdate} />
+          <Section title="LATER" items={later} color="#9ca3af" onUpdate={handleUpdate} />
+          <Section title="COMPLETED / MISSED" items={completed} color="#d1d5db" onUpdate={handleUpdate} />
         </div>
       )}
 

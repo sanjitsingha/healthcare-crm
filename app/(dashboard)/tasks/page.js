@@ -114,9 +114,18 @@ export default function TasksPage() {
   }, [filter, search])
 
   useEffect(() => {
-    loadTasks()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let active = true
+    setLoading(true)
+    getTasks({ status: filter !== 'All' ? filter : '' })
+      .then(data => {
+        if (active) {
+          setTasks((data || []).filter(t => !search || t.title.toLowerCase().includes(search.toLowerCase())))
+        }
+      })
+      .catch(() => { if (active) setTasks([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [filter, search])
 
   const handleUpdate = async (id, updates) => {
     try {
