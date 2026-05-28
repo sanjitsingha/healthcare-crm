@@ -113,7 +113,10 @@ export default function TasksPage() {
     setLoading(false)
   }, [filter, search])
 
-  useEffect(() => { loadTasks() }, [loadTasks])
+  useEffect(() => {
+    loadTasks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleUpdate = async (id, updates) => {
     try {
