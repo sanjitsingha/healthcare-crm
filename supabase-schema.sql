@@ -1,4 +1,28 @@
--- Healthcare CRM Schema (Multi-tenant)
+-- Healthcare CRM Schema (Multi-tenant Clean Installation)
+
+-- Cleanup existing (uncomment if needed)
+-- drop table if exists notifications cascade;
+-- drop table if exists audit_logs cascade;
+-- drop table if exists automation_rules cascade;
+-- drop table if exists payments cascade;
+-- drop table if exists invoices cascade;
+-- drop table if exists followups cascade;
+-- drop table if exists tasks cascade;
+-- drop table if exists activities cascade;
+-- drop table if exists patient_tags cascade;
+-- drop table if exists lead_tags cascade;
+-- drop table if exists tags cascade;
+-- drop table if exists appointments cascade;
+-- drop table if exists leads cascade;
+-- drop table if exists contacts cascade;
+-- drop table if exists patients cascade;
+-- drop table if exists user_roles cascade;
+-- drop table if exists role_permissions cascade;
+-- drop table if exists permissions cascade;
+-- drop table if exists roles cascade;
+-- drop table if exists branches cascade;
+-- drop table if exists organization_settings cascade;
+-- drop table if exists organizations cascade;
 
 -- Organizations table
 create table if not exists organizations (
@@ -22,7 +46,7 @@ create table if not exists organizations (
 -- Organization Settings
 create table if not exists organization_settings (
   id uuid default gen_random_uuid() primary key,
-  organization_id uuid references organizations(id) on delete cascade,
+  organization_id uuid references organizations(id) on delete cascade not null,
   key text not null,
   value jsonb,
   created_at timestamptz default now(),
@@ -46,7 +70,7 @@ create table if not exists branches (
 -- Roles & Permissions
 create table if not exists roles (
   id uuid default gen_random_uuid() primary key,
-  organization_id uuid references organizations(id) on delete cascade,
+  organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
   description text,
   created_at timestamptz default now()
@@ -61,16 +85,16 @@ create table if not exists permissions (
 
 create table if not exists role_permissions (
   id uuid default gen_random_uuid() primary key,
-  role_id uuid references roles(id) on delete cascade,
-  permission_id uuid references permissions(id) on delete cascade,
+  role_id uuid references roles(id) on delete cascade not null,
+  permission_id uuid references permissions(id) on delete cascade not null,
   created_at timestamptz default now()
 );
 
 create table if not exists user_roles (
   id uuid default gen_random_uuid() primary key,
   user_id uuid not null, -- References auth.users(id)
-  role_id uuid references roles(id) on delete cascade,
-  organization_id uuid references organizations(id) on delete cascade,
+  role_id uuid references roles(id) on delete cascade not null,
+  organization_id uuid references organizations(id) on delete cascade not null,
   created_at timestamptz default now()
 );
 
@@ -94,14 +118,14 @@ create table if not exists patients (
 -- Contacts (People) table
 create table if not exists contacts (
   id uuid default gen_random_uuid() primary key,
-  organization_id uuid references organizations(id) on delete cascade,
+  organization_id uuid references organizations(id) on delete cascade not null,
   first_name text not null,
   last_name text,
   email text,
   phone text,
   designation text,
   department text,
-  linked_organization_id uuid references organizations(id) on delete set null, -- If they belong to another org (e.g. referral)
+  linked_organization_id uuid references organizations(id) on delete set null,
   notes text,
   avatar_color text default '#3b82f6',
   status text check (status in ('Active','Inactive')) default 'Active',
@@ -123,7 +147,7 @@ create table if not exists leads (
   value numeric default 0,
   currency text default 'INR',
   source text default 'Other',
-  assigned_to uuid, -- References auth.users(id)
+  assigned_to uuid,
   expected_close_date date,
   closed_date date,
   lost_reason text,
@@ -135,9 +159,9 @@ create table if not exists leads (
 create table if not exists appointments (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
-  patient_id uuid references patients(id) on delete cascade,
+  patient_id uuid references patients(id) on delete cascade not null,
   lead_id uuid references leads(id) on delete set null,
-  doctor_id uuid, -- References auth.users(id) or a separate doctors table
+  doctor_id uuid,
   branch_id uuid references branches(id) on delete set null,
   scheduled_at timestamptz not null,
   duration_minutes integer default 30,
@@ -160,22 +184,22 @@ create table if not exists tags (
 
 create table if not exists lead_tags (
   id uuid default gen_random_uuid() primary key,
-  lead_id uuid references leads(id) on delete cascade,
-  tag_id uuid references tags(id) on delete cascade,
+  lead_id uuid references leads(id) on delete cascade not null,
+  tag_id uuid references tags(id) on delete cascade not null,
   created_at timestamptz default now()
 );
 
 create table if not exists patient_tags (
   id uuid default gen_random_uuid() primary key,
-  patient_id uuid references patients(id) on delete cascade,
-  tag_id uuid references tags(id) on delete cascade,
+  patient_id uuid references patients(id) on delete cascade not null,
+  tag_id uuid references tags(id) on delete cascade not null,
   created_at timestamptz default now()
 );
 
 -- Activities / Comments table
 create table if not exists activities (
   id uuid default gen_random_uuid() primary key,
-  organization_id uuid references organizations(id) on delete cascade,
+  organization_id uuid references organizations(id) on delete cascade not null,
   entity_type text check (entity_type in ('lead','contact','organization','patient')) not null,
   entity_id uuid not null,
   type text check (type in ('comment','email','call','meeting','note','status_change','stage_change','whatsapp')) default 'comment',
@@ -187,7 +211,7 @@ create table if not exists activities (
 -- Tasks table
 create table if not exists tasks (
   id uuid default gen_random_uuid() primary key,
-  organization_id uuid references organizations(id) on delete cascade,
+  organization_id uuid references organizations(id) on delete cascade not null,
   title text not null,
   description text,
   entity_type text check (entity_type in ('lead','contact','organization','patient')),
@@ -203,7 +227,7 @@ create table if not exists tasks (
 -- Follow-ups table
 create table if not exists followups (
   id uuid default gen_random_uuid() primary key,
-  organization_id uuid references organizations(id) on delete cascade,
+  organization_id uuid references organizations(id) on delete cascade not null,
   lead_id uuid references leads(id) on delete cascade,
   patient_id uuid references patients(id) on delete cascade,
   type text check (type in ('Call','Email','Meeting','Demo','Site Visit','WhatsApp','Other')) default 'Call',
@@ -219,7 +243,7 @@ create table if not exists followups (
 create table if not exists invoices (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
-  patient_id uuid references patients(id) on delete cascade,
+  patient_id uuid references patients(id) on delete cascade not null,
   appointment_id uuid references appointments(id) on delete set null,
   invoice_number text not null,
   amount numeric not null,
@@ -234,7 +258,7 @@ create table if not exists invoices (
 create table if not exists payments (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
-  invoice_id uuid references invoices(id) on delete cascade,
+  invoice_id uuid references invoices(id) on delete cascade not null,
   amount numeric not null,
   payment_method text check (payment_method in ('Cash','Card','UPI','Bank Transfer','Other')),
   payment_date timestamptz default now(),
@@ -247,7 +271,7 @@ create table if not exists automation_rules (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
-  trigger_event text not null, -- e.g. 'lead_created'
+  trigger_event text not null,
   conditions jsonb default '{}',
   actions jsonb default '[]',
   is_active boolean default true,
@@ -289,6 +313,9 @@ create index if not exists appointments_org_idx on appointments(organization_id)
 create index if not exists appointments_scheduled_idx on appointments(scheduled_at);
 create index if not exists tasks_org_idx on tasks(organization_id);
 create index if not exists activities_org_idx on activities(organization_id);
+create index if not exists followups_org_idx on followups(organization_id);
+create index if not exists invoices_org_idx on invoices(organization_id);
+create index if not exists automation_rules_org_idx on automation_rules(organization_id);
 
 -- Enable Row Level Security (RLS)
 alter table organizations enable row level security;
@@ -314,8 +341,7 @@ alter table automation_rules enable row level security;
 alter table audit_logs enable row level security;
 alter table notifications enable row level security;
 
--- Permissive policies for now (filter by organization_id in practice)
--- In a real app, you'd use (auth.uid() in (select user_id from user_roles where organization_id = table.organization_id))
+-- Permissive policies for now
 create policy "Allow all org access" on organizations for all using (true) with check (true);
 create policy "Allow all settings access" on organization_settings for all using (true) with check (true);
 create policy "Allow all branch access" on branches for all using (true) with check (true);

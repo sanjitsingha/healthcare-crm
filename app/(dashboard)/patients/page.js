@@ -65,19 +65,15 @@ export default function PatientsPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
 
-  const loadPatients = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await getPatients({ search })
-      setPatients(data || [])
-    } catch { setPatients([]) }
-    setLoading(false)
-  }, [search])
-
   useEffect(() => {
-    loadPatients()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let active = true
+    setLoading(true)
+    getPatients({ search })
+      .then(data => { if (active) setPatients(data || []) })
+      .catch(() => { if (active) setPatients([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [search])
 
   return (
     <div className="p-6 space-y-6">

@@ -10,10 +10,13 @@ export default function AutomationPage() {
   const [createOpen, setCreateOpen] = useState(false)
 
   useEffect(() => {
-    getAutomationRules().then(data => {
-      setRules(data || [])
-      setLoading(false)
-    })
+    getAutomationRules()
+      .then(data => setRules(data || []))
+      .catch(err => {
+        console.error('Failed to fetch automation rules:', err)
+        setRules([])
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const defaultRules = [

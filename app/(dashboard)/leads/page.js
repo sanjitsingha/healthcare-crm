@@ -195,19 +195,15 @@ export default function LeadsPage() {
   const [view, setView] = useState('kanban')
   const [createOpen, setCreateOpen] = useState(false)
 
-  const loadLeads = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await getLeads({ search, stage: stageFilter })
-      setLeads(data || [])
-    } catch { setLeads([]) }
-    setLoading(false)
-  }, [search, stageFilter])
-
   useEffect(() => {
-    loadLeads()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    let active = true
+    setLoading(true)
+    getLeads({ search, stage: stageFilter })
+      .then(data => { if (active) setLeads(data || []) })
+      .catch(() => { if (active) setLeads([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [search, stageFilter])
 
   return (
     <div className="p-6 space-y-6">
