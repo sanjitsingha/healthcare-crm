@@ -1,31 +1,31 @@
 -- Healthcare CRM Schema (Multi-tenant Clean Installation)
 
--- Cleanup existing (uncomment if needed)
--- drop table if exists notifications cascade;
--- drop table if exists audit_logs cascade;
--- drop table if exists automation_rules cascade;
--- drop table if exists payments cascade;
--- drop table if exists invoices cascade;
--- drop table if exists followups cascade;
--- drop table if exists tasks cascade;
--- drop table if exists activities cascade;
--- drop table if exists patient_tags cascade;
--- drop table if exists lead_tags cascade;
--- drop table if exists tags cascade;
--- drop table if exists appointments cascade;
--- drop table if exists leads cascade;
--- drop table if exists contacts cascade;
--- drop table if exists patients cascade;
--- drop table if exists user_roles cascade;
--- drop table if exists role_permissions cascade;
--- drop table if exists permissions cascade;
--- drop table if exists roles cascade;
--- drop table if exists branches cascade;
--- drop table if exists organization_settings cascade;
--- drop table if exists organizations cascade;
+-- Drop existing tables to start from zero
+drop table if exists notifications cascade;
+drop table if exists audit_logs cascade;
+drop table if exists automation_rules cascade;
+drop table if exists payments cascade;
+drop table if exists invoices cascade;
+drop table if exists followups cascade;
+drop table if exists tasks cascade;
+drop table if exists activities cascade;
+drop table if exists patient_tags cascade;
+drop table if exists lead_tags cascade;
+drop table if exists tags cascade;
+drop table if exists appointments cascade;
+drop table if exists leads cascade;
+drop table if exists contacts cascade;
+drop table if exists patients cascade;
+drop table if exists user_roles cascade;
+drop table if exists role_permissions cascade;
+drop table if exists permissions cascade;
+drop table if exists roles cascade;
+drop table if exists branches cascade;
+drop table if exists organization_settings cascade;
+drop table if exists organizations cascade;
 
 -- Organizations table
-create table if not exists organizations (
+create table organizations (
   id uuid default gen_random_uuid() primary key,
   name text not null,
   type text check (type in ('Hospital','Clinic','Pharmacy','Lab','Insurance','Wellness Center','Dental Clinic','Other')) default 'Clinic',
@@ -44,7 +44,7 @@ create table if not exists organizations (
 );
 
 -- Organization Settings
-create table if not exists organization_settings (
+create table organization_settings (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   key text not null,
@@ -55,7 +55,7 @@ create table if not exists organization_settings (
 );
 
 -- Branches
-create table if not exists branches (
+create table branches (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
@@ -68,7 +68,7 @@ create table if not exists branches (
 );
 
 -- Roles & Permissions
-create table if not exists roles (
+create table roles (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
@@ -76,21 +76,21 @@ create table if not exists roles (
   created_at timestamptz default now()
 );
 
-create table if not exists permissions (
+create table permissions (
   id uuid default gen_random_uuid() primary key,
   name text unique not null,
   description text,
   created_at timestamptz default now()
 );
 
-create table if not exists role_permissions (
+create table role_permissions (
   id uuid default gen_random_uuid() primary key,
   role_id uuid references roles(id) on delete cascade not null,
   permission_id uuid references permissions(id) on delete cascade not null,
   created_at timestamptz default now()
 );
 
-create table if not exists user_roles (
+create table user_roles (
   id uuid default gen_random_uuid() primary key,
   user_id uuid not null, -- References auth.users(id)
   role_id uuid references roles(id) on delete cascade not null,
@@ -99,7 +99,7 @@ create table if not exists user_roles (
 );
 
 -- Patients
-create table if not exists patients (
+create table patients (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   first_name text not null,
@@ -116,7 +116,7 @@ create table if not exists patients (
 );
 
 -- Contacts (People) table
-create table if not exists contacts (
+create table contacts (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   first_name text not null,
@@ -134,7 +134,7 @@ create table if not exists contacts (
 );
 
 -- Leads table
-create table if not exists leads (
+create table leads (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   title text not null,
@@ -156,7 +156,7 @@ create table if not exists leads (
 );
 
 -- Appointments
-create table if not exists appointments (
+create table appointments (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   patient_id uuid references patients(id) on delete cascade not null,
@@ -172,7 +172,7 @@ create table if not exists appointments (
 );
 
 -- Tags
-create table if not exists tags (
+create table tags (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
@@ -182,14 +182,14 @@ create table if not exists tags (
   unique(organization_id, name)
 );
 
-create table if not exists lead_tags (
+create table lead_tags (
   id uuid default gen_random_uuid() primary key,
   lead_id uuid references leads(id) on delete cascade not null,
   tag_id uuid references tags(id) on delete cascade not null,
   created_at timestamptz default now()
 );
 
-create table if not exists patient_tags (
+create table patient_tags (
   id uuid default gen_random_uuid() primary key,
   patient_id uuid references patients(id) on delete cascade not null,
   tag_id uuid references tags(id) on delete cascade not null,
@@ -197,7 +197,7 @@ create table if not exists patient_tags (
 );
 
 -- Activities / Comments table
-create table if not exists activities (
+create table activities (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   entity_type text check (entity_type in ('lead','contact','organization','patient')) not null,
@@ -209,7 +209,7 @@ create table if not exists activities (
 );
 
 -- Tasks table
-create table if not exists tasks (
+create table tasks (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   title text not null,
@@ -225,7 +225,7 @@ create table if not exists tasks (
 );
 
 -- Follow-ups table
-create table if not exists followups (
+create table followups (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   lead_id uuid references leads(id) on delete cascade,
@@ -240,7 +240,7 @@ create table if not exists followups (
 );
 
 -- Billing & Finance
-create table if not exists invoices (
+create table invoices (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   patient_id uuid references patients(id) on delete cascade not null,
@@ -255,7 +255,7 @@ create table if not exists invoices (
   updated_at timestamptz default now()
 );
 
-create table if not exists payments (
+create table payments (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   invoice_id uuid references invoices(id) on delete cascade not null,
@@ -267,7 +267,7 @@ create table if not exists payments (
 );
 
 -- Automation Rules
-create table if not exists automation_rules (
+create table automation_rules (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
@@ -280,7 +280,7 @@ create table if not exists automation_rules (
 );
 
 -- Audit Logs
-create table if not exists audit_logs (
+create table audit_logs (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   user_id uuid,
@@ -293,7 +293,7 @@ create table if not exists audit_logs (
 );
 
 -- Notifications
-create table if not exists notifications (
+create table notifications (
   id uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
   user_id uuid not null,
@@ -306,16 +306,16 @@ create table if not exists notifications (
 );
 
 -- Indexes
-create index if not exists leads_org_idx on leads(organization_id);
-create index if not exists leads_stage_idx on leads(stage);
-create index if not exists patients_org_idx on patients(organization_id);
-create index if not exists appointments_org_idx on appointments(organization_id);
-create index if not exists appointments_scheduled_idx on appointments(scheduled_at);
-create index if not exists tasks_org_idx on tasks(organization_id);
-create index if not exists activities_org_idx on activities(organization_id);
-create index if not exists followups_org_idx on followups(organization_id);
-create index if not exists invoices_org_idx on invoices(organization_id);
-create index if not exists automation_rules_org_idx on automation_rules(organization_id);
+create index leads_org_idx on leads(organization_id);
+create index leads_stage_idx on leads(stage);
+create index patients_org_idx on patients(organization_id);
+create index appointments_org_idx on appointments(organization_id);
+create index appointments_scheduled_idx on appointments(scheduled_at);
+create index tasks_org_idx on tasks(organization_id);
+create index activities_org_idx on activities(organization_id);
+create index followups_org_idx on followups(organization_id);
+create index invoices_org_idx on invoices(organization_id);
+create index automation_rules_org_idx on automation_rules(organization_id);
 
 -- Enable Row Level Security (RLS)
 alter table organizations enable row level security;
