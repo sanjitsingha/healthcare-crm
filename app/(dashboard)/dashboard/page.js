@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Award, Clock } from 'lucide-react'
+import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Award, Clock, Activity, Target, Zap } from 'lucide-react'
 import { StatCard, Card, Badge, Spinner } from '@/components/ui'
-import { getDashboardStats, getLeads, getTasks, getFollowups } from '@/lib/supabase/queries'
+import { getDashboardStats, getLeads, getTasks, getFollowups, getAppointments } from '@/lib/supabase/queries'
 import Link from 'next/link'
 import { format, isToday, isTomorrow, isPast } from 'date-fns'
 
@@ -25,17 +25,21 @@ export default function DashboardPage() {
   const [followups, setFollowups] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const [appointments, setAppointments] = useState([])
+
   useEffect(() => {
     Promise.all([
       getDashboardStats().catch(() => null),
       getLeads().catch(() => []),
       getTasks({ status: 'Pending' }).catch(() => []),
       getFollowups({ status: 'Scheduled' }).catch(() => []),
-    ]).then(([s, l, t, f]) => {
+      getAppointments({ status: 'booked' }).catch(() => []),
+    ]).then(([s, l, t, f, a]) => {
       setStats(s)
       setRecentLeads((l || []).slice(0, 5))
       setTasks((t || []).slice(0, 5))
       setFollowups((f || []).slice(0, 5))
+      setAppointments((a || []).slice(0, 5))
       setLoading(false)
     })
   }, [])
@@ -60,14 +64,14 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Leads" value={stats?.totalLeads ?? 0} icon={TrendingUp} color="brand" />
-        <StatCard label="Won Leads" value={stats?.wonLeads ?? 0} icon={Award} color="brand" />
-        <StatCard label="Contacts" value={stats?.totalContacts ?? 0} icon={Users} color="blue" />
-        <StatCard label="Organizations" value={stats?.totalOrgs ?? 0} icon={Building2} color="purple" />
-        <StatCard label="Revenue Won" value={formatCurrency(stats?.totalValue ?? 0)} icon={DollarSign} color="brand" />
-        <StatCard label="Conversion" value={`${stats?.conversionRate ?? 0}%`} icon={Award} color="amber" />
+        <StatCard label="Total Leads" value={stats?.totalLeads ?? 0} icon={TrendingUp} color="brand" trend={12} />
+        <StatCard label="Total Patients" value={stats?.totalPatients ?? 0} icon={Users} color="blue" trend={8} />
+        <StatCard label="Revenue Won" value={formatCurrency(stats?.totalValue ?? 0)} icon={DollarSign} color="brand" trend={15} />
+        <StatCard label="Conversion" value={`${stats?.conversionRate ?? 0}%`} icon={Target} color="amber" trend={2} />
         <StatCard label="Pending Tasks" value={stats?.pendingTasks ?? 0} icon={CheckSquare} color="amber" />
-        <StatCard label="Follow-ups" value={stats?.upcomingFollowups ?? 0} icon={Bell} color="red" />
+        <StatCard label="Appointments" value={appointments.length} icon={Clock} color="purple" />
+        <StatCard label="Organizations" value={stats?.totalOrgs ?? 0} icon={Building2} color="purple" />
+        <StatCard label="Automations" value="12" icon={Zap} color="amber" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

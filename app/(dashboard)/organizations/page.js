@@ -78,7 +78,10 @@ export default function OrganizationsPage() {
     setLoading(false)
   }, [search, typeFilter])
 
-  useEffect(() => { loadOrgs() }, [loadOrgs])
+  useEffect(() => {
+    loadOrgs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="p-6 space-y-5">

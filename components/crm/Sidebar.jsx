@@ -3,25 +3,27 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Building2, Users, TrendingUp,
-  CheckSquare, Bell, Settings, Heart, Menu, X, ChevronRight
+  CheckSquare, Bell, Settings, Heart, Menu, X, ChevronRight,
+  UserRound, CalendarDays, CreditCard, Zap, Tags
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/leads', icon: TrendingUp, label: 'Leads' },
+  { href: '/leads', icon: TrendingUp, label: 'Lead Pipeline' },
+  { href: '/patients', icon: UserRound, label: 'Patients' },
+  { href: '/appointments', icon: CalendarDays, label: 'Appointments' },
+  { href: '/billing', icon: CreditCard, label: 'Billing & Finance' },
   { href: '/contacts', icon: Users, label: 'Contacts' },
   { href: '/organizations', icon: Building2, label: 'Organizations' },
   { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
-  { href: '/followups', icon: Bell, label: 'Follow-ups' },
+  { href: '/automation', icon: Zap, label: 'Automation' },
+  { href: '/tags', icon: Tags, label: 'Tags' },
 ]
 
-export default function Sidebar() {
-  const pathname = usePathname()
-  const [mobileOpen, setMobileOpen] = useState(false)
-
-  const SidebarContent = () => (
+function SidebarContent({ pathname, setMobileOpen }) {
+  return (
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-[var(--color-border)]">
@@ -73,6 +75,11 @@ export default function Sidebar() {
       </div>
     </div>
   )
+}
+
+export default function Sidebar() {
+  const pathname = usePathname()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <>
@@ -81,7 +88,7 @@ export default function Sidebar() {
         className="hidden md:flex flex-col fixed left-0 top-0 h-full z-20 border-r border-[var(--color-border)]"
         style={{ width: '220px', background: 'var(--color-surface)' }}
       >
-        <SidebarContent />
+        <SidebarContent pathname={pathname} setMobileOpen={setMobileOpen} />
       </aside>
 
       {/* Mobile toggle */}
@@ -100,7 +107,7 @@ export default function Sidebar() {
             className="absolute left-0 top-0 h-full w-64 border-r border-[var(--color-border)]"
             style={{ background: 'var(--color-surface)' }}
           >
-            <SidebarContent />
+            <SidebarContent pathname={pathname} setMobileOpen={setMobileOpen} />
           </aside>
         </div>
       )}
