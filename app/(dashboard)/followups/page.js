@@ -1,223 +1,319 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, Bell, Calendar, Phone, Mail, Users, Video, MapPin, Search } from 'lucide-react'
-import { Button, Card, Badge, Modal, Input, Select, Textarea, EmptyState, Spinner } from '@/components/ui'
-import { getFollowups, createFollowup, updateFollowup, getLeads, getContacts } from '@/lib/supabase/queries'
-import { format, isToday, isTomorrow, isPast, isThisWeek } from 'date-fns'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, Bell, Phone, Mail, MessageCircle, Users, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button, Card, Badge, Modal, Select, Textarea, EmptyState, Spinner } from '@/components/ui'
+import { getFollowups, createFollowup, getLeads, getPatients } from '@/lib/supabase/queries'
+import {
+  addMonths,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+} from 'date-fns'
 import clsx from 'clsx'
 
-const TYPE_ICONS = { Call: Phone, Email: Mail, Meeting: Users, Demo: Video, 'Site Visit': MapPin, Other: Bell }
+const CHANNELS = ['Call', 'WhatsApp', 'Email', 'Meeting', 'Other']
 
-function Section({ title, items, color, onUpdate }) {
-  if (items.length === 0) return null
-  return (
-    <div>
-      <h2 className="text-xs font-700 mb-3 flex items-center gap-2" style={{ color }}>
-        <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
-        {title} ({items.length})
-      </h2>
-      <div className="space-y-2">
-        {items.map(f => <FollowupCard key={f.id} followup={f} onUpdate={onUpdate} />)}
-      </div>
-    </div>
-  )
+const CHANNEL_OUTCOMES = {
+  Call: [
+    'Ringing - No Response',
+    'Switched Off',
+    'Busy',
+    'Not Reachable',
+    'Connected - Interested',
+    'Connected - Not Interested',
+    'Connected - Callback Requested',
+    'Connected - Wrong Number',
+  ],
+  WhatsApp: [
+    'Message Sent - No Reply',
+    'Delivered - No Reply',
+    'Seen - No Reply',
+    'Replied - Interested',
+    'Replied - Not Interested',
+    'Replied - Callback Requested',
+    'Number Not on WhatsApp',
+  ],
+  Email: [
+    'Sent - No Reply',
+    'Bounced',
+    'Opened - No Reply',
+    'Replied - Interested',
+    'Replied - Not Interested',
+    'Replied - Callback Requested',
+  ],
+  Meeting: [
+    'Attended - Interested',
+    'Attended - Not Interested',
+    'Rescheduled',
+    'No Show',
+    'Cancelled',
+  ],
+  Other: ['Updated', 'Waiting for Response', 'Closed'],
 }
-const FOLLOWUP_TYPES = ['Call', 'Email', 'Meeting', 'Demo', 'Site Visit', 'Other']
 
-function CreateFollowupModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({ type: 'Call', scheduled_at: '', notes: '', lead_id: '', contact_id: '' })
-  const [leads, setLeads] = useState([])
-  const [contacts, setContacts] = useState([])
-  const [saving, setSaving] = useState(false)
+const TYPE_ICONS = {
+  Call: Phone,
+  WhatsApp: MessageCircle,
+  Email: Mail,
+  Meeting: Users,
+  Other: Bell,
+}
+
+function DateTimePicker({ value, onChange }) {
+  const parsed = value ? new Date(value) : new Date()
+  const [open, setOpen] = useState(false)
+  const [month, setMonth] = useState(startOfMonth(parsed))
+  const ref = useRef(null)
 
   useEffect(() => {
-    if (open) {
-      getLeads().then(setLeads).catch(() => [])
-      getContacts().then(setContacts).catch(() => [])
+    const onDocClick = (e) => {
+      if (!ref.current?.contains(e.target)) setOpen(false)
     }
-  }, [open])
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!form.scheduled_at) return
-    setSaving(true)
-    try {
-      const f = await createFollowup({
-        ...form,
-        lead_id: form.lead_id || null,
-        contact_id: form.contact_id || null,
-        status: 'Scheduled',
-      })
-      onCreated(f)
-      setForm({ type: 'Call', scheduled_at: '', notes: '', lead_id: '', contact_id: '' })
-      onClose()
-    } catch (err) { alert(err.message) }
-    finally { setSaving(false) }
+  const selected = value ? new Date(value) : new Date()
+  const monthStart = startOfMonth(month)
+  const monthEnd = endOfMonth(monthStart)
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+
+  const days = []
+  let d = gridStart
+  while (d <= gridEnd) {
+    days.push(d)
+    d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
+  }
+
+  const updateDate = (date) => {
+    const next = new Date(date)
+    next.setHours(selected.getHours(), selected.getMinutes(), 0, 0)
+    onChange(next.toISOString())
+  }
+
+  const updateTime = (key, val) => {
+    const next = new Date(selected)
+    if (key === 'hour') next.setHours(Number(val))
+    if (key === 'minute') next.setMinutes(Number(val))
+    onChange(next.toISOString())
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Schedule Follow-up" size="md">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <Select label="Type" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-          options={FOLLOWUP_TYPES.map(t => ({ value: t, label: t }))} />
-        <Input label="Scheduled Date & Time *" type="datetime-local" value={form.scheduled_at}
-          onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} required />
-        <Select label="Linked Lead" value={form.lead_id} onChange={e => setForm(f => ({ ...f, lead_id: e.target.value }))}
-          options={[{ value: '', label: 'No lead' }, ...leads.map(l => ({ value: l.id, label: l.title }))]} />
-        <Select label="Contact" value={form.contact_id} onChange={e => setForm(f => ({ ...f, contact_id: e.target.value }))}
-          options={[{ value: '', label: 'No contact' }, ...contacts.map(c => ({ value: c.id, label: `${c.first_name} ${c.last_name || ''}`.trim() }))]} />
-        <Textarea label="Notes / Agenda" placeholder="What's the purpose of this follow-up?" rows={3}
-          value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+    <div className="space-y-1.5" ref={ref}>
+      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Date & Time *</label>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full rounded-lg border px-3 py-2 text-left text-sm"
+        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', background: 'white' }}
+      >
+        {format(selected, 'EEE, d MMM yyyy · hh:mm a')}
+      </button>
+
+      {open && (
+        <div className="rounded-xl border p-3 space-y-3 relative z-30" style={{ borderColor: 'var(--color-border)', background: 'white' }}>
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={() => setMonth(m => subMonths(m, 1))} className="p-1 rounded hover:bg-gray-100"><ChevronLeft size={16} /></button>
+            <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+            <button type="button" onClick={() => setMonth(m => addMonths(m, 1))} className="p-1 rounded hover:bg-gray-100"><ChevronRight size={16} /></button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(w => <div key={w} className="py-1">{w}</div>)}
+            {days.map((day, idx) => {
+              const active = isSameDay(day, selected)
+              const inMonth = isSameMonth(day, month)
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => updateDate(day)}
+                  className={clsx('py-1.5 rounded text-xs', active && 'text-white')}
+                  style={active ? { background: 'var(--color-brand)' } : { color: inMonth ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
+                >
+                  {format(day, 'd')}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select value={selected.getHours()} onChange={(e) => updateTime('hour', e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: 'var(--color-border)' }}>
+              {Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}
+            </select>
+            <span>:</span>
+            <select value={selected.getMinutes()} onChange={(e) => updateTime('minute', e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm" style={{ borderColor: 'var(--color-border)' }}>
+              {Array.from({ length: 60 }).map((_, m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+            </select>
+            <Button type="button" variant="secondary" className="ml-auto" onClick={() => onChange(new Date().toISOString())}>Today</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LogInteractionModal({ open, onClose, onCreated }) {
+  const [form, setForm] = useState({
+    type: 'Call',
+    scheduled_at: new Date().toISOString(),
+    lead_id: '',
+    patient_id: '',
+    outcome: '',
+    notes: '',
+  })
+  const [leads, setLeads] = useState([])
+  const [patients, setPatients] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  const outcomes = CHANNEL_OUTCOMES[form.type] || []
+
+  useEffect(() => {
+    if (!open) return
+    getLeads().then(setLeads).catch(() => setLeads([]))
+    getPatients().then(setPatients).catch(() => setPatients([]))
+  }, [open])
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const when = new Date(form.scheduled_at)
+      const isFuture = when.getTime() > Date.now()
+      const payload = {
+        ...form,
+        lead_id: form.lead_id || null,
+        patient_id: form.patient_id || null,
+        outcome: form.outcome || null,
+        status: isFuture && !form.outcome ? 'Scheduled' : 'Completed',
+      }
+      const row = await createFollowup(payload)
+      onCreated(row)
+      setForm({ type: 'Call', scheduled_at: new Date().toISOString(), lead_id: '', patient_id: '', outcome: '', notes: '' })
+      onClose()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Log Interaction" size="md">
+      <form className="space-y-4" onSubmit={submit}>
+        <Select
+          label="Channel"
+          value={form.type}
+          onChange={e => setForm(f => ({ ...f, type: e.target.value, outcome: '' }))}
+          options={CHANNELS.map(c => ({ value: c, label: c }))}
+        />
+
+        <DateTimePicker value={form.scheduled_at} onChange={(v) => setForm(f => ({ ...f, scheduled_at: v }))} />
+
+        <Select
+          label="Outcome"
+          value={form.outcome}
+          onChange={e => setForm(f => ({ ...f, outcome: e.target.value }))}
+          options={[{ value: '', label: 'Select outcome (optional)' }, ...outcomes.map(o => ({ value: o, label: o }))]}
+        />
+
+        <Select
+          label="Linked Lead"
+          value={form.lead_id}
+          onChange={e => setForm(f => ({ ...f, lead_id: e.target.value }))}
+          options={[{ value: '', label: 'No lead' }, ...leads.map(l => ({ value: l.id, label: l.title }))]}
+        />
+
+        <Select
+          label="Linked Patient"
+          value={form.patient_id}
+          onChange={e => setForm(f => ({ ...f, patient_id: e.target.value }))}
+          options={[{ value: '', label: 'No patient' }, ...patients.map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() }))]}
+        />
+
+        <Textarea
+          label="Patient Response / Notes"
+          placeholder="What did the patient/customer say?"
+          rows={4}
+          value={form.notes}
+          onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+        />
+
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose} type="button">Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Scheduling...' : 'Schedule'}</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Interaction'}</Button>
         </div>
       </form>
     </Modal>
   )
 }
 
-function OutcomeModal({ open, followup, onClose, onSave }) {
-  const [outcome, setOutcome] = useState('')
-  const [status, setStatus] = useState('Completed')
-
-  const handleSave = async () => {
-    await onSave(followup.id, { status, outcome })
-    onClose()
-  }
+function FollowupLogCard({ item }) {
+  const Icon = TYPE_ICONS[item.type] || Bell
+  const when = new Date(item.scheduled_at)
+  const isScheduled = item.status === 'Scheduled'
 
   return (
-    <Modal open={open} onClose={onClose} title="Mark Follow-up Outcome" size="sm">
-      <div className="space-y-4">
-        <Select label="Status" value={status} onChange={e => setStatus(e.target.value)}
-          options={[
-            { value: 'Completed', label: 'Completed' },
-            { value: 'Missed', label: 'Missed' },
-            { value: 'Rescheduled', label: 'Rescheduled' },
-          ]} />
-        <Textarea label="Outcome / Notes" placeholder="What happened? Key takeaways..." rows={3}
-          value={outcome} onChange={e => setOutcome(e.target.value)} />
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose} type="button">Cancel</Button>
-          <Button onClick={handleSave}>Save Outcome</Button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-function FollowupCard({ followup, onUpdate }) {
-  const [outcomeOpen, setOutcomeOpen] = useState(false)
-  const Icon = TYPE_ICONS[followup.type] || Bell
-  const scheduled = new Date(followup.scheduled_at)
-  const isOverdue = isPast(scheduled) && followup.status === 'Scheduled'
-
-  const getTimeLabel = () => {
-    if (isToday(scheduled)) return `Today at ${format(scheduled, 'h:mm a')}`
-    if (isTomorrow(scheduled)) return `Tomorrow at ${format(scheduled, 'h:mm a')}`
-    return format(scheduled, 'EEE, d MMM · h:mm a')
-  }
-
-  return (
-    <>
-      <div className={clsx(
-        'flex items-start gap-4 p-4 rounded-xl border bg-white transition-all',
-        isOverdue ? 'border-red-200 bg-red-50/20' : followup.status === 'Completed' ? 'opacity-60 border-[var(--color-border)]' : 'border-[var(--color-border)] hover:shadow-sm'
-      )}>
-        <div className={clsx('p-2.5 rounded-xl flex-shrink-0')}
-          style={{ background: isOverdue ? '#fee2e2' : 'var(--color-brand-50)' }}>
-          <Icon size={16} style={{ color: isOverdue ? '#ef4444' : 'var(--color-brand)' }} />
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-lg" style={{ background: 'var(--color-brand-50)' }}>
+          <Icon size={16} style={{ color: 'var(--color-brand)' }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{followup.type}</span>
-                <Badge>{followup.status}</Badge>
-                {isOverdue && <span className="text-xs font-500 text-red-500">Overdue</span>}
-              </div>
-              <p className="text-xs mt-0.5" style={{ color: isOverdue ? '#ef4444' : 'var(--color-text-muted)' }}>
-                <Calendar size={10} className="inline mr-1" />
-                {getTimeLabel()}
-              </p>
-            </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{item.type}</p>
+            <Badge>{isScheduled ? 'Scheduled' : 'Logged'}</Badge>
           </div>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            <Calendar size={11} className="inline mr-1" />
+            {format(when, 'EEE, d MMM yyyy · hh:mm a')}
+          </p>
 
-          {followup.leads && (
-            <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: 'var(--color-text-secondary)' }}>
-              <span className="font-500" style={{ color: 'var(--color-brand)' }}>Lead:</span> {followup.leads.title}
-            </p>
-          )}
-          {followup.contacts && (
-            <p className="text-xs flex items-center gap-1" style={{ color: 'var(--color-text-secondary)' }}>
-              <span className="font-500" style={{ color: 'var(--color-brand)' }}>Contact:</span> {followup.contacts.first_name} {followup.contacts.last_name || ''}
-            </p>
-          )}
-          {followup.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{followup.notes}</p>}
-          {followup.outcome && (
-            <div className="mt-2 px-2.5 py-1.5 rounded-lg" style={{ background: 'var(--color-surface-2)', borderLeft: '2px solid var(--color-brand)' }}>
-              <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                <span className="font-500">Outcome:</span> {followup.outcome}
-              </p>
-            </div>
-          )}
+          {item.leads?.title && <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}><span className="font-600">Lead:</span> {item.leads.title}</p>}
+          {item.patients?.first_name && <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}><span className="font-600">Patient:</span> {item.patients.first_name} {item.patients.last_name || ''}</p>}
+
+          {item.outcome && <p className="text-xs mt-2 px-2.5 py-1 rounded-lg inline-block" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }}><span className="font-600">Outcome:</span> {item.outcome}</p>}
+          {item.notes && <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{item.notes}</p>}
         </div>
-
-        {followup.status === 'Scheduled' && (
-          <Button size="sm" variant="secondary" onClick={() => setOutcomeOpen(true)}>
-            Mark Done
-          </Button>
-        )}
       </div>
-
-      <OutcomeModal
-        open={outcomeOpen}
-        followup={followup}
-        onClose={() => setOutcomeOpen(false)}
-        onSave={async (id, updates) => {
-          const updated = await onUpdate(id, updates)
-          setOutcomeOpen(false)
-        }}
-      />
-    </>
+    </Card>
   )
 }
 
 export default function FollowupsPage() {
   const [followups, setFollowups] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('Scheduled')
+  const [loading, setLoading] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    getFollowups({ status: filter !== 'All' ? filter : '' })
-      .then(data => { if (active) setFollowups(data || []) })
-      .catch(() => { if (active) setFollowups([]) })
-      .finally(() => { if (active) setLoading(false) })
+    const run = async () => {
+      if (active) setLoading(true)
+      try {
+        const data = await getFollowups()
+        if (active) setFollowups(data || [])
+      } catch {
+        if (active) setFollowups([])
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    run()
     return () => { active = false }
-  }, [filter])
+  }, [])
 
-  const handleUpdate = async (id, updates) => {
-    const updated = await updateFollowup(id, updates)
-    setFollowups(prev => prev.map(f => f.id === id ? { ...f, ...updated } : f))
-    return updated
-  }
+  const sorted = useMemo(() => {
+    return [...followups].sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at))
+  }, [followups])
 
-  // Group by date
-  const today = followups.filter(f => isToday(new Date(f.scheduled_at)))
-  const tomorrow = followups.filter(f => isTomorrow(new Date(f.scheduled_at)))
-  const thisWeek = followups.filter(f => {
-    const d = new Date(f.scheduled_at)
-    return isThisWeek(d) && !isToday(d) && !isTomorrow(d) && !isPast(d)
-  })
-  const overdue = followups.filter(f => isPast(new Date(f.scheduled_at)) && f.status === 'Scheduled')
-  const later = followups.filter(f => {
-    const d = new Date(f.scheduled_at)
-    return !isThisWeek(d) && !isPast(d)
-  })
-  const completed = followups.filter(f => f.status !== 'Scheduled' && f.status !== 'Rescheduled')
+  const scheduledCount = followups.filter(f => f.status === 'Scheduled').length
 
   return (
     <div className="p-6 space-y-5">
@@ -225,60 +321,35 @@ export default function FollowupsPage() {
         <div>
           <h1 className="text-xl font-700" style={{ color: 'var(--color-text-primary)' }}>Follow-ups</h1>
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            {followups.filter(f => f.status === 'Scheduled').length} scheduled
-            {overdue.length > 0 && ` · `}
-            {overdue.length > 0 && <span className="text-red-500">{overdue.length} overdue</span>}
+            Interaction log for call / WhatsApp / email responses · {scheduledCount} upcoming
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}><Plus size={16} /> Schedule Follow-up</Button>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Today', count: today.length, color: 'var(--color-brand)' },
-          { label: 'Tomorrow', count: tomorrow.length, color: '#3b82f6' },
-          { label: 'This Week', count: thisWeek.length, color: '#8b5cf6' },
-          { label: 'Overdue', count: overdue.length, color: '#ef4444' },
-        ].map(({ label, count, color }) => (
-          <Card key={label} className="p-3 text-center">
-            <p className="text-2xl font-700" style={{ color }}>{count}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
-          </Card>
-        ))}
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="flex gap-1">
-        {['All', 'Scheduled', 'Completed', 'Missed', 'Rescheduled'].map(s => (
-          <button key={s} onClick={() => setFilter(s)}
-            className="px-3 py-1.5 rounded-lg text-xs font-500 border transition-all"
-            style={filter === s
-              ? { background: 'var(--color-brand)', color: 'white', borderColor: 'transparent' }
-              : { color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)', background: 'white' }}>
-            {s}
-          </button>
-        ))}
+        <Button onClick={() => setCreateOpen(true)}><Plus size={16} /> Log Interaction</Button>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><Spinner size={28} /></div>
-      ) : followups.length === 0 ? (
-        <EmptyState icon={Bell} title="No follow-ups" description="Schedule follow-ups to stay on top of your leads"
-          action={<Button onClick={() => setCreateOpen(true)}><Plus size={14} /> Schedule Follow-up</Button>} />
+      ) : sorted.length === 0 ? (
+        <EmptyState
+          icon={Bell}
+          title="No interactions yet"
+          description="Start logging patient/customer responses from calls, WhatsApp, and emails"
+          action={<Button onClick={() => setCreateOpen(true)}><Plus size={14} /> Log Interaction</Button>}
+        />
       ) : (
-        <div className="space-y-6">
-          <Section title="OVERDUE" items={overdue} color="#ef4444" onUpdate={handleUpdate} />
-          <Section title="TODAY" items={today} color="var(--color-brand)" onUpdate={handleUpdate} />
-          <Section title="TOMORROW" items={tomorrow} color="#3b82f6" onUpdate={handleUpdate} />
-          <Section title="THIS WEEK" items={thisWeek} color="#8b5cf6" onUpdate={handleUpdate} />
-          <Section title="LATER" items={later} color="#9ca3af" onUpdate={handleUpdate} />
-          <Section title="COMPLETED / MISSED" items={completed} color="#d1d5db" onUpdate={handleUpdate} />
+        <div className="space-y-3">
+          {sorted.map(item => <FollowupLogCard key={item.id} item={item} />)}
         </div>
       )}
 
-      <CreateFollowupModal open={createOpen} onClose={() => setCreateOpen(false)}
-        onCreated={f => { setFollowups(prev => [f, ...prev]); setCreateOpen(false) }} />
+      <LogInteractionModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(row) => {
+          setFollowups(prev => [row, ...prev])
+          setCreateOpen(false)
+        }}
+      />
     </div>
   )
 }

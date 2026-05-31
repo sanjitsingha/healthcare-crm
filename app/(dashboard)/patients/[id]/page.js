@@ -3,480 +3,305 @@ import { useEffect, useState, use } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
+  CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight,
 } from 'lucide-react'
-import { Button, Card, Input, Textarea, Spinner, Modal } from '@/components/ui'
+import { Button, Card, Input, Textarea, Spinner, Modal, Select } from '@/components/ui'
 import {
   getPatient, updatePatient, deletePatient,
   getActivities, createActivity,
+  getTasks, createTask, updateTask,
+  getFollowups, createFollowup, updateFollowup,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { format, formatDistanceToNow, differenceInYears } from 'date-fns'
+import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import clsx from 'clsx'
 
 const STATUS_STYLE = {
-  Active:   { bg: '#dcfce7', color: '#15803d' },
+  Active: { bg: '#dcfce7', color: '#15803d' },
   Inactive: { bg: '#fee2e2', color: '#b91c1c' },
 }
 
-// ── Custom field renderer (mirrors leads/[id]/page.js) ─────────
-function CustomFieldInput({ field, value, onChange }) {
-  if (field.type === 'textarea')
-    return <Textarea label={field.label} value={value || ''} onChange={e => onChange(e.target.value)} rows={2} />
-  if (field.type === 'select') {
-    const opts = (field.options || '').split(',').map(s => s.trim()).filter(Boolean)
-    return (
-      <select
-        className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
-        style={{ background: 'var(--color-surface)' }}
-        value={value || ''}
-        onChange={e => onChange(e.target.value)}
-      >
-        <option value="">Select...</option>
-        {opts.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    )
-  }
-  if (field.type === 'boolean') return (
-    <div className="space-y-1.5">
-      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{field.label}</label>
-      <div className="flex gap-2">
-        {['Yes', 'No'].map(opt => (
-          <button key={opt} type="button" onClick={() => onChange(opt)}
-            className="flex-1 py-1.5 rounded-lg text-xs font-500 border transition-all"
-            style={value === opt
-              ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
-              : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}
-          >{opt}</button>
-        ))}
-      </div>
-    </div>
-  )
-  const typeMap = { phone: 'tel', email: 'email', number: 'number', date: 'date', text: 'text' }
-  return <Input label={field.label} type={typeMap[field.type] || 'text'} value={value || ''} onChange={e => onChange(e.target.value)} />
+const FOLLOWUP_TYPES = ['Call', 'WhatsApp', 'Email']
+const FOLLOWUP_STATUS_OPTIONS = {
+  Call: ['Not Connected', 'Switched Off', 'Busy', 'Not Reachable', 'Connected - Interested', 'Connected - Not Interested', 'Connected - Callback Requested', 'Wrong Number'],
+  WhatsApp: ['Sent - No Reply', 'Delivered - No Reply', 'Seen - No Reply', 'Replied - Interested', 'Replied - Not Interested', 'Replied - Callback Requested', 'Number Not on WhatsApp'],
+  Email: ['Sent - No Reply', 'Bounced', 'Opened - No Reply', 'Replied - Interested', 'Replied - Not Interested', 'Replied - Callback Requested'],
 }
 
-function CustomModuleCard({ module, data, onSave }) {
-  const [editing, setEditing] = useState(false)
-  const [values, setValues]   = useState({ ...data })
-  const [saving, setSaving]   = useState(false)
+const TYPE_ICON = { Call: Phone, WhatsApp: MessageSquare, Email: Mail, Other: Bell }
+const TYPE_COLOR = {
+  Call: { bg: '#dbeafe', color: '#1d4ed8' },
+  WhatsApp: { bg: '#dcfce7', color: '#15803d' },
+  Email: { bg: '#fce7f3', color: '#be185d' },
+  Other: { bg: '#f3f4f6', color: '#374151' },
+}
+const FU_STATUS_STYLE = {
+  Scheduled: { bg: '#fef3c7', color: '#b45309' },
+  Completed: { bg: '#dcfce7', color: '#15803d' },
+  Missed: { bg: '#fee2e2', color: '#b91c1c' },
+  Rescheduled: { bg: '#f3e8ff', color: '#7c3aed' },
+}
 
-  const handleSave = async () => {
-    setSaving(true)
-    try { await onSave(values); setEditing(false) }
-    catch (err) { alert(err.message) }
-    finally { setSaving(false) }
+function CustomDateTimePicker({ value, onChange, label = 'Date & Time *' }) {
+  const [open, setOpen] = useState(false)
+  const selected = value ? new Date(value) : new Date()
+  const [month, setMonth] = useState(startOfMonth(selected))
+  const monthStart = startOfMonth(month)
+  const monthEnd = endOfMonth(month)
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+  const days = []
+  let pointer = gridStart
+  while (pointer <= gridEnd) { days.push(pointer); pointer = new Date(pointer.getFullYear(), pointer.getMonth(), pointer.getDate() + 1) }
+
+  const setDatePart = (date) => {
+    const next = new Date(date)
+    next.setHours(selected.getHours(), selected.getMinutes(), 0, 0)
+    onChange(next.toISOString())
+  }
+  const setTimePart = (key, val) => {
+    const next = new Date(selected)
+    if (key === 'hour') next.setHours(Number(val))
+    if (key === 'minute') next.setMinutes(Number(val))
+    onChange(next.toISOString())
   }
 
   return (
-    <Card className="p-5 border-(--color-border)">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>{module.name}</p>
-        {!editing && (
-          <button onClick={() => { setValues({ ...data }); setEditing(true) }}
-            className="text-xs font-500 px-2.5 py-1 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-brand-50)"
-            style={{ color: 'var(--color-brand)' }}
-          ><Edit2 size={12} className="inline mr-1" />Edit</button>
-        )}
-      </div>
-      {editing ? (
-        <div className="space-y-3">
-          {module.fields.map(f => (
-            <CustomFieldInput key={f.id} field={f} value={values[f.id]} onChange={v => setValues(p => ({ ...p, [f.id]: v }))} />
-          ))}
-          <div className="flex gap-2 justify-end pt-2 border-t border-(--color-border)">
-            <Button variant="secondary" size="sm" type="button" onClick={() => { setValues({ ...data }); setEditing(false) }}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+    <div className="space-y-1.5">
+      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{label}</label>
+      <button type="button" onClick={() => setOpen(o => !o)} className="w-full px-3 py-2 rounded-lg border text-left text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+        {format(selected, 'EEE, MMM d yyyy · h:mm a')}
+      </button>
+      {open && (
+        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+          <div className="flex items-center justify-between">
+            <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => subMonths(m, 1))}><ChevronLeft size={15} /></button>
+            <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+            <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => addMonths(m, 1))}><ChevronRight size={15} /></button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-[11px] text-center">
+            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => <span key={day} style={{ color: 'var(--color-text-muted)' }}>{day}</span>)}
+            {days.map((day, i) => {
+              const active = isSameDay(day, selected)
+              const inMonth = isSameMonth(day, month)
+              return <button key={i} type="button" onClick={() => setDatePart(day)} className="py-1.5 rounded text-xs" style={active ? { background: 'var(--color-brand)', color: 'white' } : { color: inMonth ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{format(day, 'd')}</button>
+            })}
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={selected.getHours()} onChange={e => setTimePart('hour', e.target.value)} className="px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }}>{Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}</select>
+            <span>:</span>
+            <select value={selected.getMinutes()} onChange={e => setTimePart('minute', e.target.value)} className="px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }}>{Array.from({ length: 60 }).map((_, m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}</select>
+            <Button type="button" variant="secondary" size="sm" className="ml-auto" onClick={() => onChange(new Date().toISOString())}>Now</Button>
           </div>
         </div>
-      ) : Object.values(data).some(Boolean) ? (
-        <div className="space-y-2">
-          {module.fields.map(f => (
-            <div key={f.id} className="flex items-center justify-between gap-4">
-              <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>{f.label}</span>
-              <span className="text-xs font-500 text-right truncate" style={{ color: 'var(--color-text-primary)' }}>{data[f.id] || '—'}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No data filled yet. Click Edit to fill.</p>
       )}
-    </Card>
+    </div>
   )
 }
 
-// ── Main Page ──────────────────────────────────────────────────
+function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
+  const [completing, setCompleting] = useState(false)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [outcome, setOutcome] = useState('')
+  const [nextType, setNextType] = useState('Call')
+  const [nextDate, setNextDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const Icon = TYPE_ICON[f.type] || Bell
+  const typeC = TYPE_COLOR[f.type] || TYPE_COLOR.Other
+  const statC = FU_STATUS_STYLE[f.status] || FU_STATUS_STYLE.Scheduled
+
+  const handleComplete = async () => {
+    setSaving(true)
+    try { await onComplete(f.id, outcome); setCompleting(false) } catch (e) { alert(e.message) } finally { setSaving(false) }
+  }
+  const handleReschedule = async () => {
+    if (!nextDate) return
+    setSaving(true)
+    try { await onReschedule(f.id, nextDate, nextType); setRescheduling(false) } catch (e) { alert(e.message) } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+      <div className="flex items-start gap-3 p-4">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: typeC.bg }}><Icon size={16} style={{ color: typeC.color }} /></div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{f.type}</span><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statC.bg, color: statC.color }}>{f.status}</span>{f.status === 'Scheduled' && isPast(new Date(f.scheduled_at)) && <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c' }}>Overdue</span>}</div>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{format(new Date(f.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}</p>
+          {f.notes && <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>{f.notes}</p>}
+          {f.outcome && <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>Outcome: {f.outcome}</p>}
+        </div>
+        {!completing && !rescheduling && f.status !== 'Completed' && (
+          <div className="flex gap-1.5 shrink-0">
+            <button onClick={() => setCompleting(true)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-600" style={{ background: '#dcfce7', color: '#15803d' }}><Check size={12} className="inline mr-1" />Done</button>
+            <button onClick={() => { setRescheduling(true); setNextType(f.type); setNextDate('') }} className="px-2.5 py-1.5 rounded-lg text-[11px] font-600 border border-(--color-border)"><RotateCcw size={11} className="inline mr-1" />Reschedule</button>
+            <button onClick={() => onMiss(f.id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={11} className="inline mr-1" />Missed</button>
+          </div>
+        )}
+      </div>
+      {completing && <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}><Textarea label="Outcome" value={outcome} onChange={e => setOutcome(e.target.value)} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" onClick={() => setCompleting(false)}>Cancel</Button><Button size="sm" onClick={handleComplete} disabled={saving}>{saving ? 'Saving...' : 'Mark Complete'}</Button></div></div>}
+      {rescheduling && <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="grid grid-cols-2 gap-3"><Select label="Type" value={nextType} onChange={e => setNextType(e.target.value)} options={FOLLOWUP_TYPES.map(t => ({ value: t, label: t }))} /><Input label="New Date & Time *" type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} /></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" onClick={() => setRescheduling(false)}>Cancel</Button><Button size="sm" onClick={handleReschedule} disabled={saving || !nextDate}>{saving ? 'Saving...' : 'Reschedule'}</Button></div></div>}
+    </div>
+  )
+}
+
 export default function PatientDetailPage({ params }) {
-  const { id }           = use(params)
-  const router           = useRouter()
-  const { orgId, org }   = useOrg()
-
-  const [patient,    setPatient]    = useState(null)
+  const { id } = use(params)
+  const router = useRouter()
+  const { orgId } = useOrg()
+  const [patient, setPatient] = useState(null)
   const [activities, setActivities] = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [activeTab,  setActiveTab]  = useState('history')
-  const [editOpen,   setEditOpen]   = useState(false)
-  const [editForm,   setEditForm]   = useState({})
+  const [tasks, setTasks] = useState([])
+  const [followups, setFollowups] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('tasks')
+  const [bottomTab, setBottomTab] = useState('history')
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [taskOpen, setTaskOpen] = useState(false)
+  const [newTask, setNewTask] = useState({ title: '', priority: 'Medium', due_date: '' })
+  const [addingRecord, setAddingRecord] = useState(false)
+  const [medEntry, setMedEntry] = useState({ diagnosis: '', treatment: '', notes: '' })
+  const [savingRecord, setSavingRecord] = useState(false)
+  const [showFuForm, setShowFuForm] = useState(false)
+  const [newFu, setNewFu] = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
 
-  // Add medical record inline state
-  const [addingRecord, setAddingRecord]   = useState(false)
-  const [medEntry,     setMedEntry]       = useState({ diagnosis: '', treatment: '', notes: '' })
-  const [savingRecord, setSavingRecord]   = useState(false)
+  const logActivity = (type, content, entityType = 'patient', entityId = id) => orgId && createActivity({ organization_id: orgId, entity_type: entityType, entity_id: entityId, type, content })
 
   const loadAll = async () => {
     setLoading(true)
     try {
-      const [p, a] = await Promise.all([
-        getPatient(id),
+      const p = await getPatient(id)
+      const leadIds = (p?.leads || []).map(l => l.id)
+      const [patientActs, patientTasks, patientFollowups, leadActsList, leadTasksList, leadFollowupsList] = await Promise.all([
         getActivities('patient', id, orgId),
+        getTasks({ entityType: 'patient', entityId: id, orgId }),
+        getFollowups({ patientId: id, orgId }),
+        Promise.all(leadIds.map(leadId => getActivities('lead', leadId, orgId))),
+        Promise.all(leadIds.map(leadId => getTasks({ entityType: 'lead', entityId: leadId, orgId }))),
+        Promise.all(leadIds.map(leadId => getFollowups({ leadId, orgId }))),
       ])
+
+      const mergedActs = [...(patientActs || []), ...leadActsList.flat()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      const mergedTasks = [...(patientTasks || []), ...leadTasksList.flat()].reduce((acc, t) => (acc.some(x => x.id === t.id) ? acc : [...acc, t]), [])
+      const mergedFollowups = [...(patientFollowups || []), ...leadFollowupsList.flat()].reduce((acc, f) => (acc.some(x => x.id === f.id) ? acc : [...acc, f]), [])
+
       setPatient(p)
-      setActivities(a || [])
+      setActivities(mergedActs)
+      setTasks(mergedTasks)
+      setFollowups(mergedFollowups)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
 
   useEffect(() => { loadAll() }, [id])
 
+  const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
+  const handleEdit = async (e) => { e.preventDefault(); try { const updated = await updatePatient(id, editForm); setPatient(prev => ({ ...prev, ...updated })); setEditOpen(false) } catch (err) { alert(err.message) } }
+  const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)) }
+  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }) }
+
   const handleAddRecord = async (e) => {
     e.preventDefault()
     if (!medEntry.diagnosis.trim()) return
     setSavingRecord(true)
     try {
-      const newHistory = [
-        { ...medEntry, date: new Date().toISOString() },
-        ...(patient.medical_history || []),
-      ]
+      const newHistory = [{ ...medEntry, date: new Date().toISOString() }, ...(patient.medical_history || [])]
       await updatePatient(id, { medical_history: newHistory })
-      if (orgId) await createActivity({
-        organization_id: orgId,
-        entity_type: 'patient',
-        entity_id: id,
-        type: 'note',
-        content: `Medical record added: ${medEntry.diagnosis}`,
-      })
-      await loadAll()
-      setAddingRecord(false)
-      setMedEntry({ diagnosis: '', treatment: '', notes: '' })
-    } catch (err) { alert(err.message) }
-    finally { setSavingRecord(false) }
+      await logActivity('note', `Medical record added: ${medEntry.diagnosis}`)
+      await loadAll(); setAddingRecord(false); setMedEntry({ diagnosis: '', treatment: '', notes: '' })
+    } catch (e) { alert(e.message) } finally { setSavingRecord(false) }
   }
 
-  const handleEdit = async (e) => {
+  const handleScheduleFollowup = async (e) => {
     e.preventDefault()
-    try {
-      const updated = await updatePatient(id, editForm)
-      setPatient(prev => ({ ...prev, ...updated }))
-      setEditOpen(false)
-    } catch (err) { alert(err.message) }
+    if (!newFu.scheduled_at || !newFu.status_detail || !orgId) return
+    const isFuture = new Date(newFu.scheduled_at).getTime() > Date.now()
+    const f = await createFollowup({ type: newFu.type, scheduled_at: newFu.scheduled_at, notes: newFu.response || null, outcome: newFu.status_detail, status: isFuture ? 'Scheduled' : 'Completed', organization_id: orgId, patient_id: id, lead_id: null })
+    setFollowups(prev => [f, ...prev])
+    await logActivity('note', `${newFu.type} logged: ${newFu.status_detail}${newFu.response ? ` | Response: ${newFu.response}` : ''}`)
+    setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
   }
+  const handleCompleteFollowup = async (fuId, outcome) => { const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
+  const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
+  const handleRescheduleFollowup = async (fuId, newDate, newType) => { const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
 
-  const handleDelete = async () => {
-    if (!confirm('Delete this patient? This cannot be undone.')) return
-    await deletePatient(id)
-    router.push('/patients')
-  }
+  if (loading) return <div className="flex items-center justify-center py-32"><Spinner size={32} /></div>
+  if (!patient) return <div className="p-12 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>Patient not found</div>
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-32"><Spinner size={32} /></div>
-  )
-  if (!patient) return (
-    <div className="p-12 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>Patient not found</div>
-  )
-
-  const fullName  = `${patient.first_name} ${patient.last_name || ''}`.trim()
-  const age       = patient.date_of_birth ? differenceInYears(new Date(), new Date(patient.date_of_birth)) : null
-  const initials  = `${patient.first_name?.[0] || ''}${patient.last_name?.[0] || ''}`.toUpperCase()
-  const statusS   = STATUS_STYLE[patient.status] || STATUS_STYLE.Active
-
-  const patientModules = (org?.settings?.modules || []).filter(m => m.page === 'patients' && m.active)
-
-  const TABS = [
-    { id: 'history',   label: 'Medical History', icon: History },
-    { id: 'timeline',  label: 'Timeline',        icon: Activity },
-    { id: 'documents', label: 'Documents',        icon: FileText },
-  ]
+  const fullName = `${patient.first_name} ${patient.last_name || ''}`.trim()
+  const age = patient.date_of_birth ? differenceInYears(new Date(), new Date(patient.date_of_birth)) : null
+  const initials = `${patient.first_name?.[0] || ''}${patient.last_name?.[0] || ''}`.toUpperCase()
+  const statusS = STATUS_STYLE[patient.status] || STATUS_STYLE.Active
+  const pendingTasks = tasks.filter(t => t.status === 'Pending').length
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-
-      {/* Sticky header */}
-      <div
-        className="sticky top-0 z-10 px-6 py-4 border-b border-(--color-border) flex items-center justify-between"
-        style={{ background: 'var(--color-surface)' }}
-      >
-        <div className="flex items-center gap-3">
-          <Link href="/patients" className="flex items-center gap-1.5 text-sm hover:opacity-60 transition-opacity" style={{ color: 'var(--color-text-muted)' }}>
-            <ArrowLeft size={16} /> Patients
-          </Link>
-          <span style={{ color: 'var(--color-border)' }}>/</span>
-          <span className="text-sm font-600 truncate max-w-xs" style={{ color: 'var(--color-text-primary)' }}>{fullName}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}>
-            <Edit2 size={14} /> Edit
-          </Button>
-          <button
-            onClick={handleDelete}
-            className="p-2 rounded-lg border border-(--color-border) hover:bg-red-50 hover:border-red-200 transition-colors"
-          >
-            <Trash2 size={15} className="text-red-500" />
-          </button>
-        </div>
+      <div className="sticky top-0 z-10 px-6 py-4 border-b border-(--color-border) flex items-center justify-between" style={{ background: 'var(--color-surface)' }}>
+        <div className="flex items-center gap-3"><Link href="/patients" className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--color-text-muted)' }}><ArrowLeft size={16} /> Patients</Link><span style={{ color: 'var(--color-border)' }}>/</span><span className="text-sm font-600 truncate max-w-xs" style={{ color: 'var(--color-text-primary)' }}>{fullName}</span></div>
+        <div className="flex items-center gap-2"><Button variant="secondary" size="sm" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}><Edit2 size={14} /> Edit</Button><button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border)"><Trash2 size={15} className="text-red-500" /></button></div>
       </div>
 
       <div className="p-6 space-y-5">
-        {/* Main grid */}
         <div className="grid grid-cols-3 gap-5 items-start">
-
-          {/* Left column */}
           <div className="space-y-4">
-
-            {/* Profile card */}
             <Card className="p-5 border-(--color-border)">
-              <div className="flex items-center gap-3 mb-5">
-                <div
-                  className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800 shrink-0"
-                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
-                >
-                  {initials || <User size={22} />}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-base font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>
-                      {patient.status || 'Active'}
-                    </span>
-                    {patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}
-                    {age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {[
-                  { icon: Phone,    value: patient.phone },
-                  { icon: Mail,     value: patient.email },
-                  { icon: MapPin,   value: patient.address },
-                  { icon: Calendar, value: patient.date_of_birth ? `DOB: ${format(new Date(patient.date_of_birth), 'MMM d, yyyy')}` : null },
-                  { icon: Clock,    value: `Registered: ${format(new Date(patient.created_at), 'MMM d, yyyy')}` },
-                ].filter(r => r.value).map(({ icon: Icon, value }, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <Icon size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--color-text-muted)' }} />
-                    <span className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{value}</span>
-                  </div>
-                ))}
+              <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
+              <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p><div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
+              <div className="space-y-2.5">
+                {patient.phone && <div className="flex items-center gap-2"><Phone size={13} /><span className="text-xs">{patient.phone}</span></div>}
+                {patient.email && <div className="flex items-center gap-2"><Mail size={13} /><span className="text-xs">{patient.email}</span></div>}
+                {patient.date_of_birth && <div className="flex items-center gap-2"><Calendar size={13} /><span className="text-xs">DOB: {format(new Date(patient.date_of_birth), 'MMM d, yyyy')}</span></div>}
+                {patient.address && <div className="flex items-center gap-2"><MapPin size={13} /><span className="text-xs">{patient.address}</span></div>}
               </div>
             </Card>
-
-            {/* Quick stats */}
-            <Card className="p-5 border-(--color-border)">
-              <p className="text-[10px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>Quick Stats</p>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Visits',   value: patient.appointments?.length || 0 },
-                  { label: 'Invoices', value: patient.invoices?.length || 0 },
-                  { label: 'Records',  value: patient.medical_history?.length || 0 },
-                  { label: 'Leads',    value: patient.leads?.length || 0 },
-                ].map(s => (
-                  <div key={s.label} className="p-3 rounded-xl text-center" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                    <p className="text-xl font-800" style={{ color: 'var(--color-text-primary)' }}>{s.value}</p>
-                    <p className="text-[10px] font-500 mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{s.label}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* Custom patient modules */}
-            {patientModules.map(m => (
-              <CustomModuleCard
-                key={m.id}
-                module={m}
-                data={patient?.custom_data?.[m.id] || {}}
-                onSave={async (values) => {
-                  const custom_data = { ...(patient.custom_data || {}), [m.id]: values }
-                  const updated = await updatePatient(id, { custom_data })
-                  setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
-                }}
-              />
-            ))}
+            <Card className="p-5 border-(--color-border)"><p className="text-[10px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>Quick Stats</p><div className="grid grid-cols-2 gap-3">{[{ label: 'Visits', value: patient.appointments?.length || 0 }, { label: 'Invoices', value: patient.invoices?.length || 0 }, { label: 'Records', value: patient.medical_history?.length || 0 }, { label: 'Leads', value: patient.leads?.length || 0 }].map(s => <div key={s.label} className="p-3 rounded-xl text-center" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><p className="text-xl font-800">{s.value}</p><p className="text-[10px]">{s.label}</p></div>)}</div></Card>
           </div>
 
-          {/* Right column — tabs */}
           <div className="col-span-2">
             <Card className="border-(--color-border) overflow-hidden">
-              {/* Tab bar */}
               <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                {TABS.map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2 transition-all',
-                      activeTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent hover:bg-(--color-surface)'
-                    )}
-                    style={activeTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}
-                  >
-                    <tab.icon size={14} />{tab.label}
-                  </button>
-                ))}
+                {[{ id: 'tasks', label: 'Tasks', icon: CheckSquare, count: pendingTasks }, { id: 'timeline', label: 'Timeline', icon: Clock }].map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2', activeTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')} style={activeTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}><tab.icon size={14} />{tab.label}{tab.count > 0 && <span className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{tab.count}</span>}</button>)}
               </div>
-
               <div className="p-5">
-
-                {/* Medical History */}
-                {activeTab === 'history' && (
-                  <div className="space-y-4">
-                    <div className="flex justify-end">
-                      {!addingRecord && (
-                        <Button size="sm" onClick={() => setAddingRecord(true)}><Plus size={14} /> Add Record</Button>
-                      )}
-                    </div>
-
-                    {/* Inline add record form */}
-                    {addingRecord && (
-                      <form onSubmit={handleAddRecord} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
-                        <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>New Medical Record</p>
-                        <Input
-                          label="Diagnosis / Reason for Visit *"
-                          placeholder="e.g. Annual Checkup, Dental Extraction"
-                          value={medEntry.diagnosis}
-                          onChange={e => setMedEntry(m => ({ ...m, diagnosis: e.target.value }))}
-                          required
-                        />
-                        <Textarea
-                          label="Treatment / Prescription"
-                          placeholder="Describe the treatment or prescribed medications..."
-                          value={medEntry.treatment}
-                          onChange={e => setMedEntry(m => ({ ...m, treatment: e.target.value }))}
-                          rows={3}
-                        />
-                        <Textarea
-                          label="Additional Notes"
-                          placeholder="Any other observations..."
-                          value={medEntry.notes}
-                          onChange={e => setMedEntry(m => ({ ...m, notes: e.target.value }))}
-                          rows={2}
-                        />
-                        <div className="flex gap-2 justify-end pt-2 border-t border-(--color-border)">
-                          <Button variant="secondary" size="sm" type="button" onClick={() => { setAddingRecord(false); setMedEntry({ diagnosis: '', treatment: '', notes: '' }) }}>
-                            Cancel
-                          </Button>
-                          <Button size="sm" type="submit" disabled={savingRecord}>{savingRecord ? 'Saving...' : <><Save size={13} /> Save Record</>}</Button>
-                        </div>
-                      </form>
-                    )}
-
-                    {/* Records list */}
-                    {!patient.medical_history?.length && !addingRecord ? (
-                      <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)">
-                        <History size={28} className="mx-auto mb-2 opacity-30" />
-                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {(patient.medical_history || []).map((rec, i) => (
-                          <div key={i} className="p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <p className="text-[10px] font-600 uppercase tracking-wider mb-0.5" style={{ color: 'var(--color-brand)' }}>
-                                  {rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}
-                                </p>
-                                <p className="text-sm font-700" style={{ color: 'var(--color-text-primary)' }}>{rec.diagnosis}</p>
-                              </div>
-                            </div>
-                            {rec.treatment && (
-                              <div className="mt-2 p-3 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
-                                <p className="text-[10px] font-600 uppercase mb-1" style={{ color: 'var(--color-text-muted)' }}>Treatment</p>
-                                <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{rec.treatment}</p>
-                              </div>
-                            )}
-                            {rec.notes && (
-                              <p className="text-xs mt-2 italic" style={{ color: 'var(--color-text-muted)' }}>{rec.notes}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Timeline */}
-                {activeTab === 'timeline' && (
-                  <div className="space-y-4">
-                    {activities.length === 0 ? (
-                      <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)">
-                        <Activity size={28} className="mx-auto mb-2 opacity-30" />
-                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No activity recorded yet.</p>
-                      </div>
-                    ) : activities.map((a, i) => (
-                      <div key={i} className="flex gap-3">
-                        <div className="p-2 rounded-lg h-fit shrink-0" style={{ background: 'var(--color-brand-50)' }}>
-                          <Activity size={13} style={{ color: 'var(--color-brand)' }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{a.content}</p>
-                          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                            {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Documents */}
-                {activeTab === 'documents' && (
-                  <div>
-                    <div className="py-16 text-center border-2 border-dashed rounded-xl border-(--color-border) hover:border-(--color-brand) transition-colors cursor-pointer group">
-                      <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center transition-colors group-hover:bg-(--color-brand-50)" style={{ background: 'var(--color-surface-2)' }}>
-                        <Plus size={22} style={{ color: 'var(--color-text-muted)' }} />
-                      </div>
-                      <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>Upload reports, prescriptions, or scan documents</p>
-                      <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Coming soon</p>
-                    </div>
-                  </div>
-                )}
-
+                {activeTab === 'tasks' && <div className="space-y-3">{!taskOpen ? <div className="flex justify-end"><Button size="sm" onClick={() => setTaskOpen(true)}><Plus size={14} /> New Task</Button></div> : <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Task *" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required /><div className="grid grid-cols-2 gap-3"><Select label="Priority" value={newTask.priority} onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))} options={['Low', 'Medium', 'High', 'Urgent'].map(s => ({ value: s, label: s }))} /><Input label="Due Date" type="datetime-local" value={newTask.due_date} onChange={e => setNewTask(f => ({ ...f, due_date: e.target.value }))} /></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setTaskOpen(false)}>Cancel</Button><Button size="sm" type="submit">Create Task</Button></div></form>}{tasks.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><CheckSquare size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No tasks yet.</p></div> : tasks.map(task => <div key={task.id} className={clsx('flex items-start gap-3 p-4 rounded-xl border border-(--color-border)', task.status === 'Completed' && 'opacity-50')} style={{ background: 'var(--color-surface-2)' }}><input type="checkbox" checked={task.status === 'Completed'} className="mt-0.5 w-4 h-4" onChange={() => handleTaskToggle(task)} /><div className="flex-1"><p className={clsx('text-sm font-500', task.status === 'Completed' && 'line-through')}>{task.title}</p>{task.due_date && <p className="text-xs mt-0.5"><Calendar size={10} className="inline mr-1" />{format(new Date(task.due_date), 'MMM d, h:mm a')}</p>}</div></div>)}</div>}
+                {activeTab === 'timeline' && <div>{activities.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><Activity size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No activity recorded yet.</p></div> : <div className="space-y-4">{activities.map((a, i) => <div key={i} className="flex gap-3"><div className="p-2 rounded-lg h-fit" style={{ background: 'var(--color-brand-50)' }}><Activity size={13} style={{ color: 'var(--color-brand)' }} /></div><div className="flex-1"><p className="text-sm">{a.content}</p><p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</p></div></div>)}</div>}</div>}
               </div>
             </Card>
           </div>
-
         </div>
+
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            {[{ id: 'history', label: 'Medical History', icon: History }, { id: 'documents', label: 'Documents', icon: FileText }].map(tab => <button key={tab.id} onClick={() => setBottomTab(tab.id)} className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2', bottomTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')} style={bottomTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}><tab.icon size={14} />{tab.label}</button>)}
+          </div>
+          <div className="p-5">
+            {bottomTab === 'history' && <div className="space-y-4"><div className="flex justify-end">{!addingRecord && <Button size="sm" onClick={() => setAddingRecord(true)}><Plus size={14} /> Add Record</Button>}</div>{addingRecord && <form onSubmit={handleAddRecord} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Diagnosis / Reason for Visit *" value={medEntry.diagnosis} onChange={e => setMedEntry(m => ({ ...m, diagnosis: e.target.value }))} required /><Textarea label="Treatment / Prescription" value={medEntry.treatment} onChange={e => setMedEntry(m => ({ ...m, treatment: e.target.value }))} rows={3} /><Textarea label="Additional Notes" value={medEntry.notes} onChange={e => setMedEntry(m => ({ ...m, notes: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setAddingRecord(false)}>Cancel</Button><Button size="sm" type="submit" disabled={savingRecord}>{savingRecord ? 'Saving...' : <><Save size={13} /> Save Record</>}</Button></div></form>}{!patient.medical_history?.length && !addingRecord ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><History size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p></div> : <div className="space-y-3">{(patient.medical_history || []).map((rec, i) => <div key={i} className="p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}><p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>{rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}</p><p className="text-sm font-700">{rec.diagnosis}</p>{rec.treatment && <p className="text-xs mt-2">{rec.treatment}</p>}</div>)}</div>}</div>}
+            {bottomTab === 'documents' && <div className="py-16 text-center border-2 border-dashed rounded-xl border-(--color-border)"><FileText size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Upload reports, prescriptions, or scan documents</p><p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Coming soon</p></div>}
+          </div>
+        </Card>
+
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
+          </div>
+          <div className="p-5 space-y-3">
+            {!showFuForm ? <div className="flex justify-end"><Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button></div> : <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="space-y-1.5"><label className="block text-xs font-500">Type</label><div className="flex flex-wrap gap-1.5">{FOLLOWUP_TYPES.map(t => <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))} className="px-3 py-1.5 rounded-full text-[11px] font-600 border" style={newFu.type === t ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{t}</button>)}</div></div><Select label="Status *" value={newFu.status_detail} onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))} options={[{ value: '', label: 'Select status' }, ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s }))]} /><CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} /><Textarea label="Response" value={newFu.response} onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setShowFuForm(false)}>Cancel</Button><Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>Save</Button></div></form>}
+            {followups.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="space-y-3">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
+          </div>
+        </Card>
       </div>
 
-      {/* Edit Patient modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Patient">
         <form onSubmit={handleEdit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="First Name *" value={editForm.first_name || ''} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} required />
-            <Input label="Last Name" value={editForm.last_name || ''} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Phone" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
-            <Input label="Email" type="email" value={editForm.email || ''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
-          </div>
+          <div className="grid grid-cols-2 gap-4"><Input label="First Name *" value={editForm.first_name || ''} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} required /><Input label="Last Name" value={editForm.last_name || ''} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} /></div>
+          <div className="grid grid-cols-2 gap-4"><Input label="Phone" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /><Input label="Email" type="email" value={editForm.email || ''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
           <Input label="Address" value={editForm.address || ''} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
-          <div className="space-y-1.5">
-            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
-            <div className="flex gap-2">
-              {['Active', 'Inactive'].map(s => (
-                <button key={s} type="button" onClick={() => setEditForm(f => ({ ...f, status: s }))}
-                  className="flex-1 py-2 rounded-lg text-xs font-500 border transition-all"
-                  style={editForm.status === s
-                    ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
-                    : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}
-                >{s}</button>
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2 border-t border-(--color-border)">
-            <Button variant="secondary" type="button" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Changes</Button>
-          </div>
+          <div className="space-y-1.5"><label className="block text-xs font-500">Status</label><div className="flex gap-2">{['Active', 'Inactive'].map(s => <button key={s} type="button" onClick={() => setEditForm(f => ({ ...f, status: s }))} className="flex-1 py-2 rounded-lg text-xs font-500 border" style={editForm.status === s ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{s}</button>)}</div></div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-(--color-border)"><Button variant="secondary" type="button" onClick={() => setEditOpen(false)}>Cancel</Button><Button type="submit">Save Changes</Button></div>
         </form>
       </Modal>
-
     </div>
   )
 }

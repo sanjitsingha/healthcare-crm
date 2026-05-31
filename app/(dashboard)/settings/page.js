@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import {
   Building2, Users, Tags, LogOut, Plus, Trash2, Save,
-  Check, Globe, Phone, MapPin, X, LayoutGrid, GripVertical, ToggleLeft, ToggleRight,
+  Check, Globe, Phone, MapPin, X, LayoutGrid, GripVertical, ToggleLeft, ToggleRight, UserRound,
 } from 'lucide-react'
 import { Button, Card, Input, Select, Textarea, Spinner, Avatar } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import clsx from 'clsx'
 
 const TABS = [
+  { id: 'account',      label: 'Account',      icon: UserRound },
   { id: 'organization', label: 'Organization', icon: Building2 },
   { id: 'people',       label: 'People',       icon: Users },
   { id: 'tags',         label: 'Tags',         icon: Tags },
@@ -48,6 +49,27 @@ function SectionHead({ icon: Icon, title, description }) {
         <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{title}</p>
         {description && <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{description}</p>}
       </div>
+    </div>
+  )
+}
+
+// ── Organization Tab ────────────────────────────────────────────
+function AccountTab({ user }) {
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
+  const displayEmail = user?.email || 'Not available'
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <SectionHead icon={UserRound} title="Account" description="Your signed-in account details" />
+        <div className="flex items-center gap-3 p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+          <Avatar name={displayName} size="md" />
+          <div className="min-w-0">
+            <p className="text-sm font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
+            <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{displayEmail}</p>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -790,6 +812,7 @@ export default function SettingsPage() {
 
       {/* Content area */}
       <div className="flex-1 min-w-0 p-6 overflow-y-auto">
+        {tab === 'account'      && <AccountTab user={user} />}
         {tab === 'organization' && <OrganizationTab org={org} orgId={orgId} />}
         {tab === 'people'       && <PeopleTab orgId={orgId} org={org} />}
         {tab === 'tags'         && <TagsTab orgId={orgId} />}
