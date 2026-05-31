@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Plus, Search, Users, Mail, Phone, Building2 } from 'lucide-react'
 import { Button, Card, Avatar, Badge, Modal, Input, Select, Textarea, TagsInput, EmptyState, Spinner } from '@/components/ui'
 import { getContacts, createContact, getOrganizations } from '@/lib/supabase/queries'
+import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { format } from 'date-fns'
 

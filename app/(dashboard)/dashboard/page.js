@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Award, Clock, Activity, Target, Zap } from 'lucide-react'
+import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Clock, Target, Zap } from 'lucide-react'
 import { StatCard, Card, Badge, Spinner } from '@/components/ui'
 import { getDashboardStats, getLeads, getTasks, getFollowups, getAppointments } from '@/lib/supabase/queries'
+import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { format, isToday, isTomorrow, isPast } from 'date-fns'
 
-const STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost']
+// Stages match the DB schema
+const STAGES = ['New', 'Contacted', 'Interested', 'Follow-up', 'Converted', 'Lost']
 const STAGE_BAR_COLOR = {
   New: '#3b82f6', Contacted: '#8b5cf6', Qualified: '#f59e0b',
   Proposal: '#f97316', Negotiation: '#ec4899', Won: '#10b981', Lost: '#ef4444',
@@ -19,21 +21,22 @@ function formatCurrency(n) {
 }
 
 export default function DashboardPage() {
+  const { orgId, org } = useOrg()
   const [stats, setStats] = useState(null)
   const [recentLeads, setRecentLeads] = useState([])
   const [tasks, setTasks] = useState([])
   const [followups, setFollowups] = useState([])
+  const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const [appointments, setAppointments] = useState([])
-
   useEffect(() => {
+    if (!orgId) return
     Promise.all([
-      getDashboardStats().catch(() => null),
-      getLeads().catch(() => []),
-      getTasks({ status: 'Pending' }).catch(() => []),
-      getFollowups({ status: 'Scheduled' }).catch(() => []),
-      getAppointments({ status: 'booked' }).catch(() => []),
+      getDashboardStats(orgId).catch(() => null),
+      getLeads({ orgId }).catch(() => []),
+      getTasks({ status: 'Pending', orgId }).catch(() => []),
+      getFollowups({ status: 'Scheduled', orgId }).catch(() => []),
+      getAppointments({ status: 'booked', orgId }).catch(() => []),
     ]).then(([s, l, t, f, a]) => {
       setStats(s)
       setRecentLeads((l || []).slice(0, 5))
@@ -42,7 +45,7 @@ export default function DashboardPage() {
       setAppointments((a || []).slice(0, 5))
       setLoading(false)
     })
-  }, [])
+  }, [orgId])
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">

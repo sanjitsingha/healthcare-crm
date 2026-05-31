@@ -1,6 +1,7 @@
 -- Healthcare CRM Schema (Multi-tenant Clean Installation)
 
 -- Drop existing tables to start from zero
+drop table if exists profiles cascade;
 drop table if exists notifications cascade;
 drop table if exists audit_logs cascade;
 drop table if exists automation_rules cascade;
@@ -110,6 +111,7 @@ create table patients (
   date_of_birth date,
   address text,
   medical_history jsonb default '[]',
+  custom_data jsonb default '{}',
   status text check (status in ('Active','Inactive')) default 'Active',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -150,7 +152,15 @@ create table leads (
   assigned_to uuid,
   expected_close_date date,
   closed_date date,
+  first_name text,
+  last_name text,
+  phone text,
+  email text,
+  gender text check (gender in ('Male','Female','Other')),
+  date_of_birth date,
+  address text,
   lost_reason text,
+  custom_data jsonb default '{}',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -364,3 +374,51 @@ create policy "Allow all payment access" on payments for all using (true) with c
 create policy "Allow all automation access" on automation_rules for all using (true) with check (true);
 create policy "Allow all audit access" on audit_logs for all using (true) with check (true);
 create policy "Allow all notification access" on notifications for all using (true) with check (true);
+
+-- ── Helper: get current user's org_id without RLS recursion ─────
+-- Must live in public schema — Supabase restricts creating functions in auth schema.
+-- security definer so it runs as the function owner (bypasses RLS on profiles).
+create or replace function public.get_my_org_id()
+returns uuid
+language sql
+security definer
+stable
+as $$
+  select organization_id from public.profiles where id = auth.uid()
+$$;
+
+-- ── Profiles ────────────────────────────────────────────────────
+-- Links each auth user to exactly one organization (their tenant).
+-- Created automatically during the onboarding wizard (/setup).
+create table profiles (
+  id uuid references auth.users(id) on delete cascade primary key,
+  organization_id uuid references organizations(id) on delete set null,
+  full_name text,
+  avatar_url text,
+  created_at timestamptz default now()
+);
+
+alter table profiles enable row level security;
+
+-- Users can only read/write their own profile row
+-- Own profile access
+create policy "Users can read own profile"
+  on profiles for select
+  using (auth.uid() = id);
+
+-- Teammates in the same org can see each other
+create policy "Org members can view teammates"
+  on profiles for select
+  using (
+    organization_id is not null
+    and organization_id = public.get_my_org_id()
+  );
+
+create policy "Users can insert own profile"
+  on profiles for insert
+  with check (auth.uid() = id);
+
+create policy "Users can update own profile"
+  on profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
