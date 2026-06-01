@@ -112,6 +112,7 @@ create table patients (
   address text,
   medical_history jsonb default '[]',
   custom_data jsonb default '{}',
+  assigned_to uuid,
   status text check (status in ('Active','Inactive')) default 'Active',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -242,6 +243,7 @@ create table followups (
   patient_id uuid references patients(id) on delete cascade,
   type text check (type in ('Call','Email','Meeting','Demo','Site Visit','WhatsApp','Other')) default 'Call',
   scheduled_at timestamptz not null,
+  caller_name text,
   notes text,
   outcome text,
   status text check (status in ('Scheduled','Completed','Missed','Rescheduled')) default 'Scheduled',

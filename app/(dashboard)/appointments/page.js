@@ -1,218 +1,383 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, Calendar as CalIcon, Clock, User, MapPin, MoreHorizontal, Check, X, Filter } from 'lucide-react'
-import { Button, Badge, Card, Modal, Input, Select, Spinner, Avatar } from '@/components/ui'
+import { useEffect, useState } from 'react'
+import {
+  Plus, Calendar, Clock, User, UserRound, Link2,
+  Check, X, ChevronRight,
+} from 'lucide-react'
+import { Button, Card, Modal, Input, Select, Textarea, Spinner, Avatar } from '@/components/ui'
 import { getAppointments, createAppointment, updateAppointment, getPatients, getLeads } from '@/lib/supabase/queries'
-import { format, isToday, isFuture, isPast } from 'date-fns'
+import { useOrg } from '@/lib/context/OrgContext'
+import Link from 'next/link'
+import { format, isToday, isFuture, isPast, isTomorrow } from 'date-fns'
 import clsx from 'clsx'
 
-function BookAppointmentModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({
-    patient_id: '', lead_id: '', scheduled_at: '',
-    duration_minutes: 30, notes: '', doctor_id: null
-  })
+const STATUS_STYLE = {
+  booked:    { bg: '#dbeafe', color: '#1d4ed8', label: 'Booked' },
+  confirmed: { bg: '#dcfce7', color: '#15803d', label: 'Confirmed' },
+  completed: { bg: '#f3f4f6', color: '#374151', label: 'Completed' },
+  cancelled: { bg: '#fee2e2', color: '#b91c1c', label: 'Cancelled' },
+}
+
+const TABS = [
+  { id: 'today',    label: 'Today' },
+  { id: 'upcoming', label: 'Upcoming' },
+  { id: 'history',  label: 'History' },
+  { id: 'all',      label: 'All' },
+]
+
+// ── Book Appointment Modal ─────────────────────────────────────
+function BookModal({ open, onClose, onCreated, orgId }) {
+  const [form, setForm]     = useState({ patient_id: '', lead_id: '', date: '', time: '10:00', notes: '' })
   const [patients, setPatients] = useState([])
-  const [leads, setLeads] = useState([])
-  const [saving, setSaving] = useState(false)
+  const [leads,    setLeads]    = useState([])
+  const [saving,   setSaving]   = useState(false)
 
   useEffect(() => {
-    if (open) {
-      Promise.all([getPatients(), getLeads()]).then(([p, l]) => {
-        setPatients(p || [])
-        setLeads(l || [])
-      })
-    }
-  }, [open])
+    if (!open || !orgId) return
+    Promise.all([getPatients({ orgId }), getLeads({ orgId })]).then(([p, l]) => {
+      setPatients(p || [])
+      setLeads(l || [])
+    })
+  }, [open, orgId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.scheduled_at) return
+    if (!form.patient_id || !form.date || !orgId) return
     setSaving(true)
     try {
+      const scheduledAt = new Date(`${form.date}T${form.time || '10:00'}:00`)
       const appt = await createAppointment({
-        ...form,
-        organization_id: '00000000-0000-0000-0000-000000000000',
-        status: 'booked'
+        patient_id:    form.patient_id,
+        lead_id:       form.lead_id || null,
+        scheduled_at:  scheduledAt.toISOString(),
+        notes:         form.notes || null,
+        status:        'booked',
+        organization_id: orgId,
       })
       onCreated(appt)
-      setForm({ patient_id: '', lead_id: '', scheduled_at: '', duration_minutes: 30, notes: '' })
       onClose()
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setSaving(false)
-    }
+      setForm({ patient_id: '', lead_id: '', date: '', time: '10:00', notes: '' })
+    } catch (err) { alert(err.message) }
+    finally { setSaving(false) }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Book New Appointment" size="lg">
+    <Modal open={open} onClose={onClose} title="Book Appointment">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <Select
+          label="Patient *"
+          value={form.patient_id}
+          onChange={e => setForm(f => ({ ...f, patient_id: e.target.value }))}
+          options={[
+            { value: '', label: 'Select patient…' },
+            ...patients.map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() })),
+          ]}
+        />
+        <Select
+          label="Link to Lead (optional)"
+          value={form.lead_id}
+          onChange={e => setForm(f => ({ ...f, lead_id: e.target.value }))}
+          options={[
+            { value: '', label: '— None —' },
+            ...leads.map(l => ({
+              value: l.id,
+              label: [l.first_name, l.last_name].filter(Boolean).join(' ') || l.title,
+            })),
+          ]}
+        />
         <div className="grid grid-cols-2 gap-4">
-          <Select label="Select Patient" value={form.patient_id} onChange={e => setForm(f => ({ ...f, patient_id: e.target.value }))}
-            options={[{ value: '', label: 'Select patient...' }, ...patients.map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}` }))]} />
-          <Select label="Link to Lead (Optional)" value={form.lead_id} onChange={e => setForm(f => ({ ...f, lead_id: e.target.value }))}
-            options={[{ value: '', label: 'Select lead...' }, ...leads.map(l => ({ value: l.id, label: l.title }))]} />
+          <div className="space-y-1.5">
+            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Date *</label>
+            <input
+              type="date"
+              required
+              value={form.date}
+              onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Time</label>
+            <input
+              type="time"
+              value={form.time}
+              onChange={e => setForm(f => ({ ...f, time: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+            />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Input label="Date & Time *" type="datetime-local" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} required />
-          <Input label="Duration (mins)" type="number" value={form.duration_minutes} onChange={e => setForm(f => ({ ...f, duration_minutes: e.target.value }))} />
+        <div className="space-y-1.5">
+          <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Doctor</label>
+          <div className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+            No doctor available
+          </div>
         </div>
-        <Select label="Assign Doctor" options={[{ value: '', label: 'Any available doctor' }]} />
-        <Input label="Notes" placeholder="Reason for visit..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <Textarea
+          label="Notes"
+          placeholder="Reason for visit, special instructions…"
+          value={form.notes}
+          onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+          rows={2}
+        />
+        <div className="flex justify-end gap-2 pt-2 border-t border-(--color-border)">
           <Button variant="secondary" onClick={onClose} type="button">Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Booking...' : 'Book Appointment'}</Button>
+          <Button type="submit" disabled={saving || !form.patient_id || !form.date}>
+            {saving ? 'Booking…' : <><Calendar size={14} /> Book Appointment</>}
+          </Button>
         </div>
       </form>
     </Modal>
   )
 }
 
+// ── Appointment card ───────────────────────────────────────────
+function ApptCard({ appt, staffMembers, onStatusChange }) {
+  const st   = STATUS_STYLE[appt.status] || STATUS_STYLE.booked
+  const date = new Date(appt.scheduled_at)
+  const patientName = [appt.patients?.first_name, appt.patients?.last_name].filter(Boolean).join(' ') || 'Unknown Patient'
+  const leadName    = appt.leads
+    ? ([appt.leads.first_name, appt.leads.last_name].filter(Boolean).join(' ') || appt.leads.title || 'Lead')
+    : null
+
+  const getDateLabel = () => {
+    if (isToday(date))    return 'Today'
+    if (isTomorrow(date)) return 'Tomorrow'
+    return format(date, 'EEE, MMM d yyyy')
+  }
+
+  const canAct = appt.status === 'booked' || appt.status === 'confirmed'
+
+  return (
+    <div
+      className="rounded-2xl border border-(--color-border) overflow-hidden transition-shadow hover:shadow-sm"
+      style={{ background: 'var(--color-surface)' }}
+    >
+      <div className="flex items-stretch">
+        {/* Date block */}
+        <div
+          className="w-36 shrink-0 flex flex-col items-center justify-center gap-0.5 p-4 border-r border-(--color-border)"
+          style={{ background: 'var(--color-surface-2)' }}
+        >
+          <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-brand)' }}>
+            {getDateLabel()}
+          </p>
+          <p className="text-2xl font-800 leading-none" style={{ color: 'var(--color-text-primary)' }}>
+            {format(date, 'h:mm')}
+          </p>
+          <p className="text-xs font-600" style={{ color: 'var(--color-text-muted)' }}>
+            {format(date, 'a · MMM d')}
+          </p>
+        </div>
+
+        {/* Main info */}
+        <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {/* Patient */}
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                {appt.patients?.id ? (
+                  <Link
+                    href={`/patients/${appt.patients.id}`}
+                    className="text-sm font-700 hover:underline truncate"
+                    style={{ color: 'var(--color-text-primary)' }}
+                  >
+                    {patientName}
+                  </Link>
+                ) : (
+                  <span className="text-sm font-700" style={{ color: 'var(--color-text-primary)' }}>{patientName}</span>
+                )}
+                <span
+                  className="text-[10px] font-700 px-2 py-0.5 rounded-full shrink-0 capitalize"
+                  style={{ background: st.bg, color: st.color }}
+                >
+                  {st.label}
+                </span>
+              </div>
+
+              {/* Meta row */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  <UserRound size={12} /> Patient
+                </span>
+
+                {leadName && appt.leads?.id && (
+                  <Link
+                    href={`/leads/${appt.leads.id}`}
+                    className="flex items-center gap-1 text-xs font-500 transition-opacity hover:opacity-70"
+                    style={{ color: 'var(--color-brand)' }}
+                  >
+                    <Link2 size={11} /> {leadName}
+                  </Link>
+                )}
+              </div>
+
+              {appt.notes && (
+                <p className="mt-2 text-xs italic border-l-2 pl-3" style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}>
+                  "{appt.notes}"
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            {canAct && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {appt.status === 'booked' && (
+                  <button
+                    type="button"
+                    onClick={() => onStatusChange(appt.id, 'confirmed')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
+                    style={{ background: '#dcfce7', color: '#15803d' }}
+                  >
+                    <Check size={11} /> Confirm
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onStatusChange(appt.id, 'completed')}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
+                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                >
+                  <Check size={11} /> Complete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onStatusChange(appt.id, 'cancelled')}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-red-50"
+                  style={{ borderColor: '#fecaca', color: '#b91c1c' }}
+                >
+                  <X size={11} /> Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────
 export default function AppointmentsPage() {
+  const { orgId, org }          = useOrg()
   const [appointments, setAppointments] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [view, setView] = useState('upcoming') // upcoming, past, all
+  const [loading,      setLoading]      = useState(true)
+  const [tab,          setTab]          = useState('upcoming')
+  const [createOpen,   setCreateOpen]   = useState(false)
 
-  const loadAppointments = useCallback(async () => {
+  const staffMembers = org?.settings?.staff_members || []
+
+  useEffect(() => {
+    if (!orgId) return
+    let active = true
     setLoading(true)
-    try {
-      const data = await getAppointments()
-      setAppointments(data || [])
-    } catch { setAppointments([]) }
-    setLoading(false)
-  }, [])
+    getAppointments({ orgId })
+      .then(data => { if (active) setAppointments(data || []) })
+      .catch(() => { if (active) setAppointments([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [orgId])
 
-  useEffect(() => { loadAppointments() }, [loadAppointments])
-
-  const handleStatusUpdate = async (id, status) => {
+  const handleStatusChange = async (id, status) => {
     try {
-      await updateAppointment(id, { status })
-      loadAppointments()
+      const updated = await updateAppointment(id, { status })
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: updated.status } : a))
     } catch (e) { alert(e.message) }
   }
 
-  const filteredAppointments = appointments.filter(a => {
-    if (view === 'upcoming') return isFuture(new Date(a.scheduled_at)) || isToday(new Date(a.scheduled_at))
-    if (view === 'past') return isPast(new Date(a.scheduled_at)) && !isToday(new Date(a.scheduled_at))
+  const handleCreated = (appt) => setAppointments(prev => [appt, ...prev])
+
+  const filtered = appointments.filter(a => {
+    const d = new Date(a.scheduled_at)
+    if (tab === 'today')    return isToday(d)
+    if (tab === 'upcoming') return (isFuture(d) || isToday(d)) && a.status !== 'cancelled'
+    if (tab === 'history')  return isPast(d) && !isToday(d)
     return true
   })
 
+  // Stats
+  const todayCount    = appointments.filter(a => isToday(new Date(a.scheduled_at))).length
+  const upcomingCount = appointments.filter(a => isFuture(new Date(a.scheduled_at)) && a.status !== 'cancelled').length
+  const completedCount = appointments.filter(a => a.status === 'completed').length
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="p-6 space-y-5" style={{ background: 'var(--color-bg)', minHeight: '100vh' }}>
+      {/* Header */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Appointments</h1>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Manage doctor schedules and patient visits</p>
+          <h1 className="text-xl font-700" style={{ color: 'var(--color-text-primary)' }}>Appointments</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {todayCount} today · {upcomingCount} upcoming · {completedCount} completed
+          </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="shadow-lg shadow-[var(--color-brand)]/20">
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus size={16} /> Book Appointment
         </Button>
       </div>
 
-      <div className="flex border-b border-[var(--color-border)]">
-        {[
-          { id: 'upcoming', label: 'Upcoming' },
-          { id: 'past', label: 'History' },
-          { id: 'all', label: 'All Schedule' },
-        ].map(tab => (
+      {/* Tabs */}
+      <div className="flex border-b border-(--color-border)">
+        {TABS.map(t => (
           <button
-            key={tab.id}
-            onClick={() => setView(tab.id)}
+            key={t.id}
+            onClick={() => setTab(t.id)}
             className={clsx(
-              'px-6 py-3 text-xs font-700 transition-all border-b-2',
-              view === tab.id
-                ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-                : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+              'px-5 py-3 text-xs font-600 border-b-2 transition-all',
+              tab === t.id ? 'border-(--color-brand)' : 'border-transparent hover:border-(--color-border)'
             )}
+            style={tab === t.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}
           >
-            {tab.label}
+            {t.label}
+            {t.id === 'today' && todayCount > 0 && (
+              <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-700"
+                style={{ background: 'var(--color-brand)', color: 'white' }}>
+                {todayCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
+      {/* Content */}
       {loading ? (
-        <div className="flex justify-center py-20"><Spinner size={32} /></div>
-      ) : (
-        <div className="space-y-4">
-          {filteredAppointments.map(a => (
-            <Card key={a.id} className="p-0 overflow-hidden border-[var(--color-border)] hover:border-[var(--color-brand-light)] transition-all bg-white shadow-sm">
-              <div className="flex flex-col md:flex-row">
-                {/* Time Slot */}
-                <div className="md:w-48 bg-gray-50/50 p-5 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-[var(--color-border)]">
-                  <p className="text-[10px] font-800 text-[var(--color-brand)] uppercase tracking-widest mb-1">{format(new Date(a.scheduled_at), 'EEEE')}</p>
-                  <p className="text-2xl font-900 text-[var(--color-text-primary)]">{format(new Date(a.scheduled_at), 'h:mm')}</p>
-                  <p className="text-xs font-700 text-[var(--color-text-primary)]">{format(new Date(a.scheduled_at), 'a')}</p>
-                  <div className="mt-3 px-2 py-1 bg-white rounded-full border border-gray-100 shadow-sm">
-                    <p className="text-[9px] font-700 text-gray-500">{format(new Date(a.scheduled_at), 'MMM d, yyyy')}</p>
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 p-5 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex items-center gap-4">
-                    <Avatar name={`${a.patients?.first_name} ${a.patients?.last_name || ''}`} size="lg" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-800 text-base" style={{ color: 'var(--color-text-primary)' }}>
-                          {a.patients?.first_name} {a.patients?.last_name || ''}
-                        </h3>
-                        <Badge className={clsx(
-                          a.status === 'completed' ? 'bg-green-50 text-green-700 border-green-100' :
-                          a.status === 'cancelled' ? 'bg-red-50 text-red-700 border-red-100' :
-                          'bg-blue-50 text-blue-700 border-blue-100'
-                        )}>{a.status}</Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                          <User size={12} className="text-[var(--color-text-muted)]" /> Dr. Available
-                        </p>
-                        <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                          <Clock size={12} className="text-[var(--color-text-muted)]" /> {a.duration_minutes} mins duration
-                        </p>
-                        {a.leads && (
-                          <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-brand)' }}>
-                            <Filter size={12} /> Linked: {a.leads.title}
-                          </p>
-                        )}
-                      </div>
-                      {a.notes && <p className="mt-3 text-xs italic text-[var(--color-text-muted)] border-l-2 border-gray-100 pl-3">&quot;{a.notes}&quot;</p>}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
-                    {a.status === 'booked' && (
-                      <>
-                        <Button size="sm" variant="secondary" onClick={() => handleStatusUpdate(a.id, 'cancelled')} className="text-red-600 border-red-100 hover:bg-red-50">Cancel</Button>
-                        <Button size="sm" onClick={() => handleStatusUpdate(a.id, 'completed')} className="bg-green-600 hover:bg-green-700">Mark Completed</Button>
-                      </>
-                    )}
-                    {a.status !== 'booked' && (
-                       <Button size="sm" variant="secondary" className="opacity-50 pointer-events-none">Archived</Button>
-                    )}
-                    <button className="p-2 hover:bg-gray-50 rounded-xl border border-transparent hover:border-gray-100">
-                      <MoreHorizontal size={18} className="text-gray-400" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
-          {filteredAppointments.length === 0 && (
-            <div className="py-20 text-center border border-dashed rounded-2xl bg-white">
-              <p className="text-sm font-600 text-[var(--color-text-muted)]">No appointments scheduled in this view.</p>
-              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setCreateOpen(true)}>Book your first one now</Button>
-            </div>
+        <div className="flex justify-center py-16"><Spinner size={28} /></div>
+      ) : filtered.length === 0 ? (
+        <div className="py-24 text-center border border-dashed rounded-2xl border-(--color-border)">
+          <Calendar size={32} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>
+            {tab === 'today' ? 'No appointments today.' : tab === 'upcoming' ? 'No upcoming appointments.' : 'No appointments found.'}
+          </p>
+          {tab !== 'history' && (
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="mt-2 text-xs font-600 transition-opacity hover:opacity-70"
+              style={{ color: 'var(--color-brand)' }}
+            >
+              Book one now →
+            </button>
           )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered
+            .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
+            .map(a => (
+              <ApptCard
+                key={a.id}
+                appt={a}
+                staffMembers={staffMembers}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
         </div>
       )}
 
-      <BookAppointmentModal
+      <BookModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={() => { loadAppointments(); setCreateOpen(false) }}
+        onCreated={handleCreated}
+        orgId={orgId}
       />
     </div>
   )

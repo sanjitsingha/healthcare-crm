@@ -3,7 +3,7 @@ import { useEffect, useState, use } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
-  CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight,
+  CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
 } from 'lucide-react'
 import { Button, Card, Input, Textarea, Spinner, Modal, Select } from '@/components/ui'
 import {
@@ -11,6 +11,7 @@ import {
   getActivities, createActivity,
   getTasks, createTask, updateTask,
   getFollowups, createFollowup, updateFollowup,
+  getTags, assignTagToPatient, removeTagFromPatient,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
@@ -149,11 +150,14 @@ function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
 export default function PatientDetailPage({ params }) {
   const { id } = use(params)
   const router = useRouter()
-  const { orgId } = useOrg()
+  const { orgId, org } = useOrg()
   const [patient, setPatient] = useState(null)
   const [activities, setActivities] = useState([])
   const [tasks, setTasks] = useState([])
   const [followups, setFollowups] = useState([])
+  const [availableTags, setAvailableTags] = useState([])
+  const [addingTag, setAddingTag] = useState(false)
+  const [selectedTagId, setSelectedTagId] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tasks')
   const [bottomTab, setBottomTab] = useState('history')
@@ -166,6 +170,7 @@ export default function PatientDetailPage({ params }) {
   const [savingRecord, setSavingRecord] = useState(false)
   const [showFuForm, setShowFuForm] = useState(false)
   const [newFu, setNewFu] = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
+  const [assigningPatient, setAssigningPatient] = useState(false)
 
   const logActivity = (type, content, entityType = 'patient', entityId = id) => orgId && createActivity({ organization_id: orgId, entity_type: entityType, entity_id: entityId, type, content })
 
@@ -186,11 +191,13 @@ export default function PatientDetailPage({ params }) {
       const mergedActs = [...(patientActs || []), ...leadActsList.flat()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       const mergedTasks = [...(patientTasks || []), ...leadTasksList.flat()].reduce((acc, t) => (acc.some(x => x.id === t.id) ? acc : [...acc, t]), [])
       const mergedFollowups = [...(patientFollowups || []), ...leadFollowupsList.flat()].reduce((acc, f) => (acc.some(x => x.id === f.id) ? acc : [...acc, f]), [])
+      const tags = await getTags(orgId)
 
       setPatient(p)
       setActivities(mergedActs)
       setTasks(mergedTasks)
       setFollowups(mergedFollowups)
+      setAvailableTags(tags || [])
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -227,6 +234,42 @@ export default function PatientDetailPage({ params }) {
   const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleRescheduleFollowup = async (fuId, newDate, newType) => { const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
 
+  const linkedTagIds = (patient?.tags || []).map(t => t.tags?.id).filter(Boolean)
+  const unlinkedTags = availableTags.filter(t => !linkedTagIds.includes(t.id))
+
+  const handleAddTag = async () => {
+    if (!selectedTagId) return
+    try {
+      await assignTagToPatient(id, selectedTagId)
+      const updated = await getPatient(id)
+      setPatient(updated)
+      setSelectedTagId('')
+      setAddingTag(false)
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleRemoveTag = async (tagId) => {
+    try {
+      await removeTagFromPatient(id, tagId)
+      const updated = await getPatient(id)
+      setPatient(updated)
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleAssignPatient = async (memberId) => {
+    if (memberId === patient.assigned_to) { setAssigningPatient(false); return }
+    try {
+      const updated = await updatePatient(id, { assigned_to: memberId || null })
+      setPatient(prev => ({ ...prev, assigned_to: updated.assigned_to }))
+      const staff = org?.settings?.staff_members || []
+      const member = staff.find(m => m.id === memberId)
+      await logActivity('note', memberId
+        ? `Patient assigned to ${member?.name || 'team member'}`
+        : 'Patient unassigned')
+    } catch (err) { alert(err.message) }
+    setAssigningPatient(false)
+  }
+
   if (loading) return <div className="flex items-center justify-center py-32"><Spinner size={32} /></div>
   if (!patient) return <div className="p-12 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>Patient not found</div>
 
@@ -235,12 +278,100 @@ export default function PatientDetailPage({ params }) {
   const initials = `${patient.first_name?.[0] || ''}${patient.last_name?.[0] || ''}`.toUpperCase()
   const statusS = STATUS_STYLE[patient.status] || STATUS_STYLE.Active
   const pendingTasks = tasks.filter(t => t.status === 'Pending').length
+  const staffMembers = org?.settings?.staff_members || []
+  const assignee = patient.assigned_to ? staffMembers.find(m => m.id === patient.assigned_to) : null
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <div className="sticky top-0 z-10 px-6 py-4 border-b border-(--color-border) flex items-center justify-between" style={{ background: 'var(--color-surface)' }}>
         <div className="flex items-center gap-3"><Link href="/patients" className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--color-text-muted)' }}><ArrowLeft size={16} /> Patients</Link><span style={{ color: 'var(--color-border)' }}>/</span><span className="text-sm font-600 truncate max-w-xs" style={{ color: 'var(--color-text-primary)' }}>{fullName}</span></div>
-        <div className="flex items-center gap-2"><Button variant="secondary" size="sm" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}><Edit2 size={14} /> Edit</Button><button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border)"><Trash2 size={15} className="text-red-500" /></button></div>
+        <div className="flex items-center gap-2">
+
+          {/* Assign Patient */}
+          <div className="relative">
+            {assigningPatient && <div className="fixed inset-0 z-10" onClick={() => setAssigningPatient(false)} />}
+            <button
+              type="button"
+              onClick={() => setAssigningPatient(s => !s)}
+              className="relative z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
+            >
+              {assignee ? (
+                <>
+                  <span
+                    className="w-5 h-5 rounded-full text-[10px] font-700 flex items-center justify-center shrink-0"
+                    style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                  >
+                    {assignee.name[0].toUpperCase()}
+                  </span>
+                  <span className="max-w-24 truncate">{assignee.name}</span>
+                </>
+              ) : (
+                <>
+                  <User size={13} />
+                  Assign Patient
+                </>
+              )}
+              <ChevronDown size={12} style={{ transform: assigningPatient ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+            </button>
+
+            {assigningPatient && (
+              <div
+                className="absolute top-full right-0 mt-1.5 w-52 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+              >
+                <div className="px-3 py-2 border-b border-(--color-border)">
+                  <p className="text-[10px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Assign to</p>
+                </div>
+                {staffMembers.length === 0 ? (
+                  <p className="px-3 py-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    No team members yet. Add them in Settings → People.
+                  </p>
+                ) : (
+                  <>
+                    {staffMembers.map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => handleAssignPatient(m.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-500 text-left transition-colors hover:bg-(--color-surface-2)"
+                      >
+                        <span
+                          className="w-6 h-6 rounded-full text-[10px] font-700 flex items-center justify-center shrink-0"
+                          style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                        >
+                          {m.name[0].toUpperCase()}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate" style={{ color: 'var(--color-text-primary)' }}>{m.name}</p>
+                          {m.designation && <p className="text-[10px] truncate" style={{ color: 'var(--color-text-muted)' }}>{m.designation}</p>}
+                        </div>
+                        {patient.assigned_to === m.id && <Check size={12} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />}
+                      </button>
+                    ))}
+                    {patient.assigned_to && (
+                      <>
+                        <div className="border-t border-(--color-border)" />
+                        <button
+                          type="button"
+                          onClick={() => handleAssignPatient(null)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-500 text-left transition-colors hover:bg-red-50"
+                          style={{ color: '#b91c1c' }}
+                        >
+                          <X size={13} />
+                          Unassign
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Button variant="secondary" size="sm" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}><Edit2 size={14} /> Edit</Button>
+          <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border)"><Trash2 size={15} className="text-red-500" /></button>
+        </div>
       </div>
 
       <div className="p-6 space-y-5">
@@ -249,6 +380,68 @@ export default function PatientDetailPage({ params }) {
             <Card className="p-5 border-(--color-border)">
               <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
               <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p><div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
+              <div className="mb-4 space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
+                    const tc = tag.color || '#6366f1'
+                    return (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-600"
+                      style={{ backgroundColor: `${tc}28`, borderColor: `${tc}70`, color: tc }}
+                    >
+                      <Tag size={11} />
+                      {tag.name}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag.id)}
+                        className="ml-0.5 opacity-50 hover:opacity-100 transition-opacity"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  )})}
+                  {!addingTag && (
+                    <button
+                      type="button"
+                      onClick={() => setAddingTag(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-dashed text-[11px] font-600 transition-colors hover:bg-(--color-surface-2)"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                    >
+                      <Plus size={11} /> Add Tag
+                    </button>
+                  )}
+                </div>
+                {addingTag && (
+                  <div className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
+                    <p className="text-[10px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Select a tag</p>
+                    {unlinkedTags.length === 0 ? (
+                      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>All tags already applied.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {unlinkedTags.map(tag => (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => setSelectedTagId(tag.id)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-600 transition-all"
+                            style={selectedTagId === tag.id
+                              ? { background: tag.color, borderColor: tag.color, color: 'white' }
+                              : { background: `${tag.color}15`, borderColor: `${tag.color}50`, color: tag.color }}
+                          >
+                            <Tag size={11} />
+                            {tag.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button size="sm" type="button" onClick={handleAddTag} disabled={!selectedTagId}>Add</Button>
+                      <Button size="sm" variant="secondary" type="button" onClick={() => { setAddingTag(false); setSelectedTagId('') }}>Cancel</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="space-y-2.5">
                 {patient.phone && <div className="flex items-center gap-2"><Phone size={13} /><span className="text-xs">{patient.phone}</span></div>}
                 {patient.email && <div className="flex items-center gap-2"><Mail size={13} /><span className="text-xs">{patient.email}</span></div>}

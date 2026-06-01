@@ -3,7 +3,7 @@ import { useEffect, useState, use } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin, User,
   Calendar, Clock, CheckSquare, Bell, Tag, TrendingUp,
-  MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight,
+  MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { Button, Card, Modal, Input, Select, Textarea, Spinner } from '@/components/ui'
 import {
@@ -11,15 +11,24 @@ import {
   getActivities, createActivity,
   getTasks, createTask, updateTask,
   getFollowups, createFollowup, updateFollowup,
-  createPatient,
+  createPatient, createAppointment, getAppointments, updateAppointment,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
+import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
+const DEFAULT_LEAD_STAGES = [
+  { name: 'New',        color: '#6366f1' },
+  { name: 'Contacted',  color: '#0ea5e9' },
+  { name: 'Interested', color: '#f59e0b' },
+  { name: 'Follow-up',  color: '#8b5cf6' },
+  { name: 'Converted',  color: '#10b981' },
+  { name: 'Lost',       color: '#ef4444' },
+]
+
 const FOLLOWUP_TYPES = ['Call', 'WhatsApp', 'Email']
 
 const FOLLOWUP_STATUS_OPTIONS = {
@@ -173,58 +182,146 @@ function CustomDateTimePicker({ value, onChange, label = 'Date & Time *' }) {
   return (
     <div className="space-y-1.5">
       <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{label}</label>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full px-3 py-2 rounded-lg border text-left text-sm"
-        style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
-      >
-        {format(selected, 'EEE, MMM d yyyy · h:mm a')}
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full px-3 py-2 rounded-lg border text-left text-sm"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+        >
+          {format(selected, 'MMM d, yyyy · h:mm a')}
+        </button>
 
-      {open && (
-        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-          <div className="flex items-center justify-between">
-            <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => subMonths(m, 1))}><ChevronLeft size={15} /></button>
-            <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
-            <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => addMonths(m, 1))}><ChevronRight size={15} /></button>
-          </div>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div
+              className="absolute top-full left-0 mt-1.5 w-68 rounded-xl border p-3 space-y-3 z-20"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+            >
+              <div className="flex items-center justify-between">
+                <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => subMonths(m, 1))}><ChevronLeft size={15} /></button>
+                <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+                <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => addMonths(m, 1))}><ChevronRight size={15} /></button>
+              </div>
 
-          <div className="grid grid-cols-7 gap-1 text-[11px] text-center">
-            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => (
-              <span key={day} style={{ color: 'var(--color-text-muted)' }}>{day}</span>
-            ))}
-            {days.map((day, i) => {
-              const active = isSameDay(day, selected)
-              const inMonth = isSameMonth(day, month)
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setDatePart(day)}
-                  className="py-1.5 rounded text-xs"
-                  style={active
-                    ? { background: 'var(--color-brand)', color: 'white' }
-                    : { color: inMonth ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
-                >
-                  {format(day, 'd')}
-                </button>
-              )
-            })}
-          </div>
+              <div className="grid grid-cols-7 gap-0.5 text-[11px] text-center">
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => (
+                  <span key={day} style={{ color: 'var(--color-text-muted)' }}>{day}</span>
+                ))}
+                {days.map((day, i) => {
+                  const active = isSameDay(day, selected)
+                  const inMonth = isSameMonth(day, month)
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setDatePart(day)}
+                      className="py-1.5 rounded text-xs"
+                      style={active
+                        ? { background: 'var(--color-brand)', color: 'white' }
+                        : { color: inMonth ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
+                    >
+                      {format(day, 'd')}
+                    </button>
+                  )
+                })}
+              </div>
 
-          <div className="flex items-center gap-2">
-            <select value={selected.getHours()} onChange={e => setTimePart('hour', e.target.value)} className="px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }}>
-              {Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}
-            </select>
-            <span>:</span>
-            <select value={selected.getMinutes()} onChange={e => setTimePart('minute', e.target.value)} className="px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }}>
-              {Array.from({ length: 60 }).map((_, m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
-            </select>
-            <Button type="button" variant="secondary" size="sm" className="ml-auto" onClick={() => onChange(new Date().toISOString())}>Now</Button>
-          </div>
-        </div>
-      )}
+              <div className="flex items-center gap-2">
+                <select value={selected.getHours()} onChange={e => setTimePart('hour', e.target.value)} className="flex-1 px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  {Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}
+                </select>
+                <span style={{ color: 'var(--color-text-muted)' }}>:</span>
+                <select value={selected.getMinutes()} onChange={e => setTimePart('minute', e.target.value)} className="flex-1 px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+                  {Array.from({ length: 60 }).map((_, m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+                </select>
+                <Button type="button" variant="secondary" size="sm" onClick={() => onChange(new Date().toISOString())}>Now</Button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Date-only picker (same absolute pattern as CustomDateTimePicker) ─────────
+function CustomDatePicker({ value, onChange, label = 'Date *' }) {
+  const [open, setOpen] = useState(false)
+  const selected = value ? new Date(value) : new Date()
+  const [month, setMonth] = useState(startOfMonth(selected))
+
+  const monthStart = startOfMonth(month)
+  const monthEnd   = endOfMonth(month)
+  const gridStart  = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const gridEnd    = endOfWeek(monthEnd,   { weekStartsOn: 1 })
+
+  const days = []
+  let pointer = gridStart
+  while (pointer <= gridEnd) {
+    days.push(pointer)
+    pointer = new Date(pointer.getFullYear(), pointer.getMonth(), pointer.getDate() + 1)
+  }
+
+  const selectDate = (date) => {
+    const next = new Date(date)
+    next.setHours(12, 0, 0, 0)
+    onChange(next.toISOString())
+    setOpen(false)
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {label && <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{label}</label>}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full px-3 py-2 rounded-lg border text-left text-sm"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: value ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
+        >
+          {value ? format(selected, 'EEE, MMM d yyyy') : 'Select date'}
+        </button>
+
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div
+              className="absolute top-full left-0 mt-1.5 w-68 rounded-xl border p-3 space-y-3 z-20"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+            >
+              <div className="flex items-center justify-between">
+                <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => subMonths(m, 1))}><ChevronLeft size={15} /></button>
+                <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
+                <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => addMonths(m, 1))}><ChevronRight size={15} /></button>
+              </div>
+              <div className="grid grid-cols-7 gap-0.5 text-[11px] text-center">
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
+                  <span key={d} style={{ color: 'var(--color-text-muted)' }}>{d}</span>
+                ))}
+                {days.map((day, i) => {
+                  const active = value && isSameDay(day, selected)
+                  const inMonth = isSameMonth(day, month)
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => selectDate(day)}
+                      className="py-1.5 rounded text-xs"
+                      style={active
+                        ? { background: 'var(--color-brand)', color: 'white' }
+                        : { color: inMonth ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
+                    >
+                      {format(day, 'd')}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -283,6 +380,11 @@ function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
             {format(new Date(f.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}
           </p>
+          {f.caller_name && (
+            <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+              <User size={11} /> {f.caller_name}
+            </p>
+          )}
           {f.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{f.notes}</p>}
           {f.outcome && (
             <div className="mt-2 p-2.5 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
@@ -417,12 +519,21 @@ export default function LeadDetailPage({ params }) {
   const [loading,    setLoading]    = useState(true)
   const [activeTab,  setActiveTab]  = useState('tasks')
 
+  const [changingStage,  setChangingStage]  = useState(false)
+  const [assigningLead,  setAssigningLead]  = useState(false)
   const [editOpen,  setEditOpen]  = useState(false)
   const [editForm,  setEditForm]  = useState({})
   const [taskOpen,  setTaskOpen]  = useState(false)
   const [newTask,   setNewTask]   = useState({ title: '', priority: 'Medium', due_date: '' })
-  const [showFuForm, setShowFuForm] = useState(false)
-  const [newFu,     setNewFu]     = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
+  const [showFuForm,   setShowFuForm]   = useState(false)
+  const [newFu,        setNewFu]        = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+  const [appointments,    setAppointments]    = useState([])
+  const [showBookForm,    setShowBookForm]    = useState(false)
+  const [newAppt,         setNewAppt]         = useState({ date: '', name: '', phone: '', notes: '' })
+  const [bookingSaving,   setBookingSaving]   = useState(false)
+  const [reschedulingId,  setReschedulingId]  = useState(null)
+  const [rescheduleDate,  setRescheduleDate]  = useState('')
+  const [rescheduleSaving, setRescheduleSaving] = useState(false)
 
   const logActivity = (type, content) =>
     orgId && createActivity({ organization_id: orgId, entity_type: 'lead', entity_id: id, type, content })
@@ -433,13 +544,15 @@ export default function LeadDetailPage({ params }) {
   const loadAll = async () => {
     setLoading(true)
     try {
-      const [l, a, t, f] = await Promise.all([
+      const [l, a, t, f, appts] = await Promise.all([
         getLead(id),
         getActivities('lead', id, orgId),
         getTasks({ entityType: 'lead', entityId: id, orgId }),
         getFollowups({ leadId: id, orgId }),
+        getAppointments({ orgId }),
       ])
       setLead(l); setActivities(a || []); setTasks(t || []); setFollowups(f || [])
+      setAppointments((appts || []).filter(ap => ap.lead_id === id))
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -463,6 +576,32 @@ export default function LeadDetailPage({ params }) {
     await deleteLead(id); router.push('/leads')
   }
 
+  const handleAssignLead = async (memberId) => {
+    if (memberId === lead.assigned_to) { setAssigningLead(false); return }
+    try {
+      const updated = await updateLead(id, { assigned_to: memberId || null })
+      setLead(prev => ({ ...prev, assigned_to: updated.assigned_to }))
+      const staff = org?.settings?.staff_members || []
+      const member = staff.find(m => m.id === memberId)
+      await logActivity('note', memberId
+        ? `Lead assigned to ${member?.name || 'team member'}`
+        : 'Lead unassigned')
+      await refreshActivities()
+    } catch (err) { alert(err.message) }
+    setAssigningLead(false)
+  }
+
+  const handleStageChange = async (stage) => {
+    if (stage === lead.stage) { setChangingStage(false); return }
+    try {
+      const updated = await updateLead(id, { stage })
+      setLead(prev => ({ ...prev, stage: updated.stage }))
+      await logActivity('status_change', `Stage changed to ${stage}`)
+      await refreshActivities()
+      setChangingStage(false)
+    } catch (err) { alert(err.message) }
+  }
+
   const handleConvertToPatient = async () => {
     if (lead.patient_id) { router.push(`/patients/${lead.patient_id}`); return }
     if (!confirm('Create a Patient record from this lead?')) return
@@ -472,6 +611,7 @@ export default function LeadDetailPage({ params }) {
         phone: lead.phone || null, email: lead.email || null,
         gender: lead.gender || null, date_of_birth: lead.date_of_birth || null,
         address: lead.address || null, organization_id: orgId,
+        assigned_to: lead.assigned_to || null,
       })
       await updateLead(id, { patient_id: pat.id, stage: 'Converted' })
       setLead(prev => ({ ...prev, patient_id: pat.id, stage: 'Converted' }))
@@ -513,6 +653,7 @@ export default function LeadDetailPage({ params }) {
         scheduled_at: newFu.scheduled_at,
         notes: newFu.response || null,
         outcome: newFu.status_detail,
+        caller_name: newFu.caller || null,
         status: isFuture ? 'Scheduled' : 'Completed',
         organization_id: orgId,
         lead_id: id,
@@ -524,7 +665,7 @@ export default function LeadDetailPage({ params }) {
         `${newFu.type} logged: ${newFu.status_detail}${newFu.response ? ` | Response: ${newFu.response}` : ''}`)
       await refreshActivities()
       setShowFuForm(false)
-      setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
+      setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
     } catch (e) { alert(e.message) }
   }
 
@@ -573,6 +714,73 @@ export default function LeadDetailPage({ params }) {
     await refreshActivities()
   }
 
+  const handleRescheduleAppointment = async () => {
+    if (!rescheduleDate || !reschedulingId) return
+    setRescheduleSaving(true)
+    try {
+      const updated = await updateAppointment(reschedulingId, { scheduled_at: rescheduleDate, status: 'booked' })
+      setAppointments(prev => prev.map(a => a.id === reschedulingId ? updated : a))
+      await logActivity('meeting', `Appointment rescheduled to ${format(new Date(rescheduleDate), 'MMM d, yyyy')}`)
+      await refreshActivities()
+      setReschedulingId(null)
+      setRescheduleDate('')
+    } catch (err) { alert(err.message) }
+    finally { setRescheduleSaving(false) }
+  }
+
+  const handleBookAppointment = async (e) => {
+    e.preventDefault()
+    if (!newAppt.date || !orgId) return
+    setBookingSaving(true)
+    try {
+      let patientId = lead.patient_id
+      if (!patientId) {
+        const nameParts = (newAppt.name || '').trim().split(/\s+/)
+        const pat = await createPatient({
+          first_name: nameParts[0] || lead.first_name || lead.title,
+          last_name:  nameParts.slice(1).join(' ') || lead.last_name || null,
+          phone: newAppt.phone || lead.phone || null,
+          email: lead.email || null,
+          gender: lead.gender || null, date_of_birth: lead.date_of_birth || null,
+          address: lead.address || null, organization_id: orgId,
+          assigned_to: lead.assigned_to || null,
+        })
+        await updateLead(id, { patient_id: pat.id })
+        setLead(prev => ({ ...prev, patient_id: pat.id }))
+        patientId = pat.id
+      }
+      const appt = await createAppointment({
+        organization_id: orgId,
+        patient_id: patientId,
+        lead_id: id,
+        scheduled_at: newAppt.date,
+        notes: newAppt.notes || null,
+        status: 'booked',
+      })
+      setAppointments(prev => [appt, ...prev])
+
+      // Auto-task: reminder 5 days before appointment
+      const apptDate = new Date(newAppt.date)
+      const reminderDate = subDays(apptDate, 5)
+      const reminderTask = await createTask({
+        title: `Appointment Reminder — ${newAppt.name || displayName} on ${format(apptDate, 'MMM d, yyyy')}`,
+        priority: 'High',
+        due_date: reminderDate.toISOString(),
+        status: 'Pending',
+        organization_id: orgId,
+        entity_type: 'lead',
+        entity_id: id,
+      })
+      setTasks(prev => [reminderTask, ...prev])
+
+      await logActivity('meeting', `Appointment booked for ${format(apptDate, 'MMM d, yyyy')}`)
+      await refreshActivities()
+      setShowBookForm(false)
+      setNewAppt({ date: '', name: '', phone: '', notes: '' })
+    } catch (err) { alert(err.message) }
+    finally { setBookingSaving(false) }
+  }
+
   if (loading) return <div className="flex items-center justify-center py-32"><Spinner size={32} /></div>
   if (!lead)   return <div className="p-12 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>Lead not found</div>
 
@@ -584,8 +792,12 @@ export default function LeadDetailPage({ params }) {
   const displayDOB   = lead.date_of_birth || pat?.date_of_birth || null
   const displayAddr  = lead.address  || pat?.address  || null
 
-  const STAGE_COLORS = { New:'#6366f1', Contacted:'#0ea5e9', Interested:'#f59e0b', 'Follow-up':'#8b5cf6', Converted:'#10b981', Lost:'#ef4444' }
-  const stageC  = STAGE_COLORS[lead.stage] || '#6366f1'
+  const stages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s =>
+    typeof s === 'string' ? { name: s, color: '#6366f1' } : s
+  )
+  const stageC = stages.find(s => s.name === lead.stage)?.color || '#6366f1'
+  const staffMembers = org?.settings?.staff_members || []
+  const assignee = lead.assigned_to ? staffMembers.find(m => m.id === lead.assigned_to) : null
   const pendingTasks = tasks.filter(t => t.status === 'Pending').length
   const leadCreatedEntry = {
     type: 'note',
@@ -617,9 +829,91 @@ export default function LeadDetailPage({ params }) {
           </Link>
           <span style={{ color: 'var(--color-border)' }}>/</span>
           <span className="text-sm font-600 truncate max-w-xs" style={{ color: 'var(--color-text-primary)' }}>{displayName}</span>
-          <span className="text-[10px] font-700 px-2.5 py-1 rounded-full" style={{ background: stageC + '18', color: stageC }}>{lead.stage}</span>
         </div>
         <div className="flex items-center gap-2">
+
+          {/* Assign Lead */}
+          <div className="relative">
+            {assigningLead && <div className="fixed inset-0 z-10" onClick={() => setAssigningLead(false)} />}
+            <button
+              type="button"
+              onClick={() => setAssigningLead(s => !s)}
+              className="relative z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
+            >
+              {assignee ? (
+                <>
+                  <span
+                    className="w-5 h-5 rounded-full text-[10px] font-700 flex items-center justify-center shrink-0"
+                    style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                  >
+                    {assignee.name[0].toUpperCase()}
+                  </span>
+                  <span className="max-w-24 truncate">{assignee.name}</span>
+                </>
+              ) : (
+                <>
+                  <User size={13} />
+                  Assign Lead
+                </>
+              )}
+              <ChevronDown size={12} style={{ transform: assigningLead ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+            </button>
+
+            {assigningLead && (
+              <div
+                className="absolute top-full right-0 mt-1.5 w-52 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+              >
+                <div className="px-3 py-2 border-b border-(--color-border)">
+                  <p className="text-[10px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Assign to</p>
+                </div>
+                {staffMembers.length === 0 ? (
+                  <p className="px-3 py-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    No team members yet. Add them in Settings → People.
+                  </p>
+                ) : (
+                  <>
+                    {staffMembers.map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => handleAssignLead(m.id)}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-500 text-left transition-colors hover:bg-(--color-surface-2)"
+                      >
+                        <span
+                          className="w-6 h-6 rounded-full text-[10px] font-700 flex items-center justify-center shrink-0"
+                          style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                        >
+                          {m.name[0].toUpperCase()}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate" style={{ color: 'var(--color-text-primary)' }}>{m.name}</p>
+                          {m.designation && <p className="text-[10px] truncate" style={{ color: 'var(--color-text-muted)' }}>{m.designation}</p>}
+                        </div>
+                        {lead.assigned_to === m.id && <Check size={12} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />}
+                      </button>
+                    ))}
+                    {lead.assigned_to && (
+                      <>
+                        <div className="border-t border-(--color-border)" />
+                        <button
+                          type="button"
+                          onClick={() => handleAssignLead(null)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-500 text-left transition-colors hover:bg-red-50"
+                          style={{ color: '#b91c1c' }}
+                        >
+                          <X size={13} />
+                          Unassign
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <Button variant="secondary" size="sm" onClick={() => { setEditForm({ stage: lead.stage, priority: lead.priority, source: lead.source, description: lead.description || '' }); setEditOpen(true) }}>
             <Edit2 size={14} /> Edit
           </Button>
@@ -643,8 +937,46 @@ export default function LeadDetailPage({ params }) {
                   {(displayName[0] || '?').toUpperCase()}{displayName.split(' ')[1]?.[0]?.toUpperCase() || ''}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
-                  {displayGender && <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{displayGender}</p>}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
+                    <div className="relative shrink-0">
+                      {changingStage && (
+                        <div className="fixed inset-0 z-10" onClick={() => setChangingStage(false)} />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setChangingStage(s => !s)}
+                        className="relative z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-700 shadow-sm transition-opacity hover:opacity-85"
+                        style={{ background: stageC, color: 'white' }}
+                      >
+                        {lead.stage}
+                        <ChevronDown
+                          size={13}
+                          style={{ transform: changingStage ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
+                        />
+                      </button>
+                      {changingStage && (
+                        <div
+                          className="absolute top-full left-0 mt-1.5 w-44 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                          style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+                        >
+                          {stages.map(({ name, color }) => (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => handleStageChange(name)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)"
+                            >
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                              <span className="flex-1" style={{ color: 'var(--color-text-primary)' }}>{name}</span>
+                              {name === lead.stage && <Check size={12} style={{ color, flexShrink: 0 }} />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {displayGender && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{displayGender}</p>}
                 </div>
               </div>
               <div className="space-y-2.5">
@@ -717,7 +1049,7 @@ export default function LeadDetailPage({ params }) {
           </div>
 
           {/* ── Right col ── */}
-          <div className="col-span-2">
+          <div className="col-span-2 space-y-5">
             <Card className="border-(--color-border) overflow-hidden">
               {/* Tab bar */}
               <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
@@ -737,7 +1069,7 @@ export default function LeadDetailPage({ params }) {
                 ))}
               </div>
 
-              <div className="p-5">
+              <div className="p-5 max-h-120 overflow-y-auto">
 
                 {/* ── Tasks ── */}
                 {activeTab === 'tasks' && (
@@ -827,6 +1159,158 @@ export default function LeadDetailPage({ params }) {
 
               </div>
             </Card>
+
+            {/* ── Appointments ── */}
+            <Card className={clsx('border-(--color-border)', !reschedulingId && 'overflow-hidden')}>
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} style={{ color: 'var(--color-brand)' }} />
+                  <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Appointments</p>
+                </div>
+                {!showBookForm && (
+                  <Button size="sm" onClick={() => {
+                    setNewAppt({ date: '', name: displayName, phone: displayPhone || '', notes: '' })
+                    setShowBookForm(true)
+                  }}>
+                    <Plus size={14} /> Book Appointment
+                  </Button>
+                )}
+              </div>
+
+              <div className="p-5 space-y-3">
+                {showBookForm && (
+                  <form onSubmit={handleBookAppointment} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                    <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>New Appointment</p>
+
+                    {!lead.patient_id && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ background: '#fef9c3', color: '#92400e' }}>
+                        <AlertCircle size={13} />
+                        No patient record yet — one will be created automatically on booking.
+                      </div>
+                    )}
+
+                    {/* Name + Phone — auto-filled, editable */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        label="Patient Name"
+                        value={newAppt.name}
+                        onChange={e => setNewAppt(f => ({ ...f, name: e.target.value }))}
+                        placeholder="Full name"
+                      />
+                      <Input
+                        label="Phone"
+                        value={newAppt.phone}
+                        onChange={e => setNewAppt(f => ({ ...f, phone: e.target.value }))}
+                        placeholder="Phone number"
+                      />
+                    </div>
+
+                    {/* Date */}
+                    <CustomDatePicker
+                      label="Date *"
+                      value={newAppt.date}
+                      onChange={v => setNewAppt(f => ({ ...f, date: v }))}
+                    />
+
+                    {/* Doctor — placeholder until doctor page is built */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Doctor</label>
+                      <div
+                        className="w-full px-3 py-2 rounded-lg border text-sm"
+                        style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}
+                      >
+                        No doctor available
+                      </div>
+                    </div>
+
+                    <Textarea
+                      label="Notes"
+                      placeholder="Reason for visit, special instructions..."
+                      value={newAppt.notes}
+                      onChange={e => setNewAppt(f => ({ ...f, notes: e.target.value }))}
+                      rows={2}
+                    />
+
+                    <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
+                      <Button variant="secondary" size="sm" type="button" onClick={() => { setShowBookForm(false); setNewAppt({ date: '', name: '', phone: '', notes: '' }) }}>Cancel</Button>
+                      <Button size="sm" type="submit" disabled={bookingSaving || !newAppt.date}>
+                        {bookingSaving ? 'Booking...' : <><Calendar size={13} /> Book Appointment</>}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {appointments.length === 0 && !showBookForm ? (
+                  <div className="py-12 text-center border border-dashed rounded-xl border-(--color-border)">
+                    <Calendar size={28} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No appointments booked yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {appointments.map(appt => {
+                      const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
+                      const s = ST[appt.status] || ST.booked
+                      const isRescheduling = reschedulingId === appt.id
+                      const canReschedule = appt.status !== 'cancelled' && appt.status !== 'completed'
+                      return (
+                        <div
+                          key={appt.id}
+                          className={clsx('rounded-xl border border-(--color-border)', !isRescheduling && 'overflow-hidden')}
+                          style={{ background: 'var(--color-surface-2)' }}
+                        >
+                          {/* Card row */}
+                          <div className="flex items-start gap-3 p-4">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
+                              <Calendar size={15} style={{ color: 'var(--color-brand)' }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>
+                                  {format(new Date(appt.scheduled_at), 'EEE, MMM d yyyy')}
+                                </span>
+                                <span className="text-[10px] font-600 px-2 py-0.5 rounded-full capitalize" style={{ background: s.bg, color: s.color }}>{appt.status}</span>
+                              </div>
+                              {appt.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
+                            </div>
+                            {canReschedule && !isRescheduling && (
+                              <button
+                                type="button"
+                                onClick={() => { setReschedulingId(appt.id); setRescheduleDate('') }}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors shrink-0"
+                                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
+                              >
+                                <RotateCcw size={11} /> Reschedule
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Inline reschedule form */}
+                          {isRescheduling && (
+                            <div
+                              className="border-t-2 p-4 space-y-3 rounded-b-xl"
+                              style={{ borderColor: 'var(--color-brand)', background: 'var(--color-surface)' }}
+                            >
+                              <p className="text-xs font-600" style={{ color: 'var(--color-brand)' }}>Reschedule — pick a new date</p>
+                              <CustomDatePicker
+                                label=""
+                                value={rescheduleDate}
+                                onChange={setRescheduleDate}
+                              />
+                              <div className="flex gap-2 justify-end">
+                                <Button variant="secondary" size="sm" type="button" onClick={() => { setReschedulingId(null); setRescheduleDate('') }}>Cancel</Button>
+                                <Button size="sm" type="button" onClick={handleRescheduleAppointment} disabled={rescheduleSaving || !rescheduleDate}>
+                                  {rescheduleSaving ? 'Saving...' : <><RotateCcw size={12} /> Confirm Reschedule</>}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
         </div>
 
@@ -867,11 +1351,31 @@ export default function LeadDetailPage({ params }) {
                   ]}
                 />
 
-                <CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} />
+                <div className="grid grid-cols-2 gap-3 items-start">
+                  <CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} />
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>
+                      Called By <span className="font-400" style={{ color: 'var(--color-text-muted)' }}>(optional)</span>
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                      value={newFu.caller}
+                      onChange={e => setNewFu(f => ({ ...f, caller: e.target.value }))}
+                    >
+                      <option value="">— Select —</option>
+                      {(org?.settings?.staff_members || []).map(m => (
+                        <option key={m.id} value={m.name}>
+                          {m.name}{m.designation ? ` (${m.designation})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
                 <Textarea label="Response" placeholder="Patient/customer response..." value={newFu.response} onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} />
                 <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
-                  <Button variant="secondary" size="sm" type="button" onClick={() => { setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '' }) }}>Cancel</Button>
+                  <Button variant="secondary" size="sm" type="button" onClick={() => { setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' }) }}>Cancel</Button>
                   <Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}><Bell size={13} /> Save</Button>
                 </div>
               </form>
@@ -908,7 +1412,7 @@ export default function LeadDetailPage({ params }) {
         <form onSubmit={handleEdit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Select label="Stage" value={editForm.stage || ''} onChange={e => setEditForm(f => ({ ...f, stage: e.target.value }))}
-              options={['New','Contacted','Interested','Follow-up','Converted','Lost'].map(s => ({ value: s, label: s }))} />
+              options={stages.map(({ name }) => ({ value: name, label: name }))} />
             <Select label="Priority" value={editForm.priority || ''} onChange={e => setEditForm(f => ({ ...f, priority: e.target.value }))}
               options={['Low','Medium','High','Urgent'].map(s => ({ value: s, label: s }))} />
           </div>

@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronDown,
   UserRound,
   CalendarDays,
   CreditCard,
@@ -21,15 +22,16 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Bell,
+  Kanban,
+  ListFilter,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import clsx from "clsx";
 import { useOrg } from "@/lib/context/OrgContext";
 import { useSidebar } from "@/lib/context/SidebarContext";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/leads", icon: TrendingUp, label: "Leads" },
   { href: "/patients", icon: UserRound, label: "Patients" },
   { href: "/appointments", icon: CalendarDays, label: "Appointments" },
   { href: "/billing", icon: CreditCard, label: "Billing & Finance" },
@@ -38,6 +40,11 @@ const navItems = [
   { href: "/tasks", icon: CheckSquare, label: "Tasks" },
   { href: "/followups", icon: Bell, label: "Follow-ups" },
   { href: "/automation", icon: Zap, label: "Automation" },
+];
+
+const LEADS_SUB = [
+  { href: "/leads",          icon: ListFilter, label: "All Leads" },
+  { href: "/leads/pipeline", icon: Kanban,     label: "Lead Pipeline" },
 ];
 
 function OrgLogo({ logoUrl, orgName }) {
@@ -70,6 +77,11 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
   const collapsed = forceExpanded ? false : _collapsed;
 
   const orgName = org?.name || "Your Clinic";
+
+  const [leadsOpen, setLeadsOpen] = useState(() => pathname.startsWith("/leads"));
+  useEffect(() => {
+    if (pathname.startsWith("/leads")) setLeadsOpen(true);
+  }, [pathname]);
 
   const isActive = (href) =>
     href === "/dashboard"
@@ -140,7 +152,84 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ href, icon: Icon, label }) => {
+        {/* Dashboard */}
+        {navItems.slice(0, 1).map(({ href, icon: Icon, label }) => {
+          const active = isActive(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => setMobileOpen(false)}
+              title={collapsed ? label : undefined}
+              className={navLinkClass(active)}
+              style={navLinkStyle(active)}
+            >
+              <Icon size={17} />
+              {!collapsed && label}
+              {!collapsed && active && (
+                <ChevronRight size={14} className="ml-auto opacity-60" />
+              )}
+            </Link>
+          );
+        })}
+
+        {/* Leads — expandable group */}
+        {collapsed ? (
+          <Link
+            href="/leads"
+            onClick={() => setMobileOpen(false)}
+            title="Leads"
+            className={navLinkClass(isActive("/leads"))}
+            style={navLinkStyle(isActive("/leads"))}
+          >
+            <TrendingUp size={17} />
+          </Link>
+        ) : (
+          <div>
+            <button
+              type="button"
+              onClick={() => setLeadsOpen((o) => !o)}
+              className={clsx(
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                isActive("/leads") ? "text-white" : "hover:bg-(--color-brand-50)",
+              )}
+              style={isActive("/leads") ? { background: "var(--color-brand)", color: "white" } : { color: "var(--color-text-secondary)" }}
+            >
+              <TrendingUp size={17} />
+              <span className="flex-1 text-left">Leads</span>
+              <ChevronDown
+                size={14}
+                className="opacity-60 transition-transform duration-200"
+                style={{ transform: leadsOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+              />
+            </button>
+
+            {leadsOpen && (
+              <div className="mt-0.5 ml-3 space-y-0.5">
+                {LEADS_SUB.map(({ href, icon: Icon, label }) => {
+                  const active = pathname === href;
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-2.5 pr-2.5 py-2 text-xs font-500 transition-colors"
+                      style={active
+                        ? { borderLeft: "2px solid var(--color-brand)", color: "var(--color-brand)", paddingLeft: "10px" }
+                        : { borderLeft: "2px solid transparent", color: "var(--color-text-secondary)", paddingLeft: "10px" }}
+                    >
+                      <Icon size={14} />
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Rest of nav items */}
+        {navItems.slice(1).map(({ href, icon: Icon, label }) => {
           const active = isActive(href);
           return (
             <Link
