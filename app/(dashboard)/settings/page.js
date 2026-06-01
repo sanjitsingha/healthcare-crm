@@ -337,7 +337,7 @@ function TagsTab({ orgId }) {
   const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [newTag, setNewTag] = useState({ name: '', color: '#6366f1' })
+  const [newTag, setNewTag] = useState({ name: '', color: '#6366f1', page: 'leads' })
   const [saving, setSaving] = useState(false)
 
   const PRESET_COLORS = ['#6366f1', '#0f6e56', '#1d4ed8', '#7c3aed', '#b45309', '#be185d', '#ef4444', '#f59e0b', '#10b981']
@@ -351,7 +351,7 @@ function TagsTab({ orgId }) {
 
   useEffect(() => { loadTags() }, [orgId])
 
-  const resetForm = () => { setNewTag({ name: '', color: '#6366f1' }); setShowForm(false) }
+  const resetForm = () => { setNewTag({ name: '', color: '#6366f1', page: 'leads' }); setShowForm(false) }
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -436,6 +436,24 @@ function TagsTab({ orgId }) {
                 />
               </div>
             </div>
+            <div className="space-y-1.5 min-w-36">
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>For Page *</label>
+              <div className="flex rounded-lg overflow-hidden border border-(--color-border)">
+                {PAGE_OPTS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setNewTag(t => ({ ...t, page: value }))}
+                    className="px-3 py-2 text-xs font-600 transition-all"
+                    style={newTag.page === value
+                      ? { background: 'var(--color-brand)', color: 'white' }
+                      : { color: 'var(--color-text-muted)', background: 'transparent' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-500 self-end mb-0.5"
               style={{ background: newTag.color + '20', color: newTag.color }}
@@ -477,6 +495,12 @@ function TagsTab({ orgId }) {
                   <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
                   <span className="text-sm font-500 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
                 </div>
+                <span
+                  className="text-[10px] font-600 px-2 py-0.5 rounded-full uppercase tracking-wide"
+                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                >
+                  {tag.page || 'leads'}
+                </span>
                 <button
                   onClick={() => handleDelete(tag.id)}
                   className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all shrink-0"
