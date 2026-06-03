@@ -26,8 +26,8 @@ const TABS = [
 ]
 
 // ── Book Appointment Modal ─────────────────────────────────────
-function BookModal({ open, onClose, onCreated, orgId }) {
-  const [form, setForm]     = useState({ patient_id: '', lead_id: '', date: '', time: '10:00', notes: '' })
+function BookModal({ open, onClose, onCreated, orgId, doctors = [] }) {
+  const [form, setForm]     = useState({ patient_id: '', lead_id: '', date: '', time: '10:00', notes: '', doctor_id: '' })
   const [patients, setPatients] = useState([])
   const [leads,    setLeads]    = useState([])
   const [saving,   setSaving]   = useState(false)
@@ -49,6 +49,7 @@ function BookModal({ open, onClose, onCreated, orgId }) {
       const appt = await createAppointment({
         patient_id:    form.patient_id,
         lead_id:       form.lead_id || null,
+        doctor_id:     form.doctor_id || null,
         scheduled_at:  scheduledAt.toISOString(),
         notes:         form.notes || null,
         status:        'booked',
@@ -56,7 +57,7 @@ function BookModal({ open, onClose, onCreated, orgId }) {
       })
       onCreated(appt)
       onClose()
-      setForm({ patient_id: '', lead_id: '', date: '', time: '10:00', notes: '' })
+      setForm({ patient_id: '', lead_id: '', date: '', time: '10:00', notes: '', doctor_id: '' })
     } catch (err) { alert(err.message) }
     finally { setSaving(false) }
   }
@@ -110,9 +111,25 @@ function BookModal({ open, onClose, onCreated, orgId }) {
         </div>
         <div className="space-y-1.5">
           <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Doctor</label>
-          <div className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
-            No doctor available
-          </div>
+          {doctors.length === 0 ? (
+            <div className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+              No doctors added — add them in Settings → People
+            </div>
+          ) : (
+            <select
+              value={form.doctor_id}
+              onChange={e => setForm(f => ({ ...f, doctor_id: e.target.value }))}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
+              style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+            >
+              <option value="">— Select doctor —</option>
+              {doctors.map(d => (
+                <option key={d.id} value={d.id}>
+                  {d.name}{d.department ? ` · ${d.department}` : ''}{d.qualification ? ` (${d.qualification})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <Textarea
           label="Notes"
@@ -133,13 +150,14 @@ function BookModal({ open, onClose, onCreated, orgId }) {
 }
 
 // ── Appointment card ───────────────────────────────────────────
-function ApptCard({ appt, staffMembers, onStatusChange }) {
+function ApptCard({ appt, doctors = [], onStatusChange }) {
   const st   = STATUS_STYLE[appt.status] || STATUS_STYLE.booked
   const date = new Date(appt.scheduled_at)
   const patientName = [appt.patients?.first_name, appt.patients?.last_name].filter(Boolean).join(' ') || 'Unknown Patient'
   const leadName    = appt.leads
     ? ([appt.leads.first_name, appt.leads.last_name].filter(Boolean).join(' ') || appt.leads.title || 'Lead')
     : null
+  const doctor = appt.doctor_id ? doctors.find(d => d.id === appt.doctor_id) : null
 
   const getDateLabel = () => {
     if (isToday(date))    return 'Today'
@@ -201,6 +219,13 @@ function ApptCard({ appt, staffMembers, onStatusChange }) {
                 <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   <UserRound size={12} /> Patient
                 </span>
+
+                {doctor && (
+                  <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    <User size={12} />
+                    {doctor.name}{doctor.department ? ` · ${doctor.department}` : ''}
+                  </span>
+                )}
 
                 {leadName && appt.leads?.id && (
                   <Link
@@ -266,7 +291,7 @@ export default function AppointmentsPage() {
   const [tab,          setTab]          = useState('upcoming')
   const [createOpen,   setCreateOpen]   = useState(false)
 
-  const staffMembers = org?.settings?.staff_members || []
+  const doctors = org?.settings?.doctors || []
 
   useEffect(() => {
     if (!orgId) return
@@ -366,7 +391,7 @@ export default function AppointmentsPage() {
               <ApptCard
                 key={a.id}
                 appt={a}
-                staffMembers={staffMembers}
+                doctors={doctors}
                 onStatusChange={handleStatusChange}
               />
             ))}
@@ -378,6 +403,7 @@ export default function AppointmentsPage() {
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
         orgId={orgId}
+        doctors={doctors}
       />
     </div>
   )

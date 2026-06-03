@@ -24,6 +24,7 @@ import {
   Bell,
   Kanban,
   ListFilter,
+  Stethoscope,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import clsx from "clsx";
@@ -34,6 +35,7 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/patients", icon: UserRound, label: "Patients" },
   { href: "/appointments", icon: CalendarDays, label: "Appointments" },
+  { href: "/consultation", icon: Stethoscope, label: "Consultations" },
   { href: "/billing", icon: CreditCard, label: "Billing & Finance" },
   { href: "/contacts", icon: Users, label: "Contacts" },
   { href: "/organizations", icon: Building2, label: "Organizations" },

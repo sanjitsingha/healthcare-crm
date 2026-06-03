@@ -529,7 +529,7 @@ export default function LeadDetailPage({ params }) {
   const [newFu,        setNewFu]        = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
   const [appointments,    setAppointments]    = useState([])
   const [showBookForm,    setShowBookForm]    = useState(false)
-  const [newAppt,         setNewAppt]         = useState({ date: '', name: '', phone: '', notes: '' })
+  const [newAppt,         setNewAppt]         = useState({ date: '', name: '', phone: '', notes: '', doctor_id: '' })
   const [bookingSaving,   setBookingSaving]   = useState(false)
   const [reschedulingId,  setReschedulingId]  = useState(null)
   const [rescheduleDate,  setRescheduleDate]  = useState('')
@@ -754,6 +754,7 @@ export default function LeadDetailPage({ params }) {
         patient_id: patientId,
         lead_id: id,
         scheduled_at: newAppt.date,
+        doctor_id: newAppt.doctor_id || null,
         notes: newAppt.notes || null,
         status: 'booked',
       })
@@ -776,7 +777,7 @@ export default function LeadDetailPage({ params }) {
       await logActivity('meeting', `Appointment booked for ${format(apptDate, 'MMM d, yyyy')}`)
       await refreshActivities()
       setShowBookForm(false)
-      setNewAppt({ date: '', name: '', phone: '', notes: '' })
+      setNewAppt({ date: '', name: '', phone: '', notes: '', doctor_id: '' })
     } catch (err) { alert(err.message) }
     finally { setBookingSaving(false) }
   }
@@ -797,6 +798,7 @@ export default function LeadDetailPage({ params }) {
   )
   const stageC = stages.find(s => s.name === lead.stage)?.color || '#6366f1'
   const staffMembers = org?.settings?.staff_members || []
+  const doctors      = org?.settings?.doctors      || []
   const assignee = lead.assigned_to ? staffMembers.find(m => m.id === lead.assigned_to) : null
   const pendingTasks = tasks.filter(t => t.status === 'Pending').length
   const leadCreatedEntry = {
@@ -1169,7 +1171,7 @@ export default function LeadDetailPage({ params }) {
                 </div>
                 {!showBookForm && (
                   <Button size="sm" onClick={() => {
-                    setNewAppt({ date: '', name: displayName, phone: displayPhone || '', notes: '' })
+                    setNewAppt({ date: '', name: displayName, phone: displayPhone || '', notes: '', doctor_id: '' })
                     setShowBookForm(true)
                   }}>
                     <Plus size={14} /> Book Appointment
@@ -1212,15 +1214,28 @@ export default function LeadDetailPage({ params }) {
                       onChange={v => setNewAppt(f => ({ ...f, date: v }))}
                     />
 
-                    {/* Doctor — placeholder until doctor page is built */}
+                    {/* Doctor */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Doctor</label>
-                      <div
-                        className="w-full px-3 py-2 rounded-lg border text-sm"
-                        style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}
-                      >
-                        No doctor available
-                      </div>
+                      {doctors.length === 0 ? (
+                        <div className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+                          No doctors added — add them in Settings → People
+                        </div>
+                      ) : (
+                        <select
+                          value={newAppt.doctor_id}
+                          onChange={e => setNewAppt(f => ({ ...f, doctor_id: e.target.value }))}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
+                          style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                        >
+                          <option value="">— Select doctor —</option>
+                          {doctors.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}{d.department ? ` · ${d.department}` : ''}{d.qualification ? ` (${d.qualification})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     <Textarea
@@ -1232,7 +1247,7 @@ export default function LeadDetailPage({ params }) {
                     />
 
                     <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
-                      <Button variant="secondary" size="sm" type="button" onClick={() => { setShowBookForm(false); setNewAppt({ date: '', name: '', phone: '', notes: '' }) }}>Cancel</Button>
+                      <Button variant="secondary" size="sm" type="button" onClick={() => { setShowBookForm(false); setNewAppt({ date: '', name: '', phone: '', notes: '', doctor_id: '' }) }}>Cancel</Button>
                       <Button size="sm" type="submit" disabled={bookingSaving || !newAppt.date}>
                         {bookingSaving ? 'Booking...' : <><Calendar size={13} /> Book Appointment</>}
                       </Button>
@@ -1250,6 +1265,7 @@ export default function LeadDetailPage({ params }) {
                     {appointments.map(appt => {
                       const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
                       const s = ST[appt.status] || ST.booked
+                      const apptDoctor = appt.doctor_id ? doctors.find(d => d.id === appt.doctor_id) : null
                       const isRescheduling = reschedulingId === appt.id
                       const canReschedule = appt.status !== 'cancelled' && appt.status !== 'completed'
                       return (
@@ -1270,6 +1286,11 @@ export default function LeadDetailPage({ params }) {
                                 </span>
                                 <span className="text-[10px] font-600 px-2 py-0.5 rounded-full capitalize" style={{ background: s.bg, color: s.color }}>{appt.status}</span>
                               </div>
+                              {apptDoctor && (
+                                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+                                  <User size={11} /> {apptDoctor.name}{apptDoctor.department ? ` · ${apptDoctor.department}` : ''}
+                                </p>
+                              )}
                               {appt.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
                             </div>
                             {canReschedule && !isRescheduling && (

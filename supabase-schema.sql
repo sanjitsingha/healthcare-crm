@@ -251,6 +251,30 @@ create table followups (
   updated_at timestamptz default now()
 );
 
+-- Consultations table
+create table consultations (
+  id uuid default gen_random_uuid() primary key,
+  organization_id uuid references organizations(id) on delete cascade not null,
+  patient_id uuid references patients(id) on delete set null,
+  lead_id uuid references leads(id) on delete set null,
+  doctor_id uuid,
+  consultation_type text check (consultation_type in ('Initial','Follow-up','Urgent','Routine','Teleconsultation','Walk-in')) default 'Initial',
+  status text check (status in ('Scheduled','Completed','Cancelled','No-Show')) default 'Completed',
+  consulted_at timestamptz not null default now(),
+  chief_complaint text,
+  clinical_notes text,
+  diagnosis text,
+  treatment_plan text,
+  prescription text,
+  vitals jsonb default '{}',
+  follow_up_required boolean default false,
+  follow_up_date date,
+  duration_minutes integer default 30,
+  amount numeric default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- Billing & Finance
 create table invoices (
   id uuid default gen_random_uuid() primary key,
@@ -276,6 +300,24 @@ create table payments (
   payment_date timestamptz default now(),
   notes text,
   created_at timestamptz default now()
+);
+
+-- Support Tickets
+create table tickets (
+  id uuid default gen_random_uuid() primary key,
+  organization_id uuid references organizations(id) on delete cascade not null,
+  created_by uuid,
+  subject text not null,
+  description text,
+  category text check (category in ('Bug','Feature Request','Billing','Account','General','Other')) default 'General',
+  priority text check (priority in ('Low','Medium','High','Urgent')) default 'Medium',
+  status text check (status in ('Open','In Progress','Resolved','Closed')) default 'Open',
+  contact_email text,
+  contact_phone text,
+  admin_response text,
+  resolved_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
 
 -- Automation Rules
@@ -326,6 +368,11 @@ create index appointments_scheduled_idx on appointments(scheduled_at);
 create index tasks_org_idx on tasks(organization_id);
 create index activities_org_idx on activities(organization_id);
 create index followups_org_idx on followups(organization_id);
+create index consultations_org_idx on consultations(organization_id);
+create index consultations_patient_idx on consultations(patient_id);
+create index consultations_lead_idx on consultations(lead_id);
+create index consultations_date_idx on consultations(consulted_at desc);
+create index tickets_org_idx on tickets(organization_id);
 create index invoices_org_idx on invoices(organization_id);
 create index automation_rules_org_idx on automation_rules(organization_id);
 
@@ -347,6 +394,8 @@ alter table patient_tags enable row level security;
 alter table activities enable row level security;
 alter table tasks enable row level security;
 alter table followups enable row level security;
+alter table consultations enable row level security;
+alter table tickets enable row level security;
 alter table invoices enable row level security;
 alter table payments enable row level security;
 alter table automation_rules enable row level security;
@@ -371,6 +420,8 @@ create policy "Allow all patient_tag access" on patient_tags for all using (true
 create policy "Allow all activity access" on activities for all using (true) with check (true);
 create policy "Allow all task access" on tasks for all using (true) with check (true);
 create policy "Allow all followup access" on followups for all using (true) with check (true);
+create policy "Allow all consultation access" on consultations for all using (true) with check (true);
+create policy "Allow all ticket access" on tickets for all using (true) with check (true);
 create policy "Allow all invoice access" on invoices for all using (true) with check (true);
 create policy "Allow all payment access" on payments for all using (true) with check (true);
 create policy "Allow all automation access" on automation_rules for all using (true) with check (true);

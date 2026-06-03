@@ -1,28 +1,20 @@
 'use client'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { Building2, Users, Tags, LogOut, LayoutGrid, UserRound } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
+import { Building2, Users, Tags, LayoutGrid, UserRound, Plug } from 'lucide-react'
 import clsx from 'clsx'
 
 const NAV_ITEMS = [
-  { href: '/settings/account',      label: 'Account',      icon: UserRound },
-  { href: '/settings/organization', label: 'Organization', icon: Building2 },
-  { href: '/settings/people',       label: 'People',       icon: Users },
-  { href: '/settings/tags',         label: 'Tags',         icon: Tags },
-  { href: '/settings/modules',      label: 'Modules',      icon: LayoutGrid },
+  { href: '/settings/account',       label: 'Account',       icon: UserRound },
+  { href: '/settings/organization',  label: 'Organization',  icon: Building2 },
+  { href: '/settings/people',        label: 'People',        icon: Users },
+  { href: '/settings/tags',          label: 'Tags',          icon: Tags },
+  { href: '/settings/modules',       label: 'Modules',       icon: LayoutGrid },
+  { href: '/settings/configuration', label: 'Configuration', icon: Plug },
 ]
 
 export default function SettingsLayout({ children }) {
   const pathname = usePathname()
-  const router = useRouter()
-
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -56,17 +48,6 @@ export default function SettingsLayout({ children }) {
             )
           })}
         </nav>
-
-        <div className="border-t border-(--color-border) pt-4">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-left transition-all hover:bg-red-50 group"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            <LogOut size={16} className="group-hover:text-red-500 transition-colors" />
-            <span className="group-hover:text-red-500 transition-colors">Sign Out</span>
-          </button>
-        </div>
       </aside>
 
       <div className="flex-1 min-w-0 p-6 overflow-y-auto">

@@ -1,5 +1,6 @@
 'use client'
 import { useSidebar } from '@/lib/context/SidebarContext'
+import BottomBar from './BottomBar'
 
 // Static strings so Tailwind v4 scanner picks up both classes
 const _expanded = 'md:ml-[220px]'
@@ -11,7 +12,8 @@ export default function MainContent({ children }) {
     <main
       className={`flex-1 min-w-0 transition-all duration-300 ${collapsed ? _collapsed : _expanded}`}
     >
-      {children}
+      <div className="pb-10">{children}</div>
+      <BottomBar />
     </main>
   )
 }

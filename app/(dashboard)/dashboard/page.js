@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Clock, Target, Zap } from 'lucide-react'
+import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Clock, Target, Zap, LifeBuoy } from 'lucide-react'
 import { StatCard, Card, Badge, Spinner } from '@/components/ui'
 import { getDashboardStats, getLeads, getTasks, getFollowups, getAppointments } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -58,11 +58,20 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-700" style={{ color: 'var(--color-text-primary)' }}>Dashboard</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-          {format(new Date(), 'EEEE, d MMMM yyyy')}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-700" style={{ color: 'var(--color-text-primary)' }}>Dashboard</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {format(new Date(), 'EEEE, d MMMM yyyy')}
+          </p>
+        </div>
+        <Link
+          href="/tickets"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 border transition-colors hover:bg-(--color-brand-50)"
+          style={{ borderColor: 'var(--color-border)', color: 'var(--color-brand)', background: 'var(--color-surface)' }}
+        >
+          <LifeBuoy size={16} /> Raise a Ticket
+        </Link>
       </div>
 
       {/* Stats Grid */}
