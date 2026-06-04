@@ -3,11 +3,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   UserRound, LogOut, Shield, Clock, Monitor,
-  Mail, CheckCircle, XCircle, Key, Activity,
+  Mail, CheckCircle, XCircle, Key, Activity, Palette, Check,
 } from 'lucide-react'
 import { Card, Avatar } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { createClient } from '@/lib/supabase/client'
+import { updateOrganization } from '@/lib/supabase/queries'
+import { THEMES, applyTheme, DEFAULT_THEME } from '@/lib/theme'
+import TwoFactorSettings from '@/components/crm/TwoFactorSettings'
 import { format, formatDistanceToNow, subDays, isToday, isYesterday } from 'date-fns'
 
 function SectionHead({ icon: Icon, title, description }) {
@@ -46,11 +49,27 @@ function getDayLabel(date) {
 }
 
 export default function AccountPage() {
-  const { user }  = useOrg()
+  const { user, org, orgId } = useOrg()
   const router    = useRouter()
   const [deviceInfo,  setDeviceInfo]  = useState('')
   const [sessionLog,  setSessionLog]  = useState([])
   const [signingOut,  setSigningOut]  = useState(false)
+  const [theme,       setTheme]       = useState(DEFAULT_THEME)
+
+  useEffect(() => {
+    let stored = null
+    try { stored = localStorage.getItem('app_theme') } catch {}
+    setTheme(stored || org?.settings?.theme || DEFAULT_THEME)
+  }, [org])
+
+  const chooseTheme = async (key) => {
+    setTheme(key)
+    applyTheme(key)
+    try { localStorage.setItem('app_theme', key) } catch {}
+    if (orgId) {
+      try { await updateOrganization(orgId, { settings: { ...(org?.settings || {}), theme: key } }) } catch {}
+    }
+  }
 
   const displayName  = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
   const displayEmail = user?.email || 'Not available'
@@ -187,6 +206,38 @@ export default function AccountPage() {
           <InfoRow icon={Monitor} label="Current session" value={deviceInfo || 'Detecting…'} />
         </div>
       </Card>
+
+      {/* ── Appearance / Theme ── */}
+      <Card className="p-5">
+        <SectionHead icon={Palette} title="Appearance" description="Choose the app's accent color" />
+        <div className="flex flex-wrap gap-3">
+          {Object.values(THEMES).map(t => {
+            const active = theme === t.key
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => chooseTheme(t.key)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all"
+                style={active
+                  ? { borderColor: t.brand, background: t.tint }
+                  : { borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+              >
+                <span className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center" style={{ background: t.brand }}>
+                  {active && <Check size={14} className="text-white" />}
+                </span>
+                <div className="text-left">
+                  <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{t.name}</p>
+                  <p className="text-[10px] font-mono" style={{ color: 'var(--color-text-muted)' }}>{t.brand}</p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </Card>
+
+      {/* ── Two-Factor Authentication ── */}
+      <TwoFactorSettings />
 
       {/* ── 30-Day Session Timeline ── */}
       <Card className="p-5">

@@ -12,16 +12,29 @@ import {
   getTasks, createTask, updateTask,
   getFollowups, createFollowup, updateFollowup,
   getTags, assignTagToPatient, removeTagFromPatient,
+  getAppointments, createAppointment, updateAppointment,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Timeline from '@/components/crm/Timeline'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import clsx from 'clsx'
 
 const STATUS_STYLE = {
   Active: { bg: '#dcfce7', color: '#15803d' },
   Inactive: { bg: '#fee2e2', color: '#b91c1c' },
+}
+
+// Timeline icon per activity type
+const ACTIVITY_ICON = {
+  comment:       MessageSquare,
+  call:          Phone,
+  email:         Mail,
+  meeting:       Calendar,
+  note:          Edit2,
+  status_change: Tag,
+  whatsapp:      MessageSquare,
 }
 
 const FOLLOWUP_TYPES = ['Call', 'WhatsApp', 'Email']
@@ -171,6 +184,12 @@ export default function PatientDetailPage({ params }) {
   const [showFuForm, setShowFuForm] = useState(false)
   const [newFu, setNewFu] = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
   const [assigningPatient, setAssigningPatient] = useState(false)
+  const [appointments, setAppointments] = useState([])
+  const [addingAppt, setAddingAppt] = useState(false)
+  const [apptForm, setApptForm] = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
+  const [savingAppt, setSavingAppt] = useState(false)
+
+  const doctors = org?.settings?.doctors || []
 
   const logActivity = (type, content, entityType = 'patient', entityId = id) => orgId && createActivity({ organization_id: orgId, entity_type: entityType, entity_id: entityId, type, content })
 
@@ -179,24 +198,28 @@ export default function PatientDetailPage({ params }) {
     try {
       const p = await getPatient(id)
       const leadIds = (p?.leads || []).map(l => l.id)
-      const [patientActs, patientTasks, patientFollowups, leadActsList, leadTasksList, leadFollowupsList] = await Promise.all([
+      const allIds = new Set([id, ...leadIds])
+      const [patientActs, patientTasks, patientFollowups, leadActsList, leadTasksList, leadFollowupsList, allAppts] = await Promise.all([
         getActivities('patient', id, orgId),
         getTasks({ entityType: 'patient', entityId: id, orgId }),
         getFollowups({ patientId: id, orgId }),
         Promise.all(leadIds.map(leadId => getActivities('lead', leadId, orgId))),
         Promise.all(leadIds.map(leadId => getTasks({ entityType: 'lead', entityId: leadId, orgId }))),
         Promise.all(leadIds.map(leadId => getFollowups({ leadId, orgId }))),
+        getAppointments({ orgId }),
       ])
 
       const mergedActs = [...(patientActs || []), ...leadActsList.flat()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       const mergedTasks = [...(patientTasks || []), ...leadTasksList.flat()].reduce((acc, t) => (acc.some(x => x.id === t.id) ? acc : [...acc, t]), [])
       const mergedFollowups = [...(patientFollowups || []), ...leadFollowupsList.flat()].reduce((acc, f) => (acc.some(x => x.id === f.id) ? acc : [...acc, f]), [])
+      const mergedAppts = (allAppts || []).filter(a => allIds.has(a.patient_id) || allIds.has(a.lead_id))
       const tags = await getTags(orgId)
 
       setPatient(p)
       setActivities(mergedActs)
       setTasks(mergedTasks)
       setFollowups(mergedFollowups)
+      setAppointments(mergedAppts)
       setAvailableTags(tags || [])
     } catch (err) { console.error(err) }
     setLoading(false)
@@ -233,6 +256,26 @@ export default function PatientDetailPage({ params }) {
   const handleCompleteFollowup = async (fuId, outcome) => { const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleRescheduleFollowup = async (fuId, newDate, newType) => { const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
+
+  const handleBookAppt = async (e) => {
+    e.preventDefault()
+    if (!apptForm.date || !orgId) return
+    setSavingAppt(true)
+    try {
+      const scheduledAt = new Date(`${apptForm.date}T${apptForm.time || '10:00'}:00`)
+      const appt = await createAppointment({
+        organization_id: orgId, patient_id: id, lead_id: null,
+        doctor_id: apptForm.doctor_id || null, scheduled_at: scheduledAt.toISOString(), notes: apptForm.notes || null, status: 'booked',
+      })
+      setAppointments(prev => [appt, ...prev])
+      await logActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
+      setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
+    } catch (err) { alert(err.message) } finally { setSavingAppt(false) }
+  }
+  const handleApptStatus = async (aid, status) => {
+    try { const u = await updateAppointment(aid, { status }); setAppointments(prev => prev.map(a => a.id === aid ? { ...a, status: u.status } : a)) }
+    catch (err) { alert(err.message) }
+  }
 
   const linkedTagIds = (patient?.tags || []).map(t => t.tags?.id).filter(Boolean)
   const unlinkedTags = availableTags.filter(t => !linkedTagIds.includes(t.id))
@@ -459,7 +502,7 @@ export default function PatientDetailPage({ params }) {
               </div>
               <div className="p-5">
                 {activeTab === 'tasks' && <div className="space-y-3">{!taskOpen ? <div className="flex justify-end"><Button size="sm" onClick={() => setTaskOpen(true)}><Plus size={14} /> New Task</Button></div> : <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Task *" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required /><div className="grid grid-cols-2 gap-3"><Select label="Priority" value={newTask.priority} onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))} options={['Low', 'Medium', 'High', 'Urgent'].map(s => ({ value: s, label: s }))} /><Input label="Due Date" type="datetime-local" value={newTask.due_date} onChange={e => setNewTask(f => ({ ...f, due_date: e.target.value }))} /></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setTaskOpen(false)}>Cancel</Button><Button size="sm" type="submit">Create Task</Button></div></form>}{tasks.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><CheckSquare size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No tasks yet.</p></div> : tasks.map(task => <div key={task.id} className={clsx('flex items-start gap-3 p-4 rounded-xl border border-(--color-border)', task.status === 'Completed' && 'opacity-50')} style={{ background: 'var(--color-surface-2)' }}><input type="checkbox" checked={task.status === 'Completed'} className="mt-0.5 w-4 h-4" onChange={() => handleTaskToggle(task)} /><div className="flex-1"><p className={clsx('text-sm font-500', task.status === 'Completed' && 'line-through')}>{task.title}</p>{task.due_date && <p className="text-xs mt-0.5"><Calendar size={10} className="inline mr-1" />{format(new Date(task.due_date), 'MMM d, h:mm a')}</p>}</div></div>)}</div>}
-                {activeTab === 'timeline' && <div>{activities.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><Activity size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No activity recorded yet.</p></div> : <div className="space-y-4">{activities.map((a, i) => <div key={i} className="flex gap-3"><div className="p-2 rounded-lg h-fit" style={{ background: 'var(--color-brand-50)' }}><Activity size={13} style={{ color: 'var(--color-brand)' }} /></div><div className="flex-1"><p className="text-sm">{a.content}</p><p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</p></div></div>)}</div>}</div>}
+                {activeTab === 'timeline' && <Timeline activities={activities} maxHeight="28rem" />}
               </div>
             </Card>
           </div>
@@ -472,6 +515,73 @@ export default function PatientDetailPage({ params }) {
           <div className="p-5">
             {bottomTab === 'history' && <div className="space-y-4"><div className="flex justify-end">{!addingRecord && <Button size="sm" onClick={() => setAddingRecord(true)}><Plus size={14} /> Add Record</Button>}</div>{addingRecord && <form onSubmit={handleAddRecord} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Diagnosis / Reason for Visit *" value={medEntry.diagnosis} onChange={e => setMedEntry(m => ({ ...m, diagnosis: e.target.value }))} required /><Textarea label="Treatment / Prescription" value={medEntry.treatment} onChange={e => setMedEntry(m => ({ ...m, treatment: e.target.value }))} rows={3} /><Textarea label="Additional Notes" value={medEntry.notes} onChange={e => setMedEntry(m => ({ ...m, notes: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setAddingRecord(false)}>Cancel</Button><Button size="sm" type="submit" disabled={savingRecord}>{savingRecord ? 'Saving...' : <><Save size={13} /> Save Record</>}</Button></div></form>}{!patient.medical_history?.length && !addingRecord ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><History size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p></div> : <div className="space-y-3">{(patient.medical_history || []).map((rec, i) => <div key={i} className="p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}><p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>{rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}</p><p className="text-sm font-700">{rec.diagnosis}</p>{rec.treatment && <p className="text-xs mt-2">{rec.treatment}</p>}</div>)}</div>}</div>}
             {bottomTab === 'documents' && <div className="py-16 text-center border-2 border-dashed rounded-xl border-(--color-border)"><FileText size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Upload reports, prescriptions, or scan documents</p><p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Coming soon</p></div>}
+          </div>
+        </Card>
+
+        {/* Appointments */}
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Calendar size={13} /> Appointments</p>
+            {!addingAppt && <Button size="sm" onClick={() => setAddingAppt(true)}><Plus size={14} /> Book</Button>}
+          </div>
+          <div className="p-5 space-y-3">
+            {addingAppt && (
+              <form onSubmit={handleBookAppt} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Date *</label>
+                    <input type="date" required value={apptForm.date} onChange={e => setApptForm(f => ({ ...f, date: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Time</label>
+                    <input type="time" value={apptForm.time} onChange={e => setApptForm(f => ({ ...f, time: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                </div>
+                {doctors.length > 0 && (
+                  <select value={apptForm.doctor_id} onChange={e => setApptForm(f => ({ ...f, doctor_id: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                    <option value="">— Doctor —</option>
+                    {doctors.map(d => <option key={d.id} value={d.id}>{d.name}{d.department ? ` · ${d.department}` : ''}</option>)}
+                  </select>
+                )}
+                <Textarea label="Notes" value={apptForm.notes} onChange={e => setApptForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" size="sm" type="button" onClick={() => setAddingAppt(false)}>Cancel</Button>
+                  <Button size="sm" type="submit" disabled={savingAppt || !apptForm.date}>{savingAppt ? 'Booking…' : <><Calendar size={13} /> Book</>}</Button>
+                </div>
+              </form>
+            )}
+            {appointments.length === 0 && !addingAppt ? (
+              <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><Calendar size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No appointments yet.</p></div>
+            ) : (
+              <div className="space-y-2">
+                {[...appointments].sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)).map(appt => {
+                  const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
+                  const st = ST[appt.status] || ST.booked
+                  const doc = appt.doctor_id ? doctors.find(d => d.id === appt.doctor_id) : null
+                  const canAct = appt.status === 'booked' || appt.status === 'confirmed'
+                  return (
+                    <div key={appt.id} className="flex items-start gap-3 p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}><Calendar size={15} style={{ color: 'var(--color-brand)' }} /></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(appt.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}</span>
+                          <span className="text-[10px] font-600 px-2 py-0.5 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{appt.status}</span>
+                          {appt.lead_id && !appt.patient_id && <span className="text-[9px] font-600 px-1.5 py-0.5 rounded-full" style={{ background: '#dbeafe', color: '#1d4ed8' }}>from lead</span>}
+                        </div>
+                        {doc && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{doc.name}{doc.department ? ` · ${doc.department}` : ''}</p>}
+                        {appt.notes && <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
+                      </div>
+                      {canAct && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button type="button" onClick={() => handleApptStatus(appt.id, 'completed')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}><Check size={11} /> Complete</button>
+                          <button type="button" onClick={() => handleApptStatus(appt.id, 'cancelled')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={11} /> Cancel</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </Card>
 

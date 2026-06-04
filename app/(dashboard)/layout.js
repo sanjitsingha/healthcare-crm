@@ -4,6 +4,7 @@ import { OrgProvider } from '@/lib/context/OrgContext'
 import { SidebarStateProvider } from '@/lib/context/SidebarContext'
 import Sidebar from '@/components/crm/Sidebar'
 import MainContent from '@/components/crm/MainContent'
+import ThemeApplier from '@/components/crm/ThemeApplier'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -22,6 +23,7 @@ export default async function DashboardLayout({ children }) {
   return (
     <OrgProvider org={profile.organizations} user={user}>
       <SidebarStateProvider>
+        <ThemeApplier />
         <div className="flex min-h-screen">
           <Sidebar />
           <MainContent>{children}</MainContent>

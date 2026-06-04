@@ -1,6 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* Tighter corner radius across the whole app — crisper, less "soft" feel.
+   Overrides Tailwind's radius scale, so every rounded-* utility shrinks. */
+@theme {
+  --radius-xs:  0.0625rem; /* 1px */
+  --radius-sm:  0.0625rem; /* 1px */
+  --radius-md:  0.125rem;  /* 2px */
+  --radius-lg:  0.125rem;  /* 2px */
+  --radius-xl:  0.1875rem; /* 3px */
+  --radius-2xl: 0.25rem;   /* 4px */
+  --radius-3xl: 0.3125rem; /* 5px */
+}
+
 :root {
   --font-sans: 'DM Sans', system-ui, sans-serif;
   --color-brand: #0f6e56;

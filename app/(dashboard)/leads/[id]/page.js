@@ -3,7 +3,7 @@ import { useEffect, useState, use } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin, User,
   Calendar, Clock, CheckSquare, Bell, Tag, TrendingUp,
-  MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight, ChevronDown,
+  MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Search,
 } from 'lucide-react'
 import { Button, Card, Modal, Input, Select, Textarea, Spinner } from '@/components/ui'
 import {
@@ -12,10 +12,12 @@ import {
   getTasks, createTask, updateTask,
   getFollowups, createFollowup, updateFollowup,
   createPatient, createAppointment, getAppointments, updateAppointment,
+  getTags, assignTagToLead, removeTagFromLead,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Timeline from '@/components/crm/Timeline'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
 import clsx from 'clsx'
 
@@ -534,6 +536,9 @@ export default function LeadDetailPage({ params }) {
   const [reschedulingId,  setReschedulingId]  = useState(null)
   const [rescheduleDate,  setRescheduleDate]  = useState('')
   const [rescheduleSaving, setRescheduleSaving] = useState(false)
+  const [availableTags, setAvailableTags] = useState([])
+  const [addingTag, setAddingTag]   = useState(false)
+  const [tagSearch, setTagSearch]   = useState('')
 
   const logActivity = (type, content) =>
     orgId && createActivity({ organization_id: orgId, entity_type: 'lead', entity_id: id, type, content })
@@ -544,20 +549,55 @@ export default function LeadDetailPage({ params }) {
   const loadAll = async () => {
     setLoading(true)
     try {
-      const [l, a, t, f, appts] = await Promise.all([
-        getLead(id),
+      const l = await getLead(id)
+      const pid = l?.patient_id || null   // linked patient (after conversion)
+      const allIds = new Set([id, pid].filter(Boolean))
+
+      const [a, t, f, appts, pa, pt, pf] = await Promise.all([
         getActivities('lead', id, orgId),
         getTasks({ entityType: 'lead', entityId: id, orgId }),
         getFollowups({ leadId: id, orgId }),
         getAppointments({ orgId }),
+        pid ? getActivities('patient', pid, orgId)            : Promise.resolve([]),
+        pid ? getTasks({ entityType: 'patient', entityId: pid, orgId }) : Promise.resolve([]),
+        pid ? getFollowups({ patientId: pid, orgId })         : Promise.resolve([]),
       ])
-      setLead(l); setActivities(a || []); setTasks(t || []); setFollowups(f || [])
-      setAppointments((appts || []).filter(ap => ap.lead_id === id))
+
+      const mergedActs = [...(a || []), ...(pa || [])].sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
+      const mergedTasks = [...(t || []), ...(pt || [])].reduce((acc, x) => acc.some(y => y.id === x.id) ? acc : [...acc, x], [])
+      const mergedFus  = [...(f || []), ...(pf || [])].reduce((acc, x) => acc.some(y => y.id === x.id) ? acc : [...acc, x], [])
+
+      setLead(l)
+      setActivities(mergedActs)
+      setTasks(mergedTasks)
+      setFollowups(mergedFus)
+      setAppointments((appts || []).filter(ap => allIds.has(ap.lead_id) || allIds.has(ap.patient_id)))
+      try { setAvailableTags(await getTags(orgId, 'leads') || []) } catch { setAvailableTags([]) }
     } catch (err) { console.error(err) }
     setLoading(false)
   }
 
   useEffect(() => { loadAll() }, [id])
+
+  // ── Tag handlers ──
+  const linkedTagIds = (lead?.tags || []).map(t => t.tags?.id).filter(Boolean)
+  const unlinkedTags = availableTags.filter(t => !linkedTagIds.includes(t.id))
+
+  const handleAddTag = async (tagId) => {
+    try {
+      await assignTagToLead(id, tagId)
+      const updated = await getLead(id)
+      setLead(prev => ({ ...prev, tags: updated.tags }))
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleRemoveTag = async (tagId) => {
+    try {
+      await removeTagFromLead(id, tagId)
+      const updated = await getLead(id)
+      setLead(prev => ({ ...prev, tags: updated.tags }))
+    } catch (err) { alert(err.message) }
+  }
 
   // ── Lead handlers ──
   const handleEdit = async (e) => {
@@ -831,6 +871,9 @@ export default function LeadDetailPage({ params }) {
           </Link>
           <span style={{ color: 'var(--color-border)' }}>/</span>
           <span className="text-sm font-600 truncate max-w-xs" style={{ color: 'var(--color-text-primary)' }}>{displayName}</span>
+          <span className="text-[11px] font-700 px-2.5 py-1 rounded-md shrink-0" style={{ background: stageC + '22', color: stageC }}>
+            {lead.stage}
+          </span>
         </div>
         <div className="flex items-center gap-2">
 
@@ -939,48 +982,77 @@ export default function LeadDetailPage({ params }) {
                   {(displayName[0] || '?').toUpperCase()}{displayName.split(' ')[1]?.[0]?.toUpperCase() || ''}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
-                    <div className="relative shrink-0">
-                      {changingStage && (
-                        <div className="fixed inset-0 z-10" onClick={() => setChangingStage(false)} />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setChangingStage(s => !s)}
-                        className="relative z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-700 shadow-sm transition-opacity hover:opacity-85"
-                        style={{ background: stageC, color: 'white' }}
-                      >
-                        {lead.stage}
-                        <ChevronDown
-                          size={13}
-                          style={{ transform: changingStage ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}
-                        />
-                      </button>
-                      {changingStage && (
-                        <div
-                          className="absolute top-full left-0 mt-1.5 w-44 rounded-xl border border-(--color-border) overflow-hidden z-20"
-                          style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
-                        >
-                          {stages.map(({ name, color }) => (
-                            <button
-                              key={name}
-                              type="button"
-                              onClick={() => handleStageChange(name)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)"
-                            >
-                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                              <span className="flex-1" style={{ color: 'var(--color-text-primary)' }}>{name}</span>
-                              {name === lead.stage && <Check size={12} style={{ color, flexShrink: 0 }} />}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <p className="text-sm font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
                   {displayGender && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{displayGender}</p>}
                 </div>
               </div>
+
+              {/* Tags */}
+              <div className="mb-4">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(lead.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
+                    const tc = tag.color || '#6366f1'
+                    return (
+                      <span key={tag.id}
+                        className="relative inline-flex items-center gap-1 pl-3 pr-1.5 py-0.5 text-[10px] font-600 group/tag"
+                        style={{ background: `${tc}22`, color: tc, clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>
+                        <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full" style={{ background: tc }} />
+                        {tag.name}
+                        <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-50 hover:opacity-100 transition-opacity">
+                          <X size={9} />
+                        </button>
+                      </span>
+                    )
+                  })}
+
+                  {/* Add Tag + searchable dropdown */}
+                  <div className="relative">
+                    {addingTag && <div className="fixed inset-0 z-10" onClick={() => { setAddingTag(false); setTagSearch('') }} />}
+                    <button type="button" onClick={() => setAddingTag(o => !o)}
+                      className="relative z-20 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                      <Plus size={10} /> Add Tag
+                    </button>
+                    {addingTag && (
+                      <div className="absolute top-full left-0 mt-1.5 w-52 rounded-lg border border-(--color-border) overflow-hidden z-20"
+                        style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                        <div className="p-2 border-b border-(--color-border)">
+                          <div className="relative">
+                            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+                            <input
+                              autoFocus
+                              value={tagSearch}
+                              onChange={e => setTagSearch(e.target.value)}
+                              placeholder="Search tags…"
+                              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-(--color-border) outline-none"
+                              style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-52 overflow-y-auto py-1">
+                          {unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 ? (
+                            <p className="px-3 py-3 text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
+                              {availableTags.length === 0 ? 'No lead tags. Create them in Settings → Tags.' : 'No matching tags.'}
+                            </p>
+                          ) : (
+                            unlinkedTags
+                              .filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()))
+                              .map(tag => (
+                                <button key={tag.id} type="button" onClick={() => handleAddTag(tag.id)}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tag.color }} />
+                                  <span className="flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
+                                  <Plus size={11} style={{ color: 'var(--color-text-muted)' }} />
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2.5">
                 {displayPhone && <div className="flex items-center gap-2"><Phone size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{displayPhone}</span></div>}
                 {displayEmail && <div className="flex items-center gap-2"><Mail size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>{displayEmail}</span></div>}
@@ -1125,38 +1197,7 @@ export default function LeadDetailPage({ params }) {
 
                 {/* ── Timeline (system-generated, read-only) ── */}
                 {activeTab === 'timeline' && (
-                  <div>
-                    {timelineActivities.length === 0 ? (
-                      <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)">
-                        <Clock size={28} className="mx-auto mb-2 opacity-30" />
-                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Activity will appear here automatically.</p>
-                        <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Stage changes, follow-ups, tasks — all logged automatically.</p>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        {/* Vertical line */}
-                        <div className="absolute left-4 top-4 bottom-4 w-px" style={{ background: 'var(--color-border)' }} />
-                        <div className="space-y-4">
-                          {timelineActivities.map((a, i) => {
-                            const Icon = ACTIVITY_ICON[a.type] || Bell
-                            return (
-                              <div key={i} className="flex gap-4 relative">
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 border-2" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                                  <Icon size={13} style={{ color: 'var(--color-brand)' }} />
-                                </div>
-                                <div className="flex-1 min-w-0 pb-4">
-                                  <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{a.content}</p>
-                                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                                    {format(new Date(a.created_at), 'MMM d, yyyy · h:mm a')} · {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
-                                  </p>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <Timeline activities={timelineActivities} emptyText="Activity will appear here automatically." />
                 )}
 
               </div>

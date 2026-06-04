@@ -25,6 +25,11 @@ function LoginContent() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
+  // MFA (TOTP) step after password sign-in
+  const [mfaStep, setMfaStep] = useState(false)
+  const [mfaFactorId, setMfaFactorId] = useState(null)
+  const [mfaCode, setMfaCode] = useState('')
+
   useEffect(() => {
     const err = searchParams.get('error')
     if (err === 'auth_failed') setError('Authentication failed. Please try again.')
@@ -70,11 +75,41 @@ function LoginContent() {
       if (error) {
         setError(error.message)
       } else {
+        // Check whether this account requires a second factor (TOTP)
+        try {
+          const { data: factors } = await supabase.auth.mfa.listFactors()
+          const totp = (factors?.totp || []).find(f => f.status === 'verified')
+          const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+          // If a verified factor exists and we're not already stepped up, require the code
+          if (totp && aal?.currentLevel !== 'aal2') {
+            setMfaFactorId(totp.id)
+            setMfaStep(true)
+            setLoading(false)
+            return
+          }
+        } catch { /* fall through to dashboard */ }
         router.push('/dashboard')
         router.refresh()
       }
     }
     setLoading(false)
+  }
+
+  const handleVerifyMfa = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const { data: ch, error: cErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
+      if (cErr) throw cErr
+      const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: ch.id, code: mfaCode.replace(/\s/g, '') })
+      if (vErr) throw vErr
+      router.push('/dashboard')
+      router.refresh()
+    } catch {
+      setError('Invalid code. Please try again.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -128,6 +163,38 @@ function LoginContent() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl border border-[var(--color-border)] overflow-hidden">
+            {mfaStep ? (
+              <div className="p-8">
+                <h2 className="text-xl font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>Two-step verification</h2>
+                <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>
+                  Enter the 6-digit code from your authenticator app.
+                </p>
+                <form onSubmit={handleVerifyMfa} className="space-y-4">
+                  <input
+                    autoFocus
+                    value={mfaCode}
+                    onChange={e => setMfaCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    inputMode="numeric"
+                    className="w-full px-4 py-3 text-center text-lg font-mono tracking-[0.4em] rounded-lg border border-[var(--color-border)] bg-white outline-none"
+                  />
+                  {error && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{error}</div>
+                  )}
+                  <button type="submit" disabled={loading || mfaCode.length < 6}
+                    className="w-full py-2.5 text-sm font-600 text-white rounded-xl transition-all disabled:opacity-50 hover:opacity-90 active:scale-[0.98]"
+                    style={{ background: 'var(--color-brand)' }}>
+                    {loading ? 'Verifying…' : 'Verify'}
+                  </button>
+                  <button type="button"
+                    onClick={async () => { await supabase.auth.signOut(); setMfaStep(false); setMfaCode(''); setError('') }}
+                    className="w-full text-xs font-500 py-1" style={{ color: 'var(--color-text-muted)' }}>
+                    ← Back to sign in
+                  </button>
+                </form>
+              </div>
+            ) : (
+            <>
             {/* Mode tabs */}
             <div className="flex border-b border-[var(--color-border)]">
               {[['signin', 'Sign In'], ['signup', 'Create Account']].map(([m, label]) => (
@@ -268,6 +335,8 @@ function LoginContent() {
                 </button>
               </form>
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>

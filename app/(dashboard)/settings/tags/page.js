@@ -112,7 +112,7 @@ export default function TagsPage() {
             </div>
             <div>
               <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Tag Management</p>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Organize patients with custom tags for segmentation</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Organize leads &amp; patients with custom tags for segmentation</p>
             </div>
           </div>
           {!showForm && (
@@ -136,6 +136,24 @@ export default function TagsPage() {
                 onChange={e => setNewTag(t => ({ ...t, name: e.target.value }))}
                 required
               />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>For Page</label>
+              <div className="flex rounded-lg overflow-hidden border border-(--color-border)">
+                {[{ value: 'patients', label: 'Patients' }, { value: 'leads', label: 'Leads' }].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setNewTag(t => ({ ...t, page: value }))}
+                    className="px-4 py-2 text-xs font-600 transition-all"
+                    style={newTag.page === value
+                      ? { background: 'var(--color-brand)', color: 'white' }
+                      : { color: 'var(--color-text-muted)', background: 'transparent' }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Color</label>
@@ -204,6 +222,9 @@ export default function TagsPage() {
                   <Tags size={14} style={{ color: tag.color }} />
                 </div>
                 <span className="text-sm font-600 flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
+                <span className="text-[9px] font-700 px-1.5 py-0.5 rounded-full uppercase shrink-0" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+                  {tag.page === 'leads' ? 'Lead' : 'Patient'}
+                </span>
                 <button
                   onClick={() => handleDelete(tag.id)}
                   className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all shrink-0"

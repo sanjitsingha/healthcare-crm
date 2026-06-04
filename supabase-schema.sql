@@ -29,7 +29,7 @@ drop table if exists organizations cascade;
 create table organizations (
   id uuid default gen_random_uuid() primary key,
   name text not null,
-  type text check (type in ('Hospital','Clinic','Pharmacy','Lab','Insurance','Wellness Center','Dental Clinic','Other')) default 'Clinic',
+  type text check (type in ('Hospital','Clinic','Pharmacy','Lab','Insurance','Wellness Center','Dental Clinic','Diagnostic Center','Other')) default 'Clinic',
   email text,
   phone text,
   website text,
@@ -188,6 +188,7 @@ create table tags (
   organization_id uuid references organizations(id) on delete cascade not null,
   name text not null,
   color text default '#6366f1',
+  page text check (page in ('patients','leads')) default 'patients',
   created_by uuid,
   created_at timestamptz default now(),
   unique(organization_id, name)
@@ -267,6 +268,7 @@ create table consultations (
   treatment_plan text,
   prescription text,
   vitals jsonb default '{}',
+  visit_details jsonb default '[]',
   follow_up_required boolean default false,
   follow_up_date date,
   duration_minutes integer default 30,
