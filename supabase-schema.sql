@@ -113,6 +113,7 @@ create table patients (
   medical_history jsonb default '[]',
   custom_data jsonb default '{}',
   assigned_to uuid,
+  patient_code text,
   status text check (status in ('Active','Inactive')) default 'Active',
   created_at timestamptz default now(),
   updated_at timestamptz default now()

@@ -18,6 +18,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
+import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import clsx from 'clsx'
 
@@ -213,7 +214,7 @@ export default function PatientDetailPage({ params }) {
       const mergedTasks = [...(patientTasks || []), ...leadTasksList.flat()].reduce((acc, t) => (acc.some(x => x.id === t.id) ? acc : [...acc, t]), [])
       const mergedFollowups = [...(patientFollowups || []), ...leadFollowupsList.flat()].reduce((acc, f) => (acc.some(x => x.id === f.id) ? acc : [...acc, f]), [])
       const mergedAppts = (allAppts || []).filter(a => allIds.has(a.patient_id) || allIds.has(a.lead_id))
-      const tags = await getTags(orgId)
+      const tags = await getTags(orgId, 'patients')
 
       setPatient(p)
       setActivities(mergedActs)
@@ -229,8 +230,8 @@ export default function PatientDetailPage({ params }) {
 
   const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
   const handleEdit = async (e) => { e.preventDefault(); try { const updated = await updatePatient(id, editForm); setPatient(prev => ({ ...prev, ...updated })); setEditOpen(false) } catch (err) { alert(err.message) } }
-  const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)) }
-  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }) }
+  const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)); if (status === 'Completed') await applyRules('task_completed') }
+  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); await applyRules('task_added') }
 
   const handleAddRecord = async (e) => {
     e.preventDefault()
@@ -241,6 +242,7 @@ export default function PatientDetailPage({ params }) {
       await updatePatient(id, { medical_history: newHistory })
       await logActivity('note', `Medical record added: ${medEntry.diagnosis}`)
       await loadAll(); setAddingRecord(false); setMedEntry({ diagnosis: '', treatment: '', notes: '' })
+      await applyRules('medical_record_added')
     } catch (e) { alert(e.message) } finally { setSavingRecord(false) }
   }
 
@@ -257,6 +259,34 @@ export default function PatientDetailPage({ params }) {
   const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleRescheduleFollowup = async (fuId, newDate, newType) => { const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
 
+  // Apply configured automation rules (Settings → Rules) for a patient event.
+  const applyRules = async (eventKey) => {
+    if (!patient) return
+    const rules = matchingRules(org?.settings?.rules || [], { target: 'patient', event: eventKey, entity: patient })
+    let changed = false
+    for (const rule of rules) {
+      const { type, value } = rule.action || {}
+      if (type === 'set_status' && value && patient.status !== value) {
+        try {
+          const u = await updatePatient(id, { status: value }); setPatient(prev => ({ ...prev, status: u.status }))
+          await logActivity('status_change', `Status auto-updated to ${value} by rule${rule.name ? ` "${rule.name}"` : ''}`)
+          changed = true
+        } catch {}
+      } else if (type === 'add_tag' && value) {
+        const already = (patient.tags || []).some(t => t.tags?.id === value)
+        if (!already) {
+          try {
+            await assignTagToPatient(id, value); const u = await getPatient(id); setPatient(u)
+            const tag = availableTags.find(t => t.id === value)
+            await logActivity('note', `Tag "${tag?.name || 'tag'}" auto-added by rule${rule.name ? ` "${rule.name}"` : ''}`)
+            changed = true
+          } catch {}
+        }
+      }
+    }
+    if (changed) await loadAll()
+  }
+
   const handleBookAppt = async (e) => {
     e.preventDefault()
     if (!apptForm.date || !orgId) return
@@ -270,6 +300,7 @@ export default function PatientDetailPage({ params }) {
       setAppointments(prev => [appt, ...prev])
       await logActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
       setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
+      await applyRules('appointment_booked')
     } catch (err) { alert(err.message) } finally { setSavingAppt(false) }
   }
   const handleApptStatus = async (aid, status) => {
@@ -288,6 +319,7 @@ export default function PatientDetailPage({ params }) {
       setPatient(updated)
       setSelectedTagId('')
       setAddingTag(false)
+      await applyRules('tag_added')
     } catch (err) { alert(err.message) }
   }
 
@@ -591,7 +623,7 @@ export default function PatientDetailPage({ params }) {
           </div>
           <div className="p-5 space-y-3">
             {!showFuForm ? <div className="flex justify-end"><Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button></div> : <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="space-y-1.5"><label className="block text-xs font-500">Type</label><div className="flex flex-wrap gap-1.5">{FOLLOWUP_TYPES.map(t => <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))} className="px-3 py-1.5 rounded-full text-[11px] font-600 border" style={newFu.type === t ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{t}</button>)}</div></div><Select label="Status *" value={newFu.status_detail} onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))} options={[{ value: '', label: 'Select status' }, ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s }))]} /><CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} /><Textarea label="Response" value={newFu.response} onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setShowFuForm(false)}>Cancel</Button><Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>Save</Button></div></form>}
-            {followups.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="space-y-3">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
+            {followups.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="space-y-3 max-h-150 overflow-y-auto pr-1">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
           </div>
         </Card>
       </div>

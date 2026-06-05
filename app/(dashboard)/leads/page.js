@@ -463,8 +463,8 @@ export default function LeadsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                  {/* Select-all checkbox */}
-                  <th className="w-10 px-4 py-3">
+                  {/* Select-all checkbox (pinned) */}
+                  <th className="sticky left-0 z-20 w-12 px-3 py-3" style={{ background: 'var(--color-surface-2)' }}>
                     <input
                       type="checkbox"
                       checked={filtered.length > 0 && selected.size === filtered.length}
@@ -473,6 +473,10 @@ export default function LeadsPage() {
                       className="w-4 h-4 cursor-pointer rounded"
                       style={{ accentColor: 'var(--color-brand)' }}
                     />
+                  </th>
+                  {/* Tag (pinned) */}
+                  <th className="sticky left-12 z-20 text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap border-r border-(--color-border)" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
+                    Tag
                   </th>
                   {visibleCols.map(col => (
                     <th key={col.id} className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
@@ -484,11 +488,14 @@ export default function LeadsPage() {
               <tbody className="divide-y divide-(--color-border)">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleCols.length + 1} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={visibleCols.length + 2} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       {hasFilters || search ? 'No leads match your filters.' : 'No leads yet. Create your first lead.'}
                     </td>
                   </tr>
-                ) : filtered.map(lead => (
+                ) : filtered.map(lead => {
+                  const rowBg = selected.has(lead.id) ? '#eef6f2' : 'var(--color-surface)'
+                  const leadTags = (lead.tags || []).map(t => t.tags).filter(Boolean)
+                  return (
                   <tr
                     key={lead.id}
                     className={clsx(
@@ -496,8 +503,8 @@ export default function LeadsPage() {
                       selected.has(lead.id) ? 'bg-(--color-brand-50)/60' : 'hover:bg-(--color-brand-50)/30'
                     )}
                   >
-                    {/* Row checkbox */}
-                    <td className="w-10 px-4 py-3" onClick={e => e.stopPropagation()}>
+                    {/* Row checkbox (pinned) */}
+                    <td className="sticky left-0 z-10 w-12 px-3 py-3" style={{ background: rowBg }} onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selected.has(lead.id)}
@@ -505,6 +512,25 @@ export default function LeadsPage() {
                         className="w-4 h-4 cursor-pointer rounded"
                         style={{ accentColor: 'var(--color-brand)' }}
                       />
+                    </td>
+                    {/* Tag (pinned) */}
+                    <td className="sticky left-12 z-10 px-4 py-3 border-r border-(--color-border) cursor-pointer align-top" style={{ background: rowBg }} onClick={() => router.push(`/leads/${lead.id}`)}>
+                      {leadTags.length === 0 ? (
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1 max-w-60">
+                          {leadTags.map(tag => {
+                            const tc = tag.color || '#6366f1'
+                            return (
+                              <span key={tag.id} className="relative inline-flex items-center pl-2.5 pr-2 py-0.5 text-[10px] font-600 whitespace-nowrap"
+                                style={{ background: tc, color: 'white', clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>
+                                <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                                {tag.name}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                     </td>
                     {visibleCols.map(col => (
                       <td
@@ -516,7 +542,8 @@ export default function LeadsPage() {
                       </td>
                     ))}
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

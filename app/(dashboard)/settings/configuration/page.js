@@ -110,6 +110,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const [values,  setValues]  = useState({ ...integration.config })
   const [saving,  setSaving]  = useState(false)
   const [copied,  setCopied]  = useState('')
+  const [showGuide, setShowGuide] = useState(false)
 
   if (!provider) return null
   const Icon = provider.icon
@@ -206,6 +207,59 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
             </div>
           )
         })}
+
+        {integration.type === 'google_forms' && (() => {
+          const url = integration.config?.webhook_url || 'YOUR_WEBHOOK_URL'
+          const secret = integration.config?.secret
+          const postUrl = secret ? `${url}?secret=${encodeURIComponent(secret)}` : url
+          const script = `function onFormSubmit(e) {
+  var url = "${postUrl}";
+  var fields = {};
+  var answers = e.response.getItemResponses();
+  for (var i = 0; i < answers.length; i++) {
+    fields[answers[i].getItem().getTitle()] = answers[i].getResponse();
+  }
+  UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ fields: fields }),
+    muteHttpExceptions: true
+  });
+}`
+          return (
+            <div className="rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
+              <button type="button" onClick={() => setShowGuide(g => !g)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-600"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="flex items-center gap-1.5"><FileText size={13} /> Setup guide (Apps Script)</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>{showGuide ? 'Hide' : 'Show'}</span>
+              </button>
+              {showGuide && (
+                <div className="px-3 pb-3 space-y-2.5 border-t border-(--color-border) pt-2.5">
+                  <ol className="text-xs space-y-1.5 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
+                    <li>Open your Google Form → <b>⋮ menu</b> → <b>Apps Script</b>.</li>
+                    <li>Delete any sample code, paste the script below, and <b>Save</b>.</li>
+                    <li>Click the <b>clock</b> icon (Triggers) → <b>Add Trigger</b>.</li>
+                    <li>Choose function <b>onFormSubmit</b>, event source <b>From form</b>, event type <b>On form submit</b> → <b>Save</b> (authorize when prompted).</li>
+                    <li>Submit a test response — a new lead appears in your CRM.</li>
+                  </ol>
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                    Tip: name your form questions <b>Name</b>, <b>Phone</b>, <b>Email</b> so they map automatically. Anything else is saved on the lead too.
+                  </p>
+                  <div className="relative">
+                    <pre className="text-[11px] font-mono p-3 rounded-lg overflow-x-auto whitespace-pre"
+                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{script}</pre>
+                    <button type="button" onClick={() => copy(script, 'script')}
+                      className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md border border-(--color-border) text-[11px] font-600"
+                      style={{ background: 'var(--color-surface)', color: copied === 'script' ? '#15803d' : 'var(--color-text-muted)' }}>
+                      {copied === 'script' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         <div className="flex justify-end gap-2 pt-1">
           {editing ? (

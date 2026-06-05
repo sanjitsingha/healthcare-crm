@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, useRef } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin, User,
   Calendar, Clock, CheckSquare, Bell, Tag, TrendingUp,
@@ -18,6 +18,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
+import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
 import clsx from 'clsx'
 
@@ -539,6 +540,8 @@ export default function LeadDetailPage({ params }) {
   const [availableTags, setAvailableTags] = useState([])
   const [addingTag, setAddingTag]   = useState(false)
   const [tagSearch, setTagSearch]   = useState('')
+  const tagBtnRef = useRef(null)
+  const [tagMenuPos, setTagMenuPos] = useState({ top: 0, left: 0 })
 
   const logActivity = (type, content) =>
     orgId && createActivity({ organization_id: orgId, entity_type: 'lead', entity_id: id, type, content })
@@ -588,6 +591,7 @@ export default function LeadDetailPage({ params }) {
       await assignTagToLead(id, tagId)
       const updated = await getLead(id)
       setLead(prev => ({ ...prev, tags: updated.tags }))
+      await applyRules('tag_added')
     } catch (err) { alert(err.message) }
   }
 
@@ -598,6 +602,21 @@ export default function LeadDetailPage({ params }) {
       setLead(prev => ({ ...prev, tags: updated.tags }))
     } catch (err) { alert(err.message) }
   }
+
+  const openTagMenu = () => {
+    const r = tagBtnRef.current?.getBoundingClientRect()
+    if (r) setTagMenuPos({ top: r.bottom + 6, left: r.left })
+    setTagSearch('')
+    setAddingTag(true)
+  }
+
+  // Close the tag menu on scroll (it's fixed-positioned)
+  useEffect(() => {
+    if (!addingTag) return
+    const close = () => setAddingTag(false)
+    window.addEventListener('scroll', close, true)
+    return () => window.removeEventListener('scroll', close, true)
+  }, [addingTag])
 
   // ── Lead handlers ──
   const handleEdit = async (e) => {
@@ -639,7 +658,42 @@ export default function LeadDetailPage({ params }) {
       await logActivity('status_change', `Stage changed to ${stage}`)
       await refreshActivities()
       setChangingStage(false)
+      await applyRules('stage_changed')
     } catch (err) { alert(err.message) }
+  }
+
+  // Apply configured automation rules (Settings → Rules) for a lead event.
+  const applyRules = async (eventKey) => {
+    if (!lead) return
+    const rules = matchingRules(org?.settings?.rules || [], { target: 'lead', event: eventKey, entity: lead })
+    let changed = false
+    for (const rule of rules) {
+      const { type, value } = rule.action || {}
+      if (type === 'set_stage' && value) {
+        const orgStages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s => typeof s === 'string' ? s : s.name)
+        if (orgStages.includes(value) && !['Converted', 'Lost', value].includes(lead.stage)) {
+          try {
+            const updated = await updateLead(id, { stage: value })
+            setLead(prev => ({ ...prev, stage: updated.stage }))
+            await logActivity('status_change', `Stage auto-updated to ${value}`)
+            changed = true
+          } catch { /* ignore */ }
+        }
+      } else if (type === 'add_tag' && value) {
+        const already = (lead.tags || []).some(t => t.tags?.id === value)
+        if (!already) {
+          try {
+            await assignTagToLead(id, value)
+            const updated = await getLead(id)
+            setLead(prev => ({ ...prev, tags: updated.tags }))
+            const tag = availableTags.find(t => t.id === value)
+            await logActivity('note', `Tag "${tag?.name || 'tag'}" auto-added by rule${rule.name ? ` "${rule.name}"` : ''}`)
+            changed = true
+          } catch { /* ignore */ }
+        }
+      }
+    }
+    if (changed) await refreshActivities()
   }
 
   const handleConvertToPatient = async () => {
@@ -671,6 +725,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setTaskOpen(false)
       setNewTask({ title: '', priority: 'Medium', due_date: '' })
+      await applyRules('task_added')
     } catch (e) { alert(e.message) }
   }
 
@@ -680,6 +735,7 @@ export default function LeadDetailPage({ params }) {
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t))
     await logActivity('note', `Task "${task.title}" marked ${newStatus}`)
     await refreshActivities()
+    if (newStatus === 'Completed') await applyRules('task_completed')
   }
 
   // ── Follow-up handlers ──
@@ -706,6 +762,8 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setShowFuForm(false)
       setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+      // Event-based automation (configured in Settings → Rules)
+      await applyRules('followup_logged')
     } catch (e) { alert(e.message) }
   }
 
@@ -818,6 +876,8 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setShowBookForm(false)
       setNewAppt({ date: '', name: '', phone: '', notes: '', doctor_id: '' })
+      // Event-based automation (configured in Settings → Rules)
+      await applyRules('appointment_booked')
     } catch (err) { alert(err.message) }
     finally { setBookingSaving(false) }
   }
@@ -871,9 +931,33 @@ export default function LeadDetailPage({ params }) {
           </Link>
           <span style={{ color: 'var(--color-border)' }}>/</span>
           <span className="text-sm font-600 truncate max-w-xs" style={{ color: 'var(--color-text-primary)' }}>{displayName}</span>
-          <span className="text-[11px] font-700 px-2.5 py-1 rounded-md shrink-0" style={{ background: stageC + '22', color: stageC }}>
-            {lead.stage}
-          </span>
+
+          {/* Stage pill with dropdown */}
+          <div className="relative shrink-0">
+            {changingStage && <div className="fixed inset-0 z-10" onClick={() => setChangingStage(false)} />}
+            <button
+              type="button"
+              onClick={() => setChangingStage(s => !s)}
+              className="relative z-20 flex items-center gap-1.5 text-[11px] font-700 px-2.5 py-1 rounded-md transition-opacity hover:opacity-85"
+              style={{ background: stageC + '22', color: stageC }}
+            >
+              {lead.stage}
+              <ChevronDown size={12} style={{ transform: changingStage ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+            </button>
+            {changingStage && (
+              <div className="absolute top-full left-0 mt-1.5 w-44 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                {stages.map(({ name, color }) => (
+                  <button key={name} type="button" onClick={() => handleStageChange(name)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                    <span className="flex-1" style={{ color: 'var(--color-text-primary)' }}>{name}</span>
+                    {name === lead.stage && <Check size={12} style={{ color, flexShrink: 0 }} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
 
@@ -994,28 +1078,28 @@ export default function LeadDetailPage({ params }) {
                     const tc = tag.color || '#6366f1'
                     return (
                       <span key={tag.id}
-                        className="relative inline-flex items-center gap-1 pl-3 pr-1.5 py-0.5 text-[10px] font-600 group/tag"
-                        style={{ background: `${tc}22`, color: tc, clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>
-                        <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full" style={{ background: tc }} />
+                        className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"
+                        style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
                         {tag.name}
-                        <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-50 hover:opacity-100 transition-opacity">
-                          <X size={9} />
+                        <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-70 hover:opacity-100 transition-opacity">
+                          <X size={11} />
                         </button>
                       </span>
                     )
                   })}
 
-                  {/* Add Tag + searchable dropdown */}
-                  <div className="relative">
-                    {addingTag && <div className="fixed inset-0 z-10" onClick={() => { setAddingTag(false); setTagSearch('') }} />}
-                    <button type="button" onClick={() => setAddingTag(o => !o)}
-                      className="relative z-20 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
-                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-                      <Plus size={10} /> Add Tag
-                    </button>
-                    {addingTag && (
-                      <div className="absolute top-full left-0 mt-1.5 w-52 rounded-lg border border-(--color-border) overflow-hidden z-20"
-                        style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                  {/* Add Tag + searchable dropdown (fixed-positioned so it never gets clipped) */}
+                  <button ref={tagBtnRef} type="button" onClick={() => addingTag ? setAddingTag(false) : openTagMenu()}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                    <Plus size={10} /> Add Tag
+                  </button>
+                  {addingTag && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setAddingTag(false)} />
+                      <div className="fixed w-56 rounded-lg border border-(--color-border) overflow-hidden z-50"
+                        style={{ top: tagMenuPos.top, left: tagMenuPos.left, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
                         <div className="p-2 border-b border-(--color-border)">
                           <div className="relative">
                             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
@@ -1048,8 +1132,8 @@ export default function LeadDetailPage({ params }) {
                           )}
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1126,33 +1210,34 @@ export default function LeadDetailPage({ params }) {
           <div className="col-span-2 space-y-5">
             <Card className="border-(--color-border) overflow-hidden">
               {/* Tab bar */}
-              <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                {TABS.map(tab => (
-                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                    className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2 transition-all',
-                      activeTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent hover:bg-(--color-surface)'
-                    )}
-                    style={activeTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}
-                  >
-                    <tab.icon size={14} />
-                    {tab.label}
-                    {tab.count > 0 && (
-                      <span className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{tab.count}</span>
-                    )}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex">
+                  {TABS.map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                      className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2 transition-all',
+                        activeTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent hover:bg-(--color-surface)'
+                      )}
+                      style={activeTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}
+                    >
+                      <tab.icon size={14} />
+                      {tab.label}
+                      {tab.count > 0 && (
+                        <span className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{tab.count}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {activeTab === 'tasks' && !taskOpen && (
+                  <Button size="sm" className="mr-3 shrink-0" onClick={() => setTaskOpen(true)}><Plus size={14} /> New Task</Button>
+                )}
               </div>
 
-              <div className="p-5 max-h-120 overflow-y-auto">
+              <div className="p-5 max-h-140 overflow-y-auto">
 
                 {/* ── Tasks ── */}
                 {activeTab === 'tasks' && (
                   <div className="space-y-3">
-                    {!taskOpen ? (
-                      <div className="flex justify-end">
-                        <Button size="sm" onClick={() => setTaskOpen(true)}><Plus size={14} /> New Task</Button>
-                      </div>
-                    ) : (
+                    {taskOpen && (
                       <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                         <Input label="Task *" placeholder="e.g. Send treatment plan, Follow up on insurance" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required />
                         <div className="grid grid-cols-2 gap-3">
@@ -1220,7 +1305,7 @@ export default function LeadDetailPage({ params }) {
                 )}
               </div>
 
-              <div className="p-5 space-y-3">
+              <div className={clsx('p-5 space-y-3', !showBookForm && !reschedulingId && 'max-h-140 overflow-y-auto')}>
                 {showBookForm && (
                   <form onSubmit={handleBookAppointment} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                     <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>New Appointment</p>
@@ -1378,15 +1463,14 @@ export default function LeadDetailPage({ params }) {
 
         {/* ── Full-width Follow-ups section ── */}
         <Card className="border-(--color-border) overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
             <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
+            {!showFuForm && (
+              <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
+            )}
           </div>
           <div className="p-5 space-y-3">
-            {!showFuForm ? (
-              <div className="flex justify-end">
-                <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
-              </div>
-            ) : (
+            {showFuForm && (
               <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                 <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Add Follow-up</p>
                 <div className="space-y-1.5">
@@ -1450,7 +1534,7 @@ export default function LeadDetailPage({ params }) {
                 <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email log to keep this lead moving.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-150 overflow-y-auto pr-1">
                 {[...followups].sort((a, b) => {
                   const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
                   return (order[a.status] ?? 9) - (order[b.status] ?? 9)

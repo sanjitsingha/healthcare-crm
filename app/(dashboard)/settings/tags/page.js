@@ -47,6 +47,7 @@ export default function TagsPage() {
   const [newStageColor, setNewStageColor] = useState('#6366f1')
   const [savingStages, setSavingStages] = useState(false)
 
+
   const persistStages = async (updated) => {
     setSavingStages(true)
     try {
@@ -318,6 +319,7 @@ export default function TagsPage() {
           )}
         </form>
       </Card>
+
     </div>
   )
 }

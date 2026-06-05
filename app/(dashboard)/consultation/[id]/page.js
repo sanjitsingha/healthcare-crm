@@ -255,7 +255,7 @@ export default function ConsultationDetailPage({ params }) {
                   <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No consultations logged yet.</p>
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 max-h-150 overflow-y-auto pr-1">
                   {consultations.map(c => <ConsultationRecord key={c.id} c={c} doctors={doctors} />)}
                 </div>
               )}
@@ -273,7 +273,7 @@ export default function ConsultationDetailPage({ params }) {
                     <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2.5 max-h-150 overflow-y-auto pr-1">
                     {history.map((rec, i) => (
                       <div key={i} className="p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
                         <p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>{rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}</p>

@@ -1,10 +1,19 @@
 'use client'
 import { useState } from 'react'
-import { Building2, Phone, MapPin, Globe, Check, Save } from 'lucide-react'
+import { Building2, Phone, MapPin, Globe, Check, Save, Hash, GripVertical, X, Plus, Type, Calendar, ListOrdered, Minus } from 'lucide-react'
 import { Button, Card, Input, Select, Textarea } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
+import { DATE_FORMATS, SEPARATORS, DEFAULT_ID_FORMAT, toTokens, buildPatientCode } from '@/lib/patientId'
 import clsx from 'clsx'
+
+const uid = () => (crypto.randomUUID?.() || Math.random().toString(36).slice(2))
+const TOKEN_META = {
+  text:      { label: 'Text',      icon: Type,        color: '#0ea5e9' },
+  date:      { label: 'Date',      icon: Calendar,    color: '#7c3aed' },
+  seq:       { label: 'Sequence',  icon: ListOrdered, color: '#0f6e56' },
+  separator: { label: 'Separator', icon: Minus,       color: '#b45309' },
+}
 
 const ORG_TYPES = ['Clinic', 'Hospital', 'Pharmacy', 'Lab', 'Dental Clinic', 'Diagnostic Center', 'Wellness Center', 'Other']
 const CLINICAL_TYPES = ['Clinic', 'Hospital', 'Dental Clinic', 'Diagnostic Center', 'Wellness Center']
@@ -67,6 +76,29 @@ export default function OrganizationPage() {
   }))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [idFormat, setIdFormat] = useState(() => {
+    const saved = org?.settings?.patient_id_format
+    return {
+      enabled: saved?.enabled || false,
+      next_seq: saved?.next_seq || 1,
+      tokens: saved ? toTokens(saved) : DEFAULT_ID_FORMAT.tokens,
+    }
+  })
+  const setIdf = (k, v) => setIdFormat(f => ({ ...f, [k]: v }))
+  const [dragIdx, setDragIdx] = useState(null)
+
+  const addToken = (type) => {
+    const defaults = { text: '', date: 'YYYYMMDD', seq: 4, separator: '-' }
+    setIdFormat(f => ({ ...f, tokens: [...f.tokens, { id: uid(), type, value: defaults[type] }] }))
+  }
+  const updateToken = (id, value) => setIdFormat(f => ({ ...f, tokens: f.tokens.map(t => t.id === id ? { ...t, value } : t) }))
+  const removeToken = (id) => setIdFormat(f => ({ ...f, tokens: f.tokens.filter(t => t.id !== id) }))
+  const reorderTokens = (from, to) => setIdFormat(f => {
+    const next = [...f.tokens]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    return { ...f, tokens: next }
+  })
 
   const set = field => e => setForm(f => ({ ...f, [field]: e.target.value }))
 
@@ -86,6 +118,7 @@ export default function OrganizationPage() {
           specialty, registration_number, staff_count: staff_count ? Number(staff_count) : null,
           logo_url, about,
           social_facebook, social_instagram, social_whatsapp, social_linkedin, social_twitter,
+          patient_id_format: { enabled: idFormat.enabled, next_seq: Number(idFormat.next_seq) || 1, tokens: idFormat.tokens },
         },
       })
       setSaved(true)
@@ -162,6 +195,99 @@ export default function OrganizationPage() {
           <Input label="LinkedIn" placeholder="https://linkedin.com/company/..." value={form.social_linkedin} onChange={set('social_linkedin')} />
           <Input label="Twitter / X" placeholder="https://twitter.com/yourclinic" value={form.social_twitter} onChange={set('social_twitter')} />
         </div>
+      </Card>
+
+      <Card className="p-5">
+        <SectionHead icon={Hash} title="Patient ID Format" description="Auto-generate a unique code for every new patient" />
+
+        <label className="flex items-center gap-2 mb-4 cursor-pointer">
+          <input type="checkbox" checked={!!idFormat.enabled} onChange={e => setIdf('enabled', e.target.checked)}
+            className="w-4 h-4" style={{ accentColor: 'var(--color-brand)' }} />
+          <span className="text-sm font-500" style={{ color: 'var(--color-text-primary)' }}>Enable auto patient IDs</span>
+        </label>
+
+        {idFormat.enabled && (
+          <>
+            {/* Add-block buttons */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {Object.entries(TOKEN_META).map(([type, m]) => {
+                const Icon = m.icon
+                return (
+                  <button key={type} type="button" onClick={() => addToken(type)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
+                    style={{ borderColor: 'var(--color-border)', color: m.color, background: 'var(--color-surface)' }}>
+                    <Plus size={12} /> <Icon size={12} /> {m.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Token builder (drag to reorder) */}
+            <p className="text-[10px] font-600 uppercase tracking-wide mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Format blocks — drag to reorder</p>
+            {idFormat.tokens.length === 0 ? (
+              <div className="py-6 text-center border border-dashed rounded-xl border-(--color-border) mb-4">
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No blocks yet. Add Text, Date, Sequence or Separator above.</p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {idFormat.tokens.map((tok, i) => {
+                  const m = TOKEN_META[tok.type]; const Icon = m.icon
+                  return (
+                    <div key={tok.id}
+                      draggable
+                      onDragStart={() => setDragIdx(i)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => { if (dragIdx !== null && dragIdx !== i) reorderTokens(dragIdx, i); setDragIdx(null) }}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border"
+                      style={{ borderColor: m.color + '60', background: m.color + '0d' }}>
+                      <GripVertical size={13} className="cursor-grab active:cursor-grabbing shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+                      <Icon size={12} style={{ color: m.color }} />
+                      {tok.type === 'text' && (
+                        <input value={tok.value} onChange={e => updateToken(tok.id, e.target.value)} placeholder="ABC / 2026"
+                          className="w-20 px-2 py-1 text-xs rounded border outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      )}
+                      {tok.type === 'date' && (
+                        <select value={tok.value} onChange={e => updateToken(tok.id, e.target.value)}
+                          className="px-2 py-1 text-xs rounded border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                          {Object.entries(DATE_FORMATS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      )}
+                      {tok.type === 'seq' && (
+                        <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                          <input type="number" min="1" max="10" value={tok.value} onChange={e => updateToken(tok.id, e.target.value)}
+                            className="w-12 px-2 py-1 text-xs rounded border outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                          digits
+                        </span>
+                      )}
+                      {tok.type === 'separator' && (
+                        <select value={tok.value} onChange={e => updateToken(tok.id, e.target.value)}
+                          className="px-2 py-1 text-xs rounded border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                          {SEPARATORS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                      )}
+                      <button type="button" onClick={() => removeToken(tok.id)} className="text-gray-400 hover:text-red-500 transition-colors shrink-0"><X size={12} /></button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Next number</label>
+                <input type="number" min="1" value={idFormat.next_seq} onChange={e => setIdf('next_seq', e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>The next patient uses this number, then it increments.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Preview</label>
+                <div className="px-3 py-2 rounded-lg border text-sm font-mono font-600" style={{ borderColor: 'var(--color-brand)', background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                  {buildPatientCode(idFormat, Number(idFormat.next_seq) || 1) || '—'}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </Card>
 
       <div className="flex justify-end pb-6">

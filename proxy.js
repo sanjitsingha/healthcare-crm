@@ -29,7 +29,10 @@ export async function proxy(request) {
 
   const isAuthRoute = pathname === '/login' || pathname.startsWith('/auth/')
   const isSetupRoute = pathname === '/setup'
-  const isPublicRoute = pathname === '/' || isAuthRoute
+  // Inbound webhooks are called by external services with no session cookie —
+  // they must never be redirected to login.
+  const isWebhookRoute = pathname.startsWith('/api/webhooks/')
+  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute
   const isProtectedRoute = !isPublicRoute && !isSetupRoute
 
   // Unauthenticated + protected → login
@@ -52,6 +55,6 @@ export async function proxy(request) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api/webhooks|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
