@@ -5,20 +5,23 @@ import {
   Heart, Users, Calendar, CreditCard, TrendingUp,
   CheckSquare, Zap, BarChart2, ArrowRight, Menu, X,
   Shield, UserCheck, Bell, Settings,
+  Plug, Workflow, PhoneCall, Tag, Stethoscope,
 } from 'lucide-react'
 
-// ── Brand tokens (mirror globals.css) ────────────────────────
+// ── Brand tokens (blue / Indigo theme — mirrors the app's brand color) ──
 const B = {
-  brand:   '#0f6e56',
-  light:   '#1d9e75',
-  bg50:    '#e1f5ee',
+  brand:   '#21297E',
+  light:   '#3a43b5',
+  bg50:    '#e8eaf6',
   surface: '#ffffff',
-  surf2:   '#f0f4f2',
-  border:  '#dce8e3',
-  text:    '#0d1f1a',
-  muted:   '#4a6b62',
-  faint:   '#8aa49e',
+  surf2:   '#f2f3fa',
+  border:  '#e0e2f0',
+  text:    '#131634',
+  muted:   '#565d82',
+  faint:   '#9499bb',
 }
+// RGB of the brand color, for translucent shadows.
+const BRAND_RGB = '33,41,126'
 
 // ── Dashboard mock ────────────────────────────────────────────
 function AppPreview() {
@@ -32,7 +35,7 @@ function AppPreview() {
   return (
     <div className="relative w-full" style={{ maxWidth: '680px' }}>
       {/* Subtle shadow underneath */}
-      <div className="absolute -bottom-6 left-8 right-8 h-16 rounded-3xl blur-2xl" style={{ background: 'rgba(15,110,86,0.15)' }} />
+      <div className="absolute -bottom-6 left-8 right-8 h-16 rounded-3xl blur-2xl" style={{ background: `rgba(${BRAND_RGB},0.15)` }} />
 
       {/* Browser frame */}
       <div className="rounded-2xl overflow-hidden border" style={{ background: B.surface, borderColor: B.border, boxShadow: '0 24px 64px rgba(13,31,26,0.12), 0 4px 16px rgba(13,31,26,0.06)' }}>
@@ -115,10 +118,15 @@ function AppPreview() {
 // ── Feature data ──────────────────────────────────────────────
 const FEATURES = [
   { icon: TrendingUp,   title: 'Lead Management',    desc: 'Capture leads with custom intake forms, assign stages, and track every interaction from first call to conversion.' },
+  { icon: Plug,         title: 'Lead Capture & Integrations', desc: 'Pull leads in automatically from Google Forms, Meta Lead Ads, WordPress, and Zapier — with smart field mapping to your fields.', badge: 'New' },
+  { icon: Workflow,     title: 'Automation Rules',   desc: 'Set rules that auto-advance stages, add tags, or trigger actions when a follow-up, task, or appointment happens.', badge: 'New' },
+  { icon: PhoneCall,    title: 'Follow-ups',         desc: 'Schedule calls, WhatsApp, and email follow-ups, log outcomes, and auto-create the next task so no lead goes cold.', badge: 'New' },
   { icon: Users,        title: 'Patient Records',     desc: 'Maintain complete patient profiles with demographics, history, and your own custom fields — all searchable.' },
   { icon: Calendar,     title: 'Appointments',        desc: 'Book, confirm, and track appointments. See upcoming schedules and manage no-shows without losing data.' },
+  { icon: Stethoscope,  title: 'Consultations',       desc: 'Record clinical visits with diagnosis, treatment, and visit details — linked to the patient timeline.', badge: 'New' },
   { icon: CreditCard,   title: 'Billing & Invoices',  desc: 'Generate invoices, record payments, and keep your practice finances organised in one place.' },
-  { icon: Settings,     title: 'Custom Modules',      desc: 'Add your own sections to any page — insurance details, vitals, emergency contacts — without writing code.' },
+  { icon: Settings,     title: 'Custom Modules',      desc: 'Add your own sections to leads or patients — insurance details, vitals, emergency contacts — without writing code.' },
+  { icon: Tag,          title: 'Tags & Segmentation', desc: 'Organise leads and patients with colour-coded tags and filter your pipeline in a click.' },
   { icon: BarChart2,    title: 'Analytics',           desc: 'Track conversion rates, lead sources, revenue trends, and team performance with a real-time dashboard.' },
 ]
 
@@ -147,7 +155,7 @@ export default function LandingPage() {
         }
         .btn-primary:hover { background: ${B.light}; transform: translateY(-1px); }
         .feat-card { transition: box-shadow .2s, transform .2s; }
-        .feat-card:hover { box-shadow: 0 8px 32px rgba(15,110,86,0.12); transform: translateY(-3px); }
+        .feat-card:hover { box-shadow: 0 8px 32px rgba(${BRAND_RGB},0.12); transform: translateY(-3px); }
       `}</style>
 
       {/* ── Navbar ── */}
@@ -211,11 +219,11 @@ export default function LandingPage() {
           </h1>
 
           <p style={{ fontSize: 18, color: B.muted, lineHeight: 1.6, maxWidth: 520, margin: '0 auto 36px', fontWeight: 400 }}>
-            One platform for leads, patients, appointments, and billing — designed for healthcare teams that want to focus on care, not admin.
+            One platform for leads, patients, appointments, and billing — with automated lead capture and smart rules, so your team can focus on care, not admin.
           </p>
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 64 }}>
-            <Link href="/login" className="btn-primary" style={{ fontSize: 15, fontWeight: 600, padding: '12px 28px', borderRadius: 10, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(15,110,86,0.3)' }}>
+            <Link href="/login" className="btn-primary" style={{ fontSize: 15, fontWeight: 600, padding: '12px 28px', borderRadius: 10, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: `0 4px 20px rgba(${BRAND_RGB},0.3)` }}>
               Start for free <ArrowRight size={16} />
             </Link>
             <Link href="/login" style={{ fontSize: 15, fontWeight: 500, padding: '12px 28px', borderRadius: 10, textDecoration: 'none', border: `1.5px solid ${B.border}`, color: B.muted, display: 'inline-flex', alignItems: 'center', gap: 8, transition: 'border-color .15s, color .15s' }}
@@ -239,7 +247,7 @@ export default function LandingPage() {
           {[
             { icon: Shield,    text: 'Secure & Private' },
             { icon: UserCheck, text: 'Multi-user Roles' },
-            { icon: Zap,       text: 'Ready in Minutes' },
+            { icon: Plug,      text: 'Form Integrations' },
             { icon: Settings,  text: 'Fully Customisable' },
           ].map(({ icon: Icon, text }) => (
             <div key={text} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, color: B.muted, fontWeight: 500 }}>
@@ -260,8 +268,11 @@ export default function LandingPage() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
-            {FEATURES.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="feat-card" style={{ padding: '28px', borderRadius: 16, border: `1.5px solid ${B.border}`, background: B.surface, cursor: 'default' }}>
+            {FEATURES.map(({ icon: Icon, title, desc, badge }) => (
+              <div key={title} className="feat-card" style={{ position: 'relative', padding: '28px', borderRadius: 16, border: `1.5px solid ${B.border}`, background: B.surface, cursor: 'default' }}>
+                {badge && (
+                  <span style={{ position: 'absolute', top: 16, right: 16, fontSize: 10, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 99, background: B.bg50, color: B.brand }}>{badge}</span>
+                )}
                 <div style={{ width: 42, height: 42, borderRadius: 12, background: B.bg50, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
                   <Icon size={20} color={B.brand} />
                 </div>
