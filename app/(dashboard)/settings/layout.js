@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: '/settings/people',        label: 'People',        icon: Users },
   { href: '/settings/tags',          label: 'Tags',          icon: Tags },
   { href: '/settings/modules',       label: 'Modules',       icon: LayoutGrid },
-  { href: '/settings/lead-layout',   label: 'Lead Layout',   icon: LayoutTemplate },
+  { href: '/settings/layout-builder', label: 'Layout Builder', icon: LayoutTemplate },
   { href: '/settings/rules',         label: 'Rules',         icon: Workflow },
   { href: '/settings/configuration', label: 'Configuration', icon: Plug },
 ]

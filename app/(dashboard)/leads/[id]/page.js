@@ -19,7 +19,38 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
-import { widthClass } from '@/lib/leadLayout'
+import GridLayout, { useContainerWidth } from 'react-grid-layout'
+import { GRID_COLS, GRID_ROW_H, isGridLayout } from '@/lib/leadLayout'
+import 'react-grid-layout/css/styles.css'
+import 'react-resizable/css/styles.css'
+
+// Read-only grid renderer for a saved layout. Measures its own width.
+function LeadLayoutGrid({ items, nodeFor }) {
+  const { width, containerRef, mounted } = useContainerWidth()
+  const layout = items.map(b => ({ i: b.key, x: b.x, y: b.y, w: b.w, h: b.h }))
+  return (
+    <div ref={containerRef}>
+      {mounted && (
+        <GridLayout
+          width={width}
+          layout={layout}
+          cols={GRID_COLS}
+          rowHeight={GRID_ROW_H}
+          margin={[20, 20]}
+          containerPadding={[0, 0]}
+          isDraggable={false}
+          isResizable={false}
+        >
+          {items.map(b => (
+            <div key={b.key} className="overflow-hidden">
+              <div className="h-full overflow-y-auto">{nodeFor(b.key)}</div>
+            </div>
+          ))}
+        </GridLayout>
+      )}
+    </div>
+  )
+}
 import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
 import clsx from 'clsx'
@@ -1478,18 +1509,13 @@ export default function LeadDetailPage({ params }) {
           }
           for (const m of leadModules) blockNodes[`module:${m.id}`] = moduleNode(m)
 
-          const saved = (org?.settings?.lead_layout || []).filter(b => blockNodes[b.key] != null)
-          if (saved.length) {
-            return (
-              <div className="grid grid-cols-6 gap-5 items-start">
-                {saved.map(b => (
-                  <div key={b.key} className={widthClass(b.width)}>{blockNodes[b.key]}</div>
-                ))}
-              </div>
-            )
+          const savedLayout = org?.settings?.lead_layout
+          if (isGridLayout(savedLayout)) {
+            const items = savedLayout.filter(b => blockNodes[b.key] != null)
+            return <LeadLayoutGrid items={items} nodeFor={(k) => blockNodes[k]} />
           }
 
-          // Default layout (used until a custom layout is saved in Settings → Lead Layout).
+          // Default layout (used until a custom layout is saved in Settings → Layout Builder).
           return (
             <div className="space-y-5">
               <div className="grid grid-cols-3 gap-5 items-start">
