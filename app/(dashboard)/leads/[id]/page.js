@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
+import { widthClass } from '@/lib/leadLayout'
 import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
 import clsx from 'clsx'
@@ -845,6 +846,19 @@ export default function LeadDetailPage({ params }) {
     { id: 'timeline',  label: 'Timeline',   icon: Clock },
   ]
 
+  const leadModules = (org?.settings?.modules || []).filter(m => m.page === 'leads' && m.active)
+  const moduleNode = (m) => (
+    <CustomModuleCard module={m} data={lead?.custom_data?.[m.id] || {}}
+      onSave={async (values) => {
+        const custom_data = { ...(lead.custom_data || {}), [m.id]: values }
+        const updated = await updateLead(id, { custom_data })
+        setLead(prev => ({ ...prev, custom_data: updated.custom_data }))
+        await logActivity('note', `${m.name} details updated`)
+        await refreshActivities()
+      }}
+    />
+  )
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
 
@@ -978,12 +992,10 @@ export default function LeadDetailPage({ params }) {
       </div>
 
       <div className="p-6 space-y-5">
-        <div className="grid grid-cols-3 gap-5 items-start">
+        {(() => {
+          const blockNodes = {
 
-          {/* ── Left col ── */}
-          <div className="space-y-4">
-
-            {/* Lead Profile */}
+            profile: (
             <Card className="p-5 border-(--color-border)">
               <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Lead Profile</p>
               <div className="flex items-center gap-3 mb-4">
@@ -1090,8 +1102,9 @@ export default function LeadDetailPage({ params }) {
                 )}
               </div>
             </Card>
+            ),
 
-            {/* Lead Info */}
+            info: (
             <Card className="p-5 border-(--color-border)">
               <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Lead Info</p>
               <div className="space-y-3">
@@ -1108,31 +1121,16 @@ export default function LeadDetailPage({ params }) {
                 ))}
               </div>
             </Card>
+            ),
 
-            {/* Notes */}
-            {lead.description && (
+            notes: lead.description ? (
               <Card className="p-5 border-(--color-border)">
                 <p className="text-[10px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>Notes</p>
                 <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-text-secondary)' }}>{lead.description}</p>
               </Card>
-            )}
+            ) : null,
 
-            {/* Custom modules */}
-            {(org?.settings?.modules || []).filter(m => m.page === 'leads' && m.active).map(m => (
-              <CustomModuleCard key={m.id} module={m} data={lead?.custom_data?.[m.id] || {}}
-                onSave={async (values) => {
-                  const custom_data = { ...(lead.custom_data || {}), [m.id]: values }
-                  const updated = await updateLead(id, { custom_data })
-                  setLead(prev => ({ ...prev, custom_data: updated.custom_data }))
-                  await logActivity('note', `${m.name} details updated`)
-                  await refreshActivities()
-                }}
-              />
-            ))}
-          </div>
-
-          {/* ── Right col ── */}
-          <div className="col-span-2 space-y-5">
+            activity: (
             <Card className="border-(--color-border) overflow-hidden">
               {/* Tab bar */}
               <div className="flex items-center justify-between border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
@@ -1212,8 +1210,9 @@ export default function LeadDetailPage({ params }) {
 
               </div>
             </Card>
+            ),
 
-            {/* ── Appointments ── */}
+            appointments: (
             <Card className={clsx('border-(--color-border)', !reschedulingId && 'overflow-hidden')}>
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
                 <div className="flex items-center gap-2">
@@ -1383,11 +1382,10 @@ export default function LeadDetailPage({ params }) {
                 )}
               </div>
             </Card>
-          </div>
-        </div>
+            ),
 
-        {/* ── Full-width Follow-ups section ── */}
-        <Card className="border-(--color-border) overflow-hidden">
+            followups: (
+            <Card className="border-(--color-border) overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
             <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
             {!showFuForm && (
@@ -1475,7 +1473,41 @@ export default function LeadDetailPage({ params }) {
               </div>
             )}
           </div>
-        </Card>
+            </Card>
+            ),
+          }
+          for (const m of leadModules) blockNodes[`module:${m.id}`] = moduleNode(m)
+
+          const saved = (org?.settings?.lead_layout || []).filter(b => blockNodes[b.key] != null)
+          if (saved.length) {
+            return (
+              <div className="grid grid-cols-6 gap-5 items-start">
+                {saved.map(b => (
+                  <div key={b.key} className={widthClass(b.width)}>{blockNodes[b.key]}</div>
+                ))}
+              </div>
+            )
+          }
+
+          // Default layout (used until a custom layout is saved in Settings → Lead Layout).
+          return (
+            <div className="space-y-5">
+              <div className="grid grid-cols-3 gap-5 items-start">
+                <div className="space-y-4">
+                  {blockNodes.profile}
+                  {blockNodes.info}
+                  {blockNodes.notes}
+                  {leadModules.map(m => <div key={m.id}>{blockNodes[`module:${m.id}`]}</div>)}
+                </div>
+                <div className="col-span-2 space-y-5">
+                  {blockNodes.activity}
+                  {blockNodes.appointments}
+                </div>
+              </div>
+              {blockNodes.followups}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Edit Lead modal */}
