@@ -32,17 +32,3 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
 .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 99px; }
-
-/* Layout Builder canvas gridlines + RGL placeholder */
-.lb-canvas {
-  background-image:
-    linear-gradient(to right, var(--color-border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-border) 1px, transparent 1px);
-  background-size: calc(100% / 12) 40px;
-  background-position: 8px 8px;
-}
-.lb-canvas .react-grid-placeholder {
-  background: var(--color-brand) !important;
-  opacity: 0.18;
-  border-radius: 0.5rem;
-}
