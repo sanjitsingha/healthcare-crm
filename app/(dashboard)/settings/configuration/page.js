@@ -1,10 +1,11 @@
 'use client'
 import { useState } from 'react'
 import {
-  Plug, FileText, Globe, Webhook, Zap, MessageCircle, Megaphone,
-  Check, X, Copy, Trash2, ToggleLeft, ToggleRight, Link2, RefreshCw,
+  Plug, FileText, Globe, Webhook, MessageCircle,
+  Check, X, Copy, Trash2, ToggleLeft, ToggleRight, Link2, RefreshCw, ChevronDown,
 } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
+import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
 
@@ -17,7 +18,7 @@ const PROVIDERS = [
     type: 'google_forms',
     name: 'Google Forms',
     description: 'Capture leads from Google Form submissions via Apps Script.',
-    icon: FileText,
+    icon: GoogleFormsLogo,
     color: '#7c3aed',
     fields: [
       { key: 'webhook_url', label: 'Inbound Webhook URL', kind: 'generated' },
@@ -40,7 +41,7 @@ const PROVIDERS = [
     type: 'meta_lead_ads',
     name: 'Meta Lead Ads',
     description: 'Facebook & Instagram lead-gen forms push leads in real time.',
-    icon: Megaphone,
+    icon: MetaLogo,
     color: '#1d4ed8',
     fields: [
       { key: 'page_access_token', label: 'Page Access Token', kind: 'secret', placeholder: 'EAAB...' },
@@ -63,7 +64,7 @@ const PROVIDERS = [
     type: 'zapier',
     name: 'Zapier',
     description: 'Connect 6,000+ apps. Use the webhook URL as a Zap action.',
-    icon: Zap,
+    icon: ZapierLogo,
     color: '#f59e0b',
     fields: [
       { key: 'webhook_url', label: 'Inbound Webhook URL', kind: 'generated' },
@@ -102,6 +103,45 @@ const LEAD_FIELD_OPTIONS = [
   { value: 'title',         label: 'Title' },
   { value: 'custom:',       label: 'Custom field (store as-is)' },
 ]
+
+// Combobox: type freely, or pick from detected form fields in a styled dropdown.
+function FieldCombobox({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const q = (value || '').toLowerCase()
+  const filtered = (options || []).filter(o => o.toLowerCase().includes(q))
+  const list = filtered.length ? filtered : (options || [])
+  return (
+    <div className="relative flex-1 min-w-0">
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        className="w-full px-2 py-1.5 pr-7 text-xs rounded-lg border border-(--color-border) outline-none"
+        style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
+      />
+      <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
+      {open && list.length > 0 && (
+        <div className="absolute z-30 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-(--color-border) shadow-lg"
+          style={{ background: 'var(--color-surface)' }}>
+          {list.map(o => (
+            <button
+              key={o}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onChange(o); setOpen(false) }}
+              className="block w-full text-left px-2.5 py-1.5 text-xs hover:bg-(--color-brand-50)"
+              style={{ color: 'var(--color-text-primary)' }}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function genToken() {
   return (crypto.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, '')
@@ -256,13 +296,11 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
               <div className="space-y-2">
                 {mapRows.map((row, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <input
-                      list={`ff-${integration.id}`}
+                    <FieldCombobox
                       value={row.form_field}
-                      onChange={e => setMapRow(i, { form_field: e.target.value })}
+                      onChange={v => setMapRow(i, { form_field: v })}
+                      options={detected}
                       placeholder="Form question"
-                      className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
                     />
                     <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>→</span>
                     <select
@@ -279,9 +317,6 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
                 ))}
               </div>
             )}
-            <datalist id={`ff-${integration.id}`}>
-              {detected.map(f => <option key={f} value={f} />)}
-            </datalist>
             <div className="flex items-center justify-between pt-1">
               <Button variant="secondary" size="sm" type="button" onClick={addMapRow}>+ Add mapping</Button>
               <Button size="sm" type="button" onClick={saveMap} disabled={savingMap}>{savingMap ? 'Saving…' : 'Save mapping'}</Button>
