@@ -20,6 +20,7 @@ const FIELD_TYPES = [
 ]
 
 const PAGE_OPTS = [
+  { value: 'leads',    label: 'Leads' },
   { value: 'patients', label: 'Patients' },
 ]
 
