@@ -85,6 +85,24 @@ const PROVIDERS = [
 
 const PROVIDER_MAP = Object.fromEntries(PROVIDERS.map(p => [p.type, p]))
 
+// Lead fields a form question can be mapped to (used by the field-mapping editor).
+const LEAD_FIELD_OPTIONS = [
+  { value: 'first_name',    label: 'First name' },
+  { value: 'last_name',     label: 'Last name' },
+  { value: 'phone',         label: 'Phone' },
+  { value: 'email',         label: 'Email' },
+  { value: 'gender',        label: 'Gender' },
+  { value: 'date_of_birth', label: 'Date of birth' },
+  { value: 'address',       label: 'Address' },
+  { value: 'value',         label: 'Value (number)' },
+  { value: 'source',        label: 'Source' },
+  { value: 'priority',      label: 'Priority' },
+  { value: 'stage',         label: 'Stage' },
+  { value: 'description',   label: 'Notes / Message' },
+  { value: 'title',         label: 'Title' },
+  { value: 'custom:',       label: 'Custom field (store as-is)' },
+]
+
 function genToken() {
   return (crypto.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, '')
 }
@@ -111,6 +129,19 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const [saving,  setSaving]  = useState(false)
   const [copied,  setCopied]  = useState('')
   const [showGuide, setShowGuide] = useState(false)
+  const [mapRows, setMapRows] = useState(() => integration.config?.field_map || [])
+  const [savingMap, setSavingMap] = useState(false)
+  const detected = integration.config?.detected_fields || []
+
+  const addMapRow    = () => setMapRows(r => [...r, { form_field: '', lead_field: '' }])
+  const setMapRow    = (i, p) => setMapRows(r => r.map((x, idx) => idx === i ? { ...x, ...p } : x))
+  const removeMapRow = (i) => setMapRows(r => r.filter((_, idx) => idx !== i))
+  const saveMap = async () => {
+    setSavingMap(true)
+    try { await onSave(integration.id, { field_map: mapRows.filter(r => r.form_field && r.lead_field) }) }
+    catch (err) { alert(err.message) }
+    finally { setSavingMap(false) }
+  }
 
   if (!provider) return null
   const Icon = provider.icon
@@ -207,6 +238,56 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
             </div>
           )
         })}
+
+        {(integration.config?.webhook_url != null) && (
+          <div className="rounded-lg border border-(--color-border) p-3 space-y-2.5" style={{ background: 'var(--color-surface)' }}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                <Link2 size={13} /> Field Mapping
+              </p>
+              <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                {detected.length ? `${detected.length} form field${detected.length !== 1 ? 's' : ''} detected` : 'Submit once to detect fields'}
+              </span>
+            </div>
+            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              Map each form question to a lead field. Unmapped questions are still auto-detected and saved.
+            </p>
+            {mapRows.length > 0 && (
+              <div className="space-y-2">
+                {mapRows.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      list={`ff-${integration.id}`}
+                      value={row.form_field}
+                      onChange={e => setMapRow(i, { form_field: e.target.value })}
+                      placeholder="Form question"
+                      className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
+                    />
+                    <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>→</span>
+                    <select
+                      value={row.lead_field}
+                      onChange={e => setMapRow(i, { lead_field: e.target.value })}
+                      className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
+                    >
+                      <option value="">Select lead field…</option>
+                      {LEAD_FIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <button type="button" onClick={() => removeMapRow(i)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <datalist id={`ff-${integration.id}`}>
+              {detected.map(f => <option key={f} value={f} />)}
+            </datalist>
+            <div className="flex items-center justify-between pt-1">
+              <Button variant="secondary" size="sm" type="button" onClick={addMapRow}>+ Add mapping</Button>
+              <Button size="sm" type="button" onClick={saveMap} disabled={savingMap}>{savingMap ? 'Saving…' : 'Save mapping'}</Button>
+            </div>
+          </div>
+        )}
 
         {integration.type === 'google_forms' && (() => {
           const url = integration.config?.webhook_url || 'YOUR_WEBHOOK_URL'
