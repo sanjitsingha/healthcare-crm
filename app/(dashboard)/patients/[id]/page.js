@@ -18,6 +18,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
+import { CustomModuleCard } from '@/components/crm/CustomModule'
 import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import clsx from 'clsx'
@@ -616,6 +617,18 @@ export default function PatientDetailPage({ params }) {
             )}
           </div>
         </Card>
+
+        {(org?.settings?.modules || []).filter(m => m.page === 'patients' && m.active).map(m => (
+          <CustomModuleCard key={m.id} module={m} data={patient?.custom_data?.[m.id] || {}}
+            onSave={async (values) => {
+              const custom_data = { ...(patient.custom_data || {}), [m.id]: values }
+              const updated = await updatePatient(id, { custom_data })
+              setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+              await logActivity('note', `${m.name} details updated`)
+              await loadAll()
+            }}
+          />
+        ))}
 
         <Card className="border-(--color-border) overflow-hidden">
           <div className="px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
