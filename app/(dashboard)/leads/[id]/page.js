@@ -4,6 +4,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin, User,
   Calendar, Clock, CheckSquare, Bell, Tag, TrendingUp,
   MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Search,
+  List, Table2,
 } from 'lucide-react'
 import { Button, Card, Modal, Input, Select, Textarea, Spinner } from '@/components/ui'
 import {
@@ -67,14 +68,31 @@ const STATUS_STYLE = {
 }
 
 // ── Spreadsheet (table view) cells ────────────────────────────
-// Google-Sheets-style chip dropdown.
+// Google-Sheets-style chip dropdown. Menu is fixed-positioned so it never
+// gets clipped by the table's overflow containers.
 function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
+  const btnRef = useRef(null)
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 176 })
   const s = value && styleFor ? styleFor(value) : null
+
+  const openMenu = () => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 176) })
+    setOpen(true)
+  }
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close) }
+  }, [open])
+
   return (
-    <div className="relative">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-1 px-2 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors">
+    <>
+      <button ref={btnRef} type="button" onClick={() => open ? setOpen(false) : openMenu()}
+        className="w-full h-full flex items-center justify-between gap-1 px-2 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors">
         {value
           ? <span className="text-[11px] font-600 px-2 py-0.5 rounded-full truncate"
               style={s ? { background: s.bg, color: s.color } : { background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{value}</span>
@@ -84,8 +102,8 @@ function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-1 top-full mt-0.5 z-50 min-w-44 max-h-56 overflow-y-auto rounded-lg border border-(--color-border) py-1"
-            style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+          <div className="fixed z-50 max-h-56 overflow-y-auto rounded-lg border border-(--color-border) py-1"
+            style={{ top: pos.top, left: pos.left, width: pos.width, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
             {options.length === 0 && <p className="px-3 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
             {options.map(o => {
               const os = styleFor ? styleFor(o) : null
@@ -100,7 +118,7 @@ function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
           </div>
         </>
       )}
-    </div>
+    </>
   )
 }
 
@@ -123,30 +141,47 @@ function TextCell({ value, onCommit, placeholder = '—', type = 'text' }) {
   )
 }
 
-function FollowupTable({ followups, staff, onField, statusStyle, typeStyle, types, outcomeOptions }) {
-  const COLS = '120px 170px minmax(180px,1fr) 140px minmax(160px,1.2fr) 130px'
+const toLocalInput = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const FU_COLS = '120px 170px minmax(180px,1fr) 140px minmax(160px,1.2fr) 130px'
+
+function FollowupTable({ followups, staff, onField, onCreate, statusStyle, typeStyle, types, outcomeOptions }) {
   const head = ['Type', 'Date & Time', 'Outcome', 'Called By', 'Response', 'Status']
-  const toLocalInput = (iso) => {
-    if (!iso) return ''
-    const d = new Date(iso)
-    const pad = n => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const [draft, setDraft] = useState({})
+
+  // When the user touches the empty bottom row, create the follow-up and reset.
+  const touchDraft = (patch) => {
+    const next = { ...draft, ...patch }
+    if (Object.values(next).some(v => v != null && v !== '')) {
+      onCreate(next)
+      setDraft({})
+    } else {
+      setDraft(next)
+    }
   }
+
+  const sorted = [...followups].sort((a, b) => {
+    const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
+    return (order[a.status] ?? 9) - (order[b.status] ?? 9)
+  })
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-(--color-border)">
+    <div className="overflow-x-auto rounded-lg border border-(--color-border)">
       <div style={{ minWidth: '900px' }}>
         {/* Header row */}
-        <div className="grid" style={{ gridTemplateColumns: COLS, background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+        <div className="grid" style={{ gridTemplateColumns: FU_COLS, background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
           {head.map(h => (
-            <div key={h} className="px-2 py-2 text-[10px] font-700 uppercase tracking-wider border-r border-(--color-border) last:border-r-0" style={{ color: 'var(--color-text-muted)' }}>{h}</div>
+            <div key={h} className="px-2 py-1.5 text-[10px] font-700 uppercase tracking-wider border-r border-(--color-border) last:border-r-0" style={{ color: 'var(--color-text-muted)' }}>{h}</div>
           ))}
         </div>
         {/* Data rows */}
-        {[...followups].sort((a, b) => {
-          const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
-          return (order[a.status] ?? 9) - (order[b.status] ?? 9)
-        }).map(f => (
-          <div key={f.id} className="grid items-stretch border-b border-(--color-border) last:border-b-0" style={{ gridTemplateColumns: COLS }}>
+        {sorted.map(f => (
+          <div key={f.id} className="grid items-stretch border-b border-(--color-border)" style={{ gridTemplateColumns: FU_COLS }}>
             <div className="border-r border-(--color-border)">
               <ChipCell value={f.type} options={types} styleFor={(v) => typeStyle[v]} onChange={(v) => onField(f.id, { type: v })} />
             </div>
@@ -168,6 +203,28 @@ function FollowupTable({ followups, staff, onField, statusStyle, typeStyle, type
             </div>
           </div>
         ))}
+        {/* Empty draft row — fill any cell to create a new follow-up */}
+        <div className="grid items-stretch" style={{ gridTemplateColumns: FU_COLS, background: 'var(--color-surface-2)' }}>
+          <div className="border-r border-(--color-border)">
+            <ChipCell value={draft.type} options={types} placeholder="+ Type" styleFor={(v) => typeStyle[v]} onChange={(v) => touchDraft({ type: v })} />
+          </div>
+          <div className="border-r border-(--color-border) flex items-center">
+            <TextCell value={draft.scheduled_at ? toLocalInput(draft.scheduled_at) : ''} type="datetime-local"
+              onCommit={(v) => touchDraft({ scheduled_at: v ? new Date(v).toISOString() : null })} />
+          </div>
+          <div className="border-r border-(--color-border)">
+            <ChipCell value={draft.outcome} options={outcomeOptions(draft.type || 'Call')} placeholder="Set outcome" onChange={(v) => touchDraft({ outcome: v })} />
+          </div>
+          <div className="border-r border-(--color-border)">
+            <ChipCell value={draft.caller_name} options={staff.map(m => m.name)} placeholder="—" onChange={(v) => touchDraft({ caller_name: v })} />
+          </div>
+          <div className="border-r border-(--color-border) flex items-center">
+            <TextCell value={draft.notes || ''} placeholder="Add response…" onCommit={(v) => touchDraft({ notes: v || null })} />
+          </div>
+          <div className="flex items-center px-2">
+            <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>new row</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -859,6 +916,31 @@ export default function LeadDetailPage({ params }) {
     }
   }
 
+  // Inline create from the table's empty bottom row.
+  const handleCreateFollowupInline = async (patch) => {
+    if (!orgId) return
+    try {
+      const scheduled_at = patch.scheduled_at || new Date().toISOString()
+      const isFuture = new Date(scheduled_at).getTime() > Date.now()
+      const f = await createFollowup({
+        type: patch.type || 'Call',
+        scheduled_at,
+        notes: patch.notes ?? null,
+        outcome: patch.outcome ?? null,
+        caller_name: patch.caller_name ?? null,
+        status: patch.status || (isFuture ? 'Scheduled' : 'Completed'),
+        organization_id: orgId,
+        lead_id: id,
+        patient_id: lead?.patient_id || null,
+      })
+      setFollowups(prev => [f, ...prev])
+      await logActivity(String(f.type).toLowerCase() === 'call' ? 'call' : 'note',
+        `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
+      await refreshActivities()
+      await applyRules('followup_logged')
+    } catch (err) { alert(err.message) }
+  }
+
   const handleRescheduleAppointment = async () => {
     if (!rescheduleDate || !reschedulingId) return
     setRescheduleSaving(true)
@@ -1510,27 +1592,27 @@ export default function LeadDetailPage({ params }) {
 
         {/* ── Full-width Follow-ups section ── */}
         <Card className="border-(--color-border) overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
-            <div className="flex items-center gap-2">
-              <div className="flex rounded-lg overflow-hidden border border-(--color-border)">
-                {[{ id: 'regular', label: 'Regular' }, { id: 'table', label: 'Table' }].map(v => (
-                  <button key={v.id} type="button" onClick={() => setFuView(v.id)}
-                    className="px-2.5 py-1 text-[11px] font-600 transition-all"
-                    style={fuView === v.id
+          <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <div className="flex items-center gap-2.5">
+              <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
+              <div className="flex items-center gap-0.5">
+                {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id, Icon, title }) => (
+                  <button key={id} type="button" title={title} onClick={() => setFuView(id)}
+                    className="p-1.5 rounded-md transition-all"
+                    style={fuView === id
                       ? { background: 'var(--color-brand)', color: 'white' }
-                      : { color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
-                    {v.label}
+                      : { color: 'var(--color-text-muted)' }}>
+                    <Icon size={14} />
                   </button>
                 ))}
               </div>
-              {!showFuForm && (
-                <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
-              )}
             </div>
+            {!showFuForm && fuView === 'regular' && (
+              <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
+            )}
           </div>
-          <div className="p-5 space-y-3">
-            {showFuForm && (
+          <div className="p-3 space-y-3">
+            {showFuForm && fuView === 'regular' && (
               <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                 <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Add Follow-up</p>
                 <div className="space-y-1.5">
@@ -1587,23 +1669,24 @@ export default function LeadDetailPage({ params }) {
               </form>
             )}
 
-            {followups.length === 0 ? (
-              <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)">
-                <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups scheduled yet.</p>
-                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email log to keep this lead moving.</p>
-              </div>
-            ) : fuView === 'table' ? (
+            {fuView === 'table' ? (
               <div className="max-h-150 overflow-y-auto">
                 <FollowupTable
                   followups={followups}
                   staff={org?.settings?.staff_members || []}
                   onField={handleFollowupField}
+                  onCreate={handleCreateFollowupInline}
                   statusStyle={STATUS_STYLE}
                   typeStyle={TYPE_COLOR}
                   types={FOLLOWUP_TYPES}
                   outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
                 />
+              </div>
+            ) : followups.length === 0 ? (
+              <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)">
+                <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups scheduled yet.</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email log to keep this lead moving.</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-150 overflow-y-auto pr-1">
