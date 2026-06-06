@@ -4,7 +4,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin, User,
   Calendar, Clock, CheckSquare, Bell, Tag, TrendingUp,
   MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Search,
-  List, Table2,
+  List, Table2, ArrowUpDown,
 } from 'lucide-react'
 import { Button, Card, Modal, Input, Select, Textarea, Spinner } from '@/components/ui'
 import {
@@ -160,7 +160,13 @@ const toLocalInput = (iso) => {
 
 const FU_COLS = '120px 170px minmax(180px,1fr) 140px minmax(160px,1.2fr) 130px'
 
-function FollowupTable({ followups, staff, onField, onCreate, statusStyle, typeStyle, types, outcomeOptions }) {
+const FU_SORTERS = {
+  added:         (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  modified_desc: (a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at),
+  modified_asc:  (a, b) => new Date(a.updated_at || a.created_at) - new Date(b.updated_at || b.created_at),
+}
+
+function FollowupTable({ followups, staff, onField, onCreate, statusStyle, typeStyle, types, outcomeOptions, sort = 'added' }) {
   const head = ['Type', 'Date & Time', 'Outcome', 'Called By', 'Response', 'Status']
   const [draft, setDraft] = useState({})
 
@@ -175,10 +181,7 @@ function FollowupTable({ followups, staff, onField, onCreate, statusStyle, typeS
     }
   }
 
-  const sorted = [...followups].sort((a, b) => {
-    const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
-    return (order[a.status] ?? 9) - (order[b.status] ?? 9)
-  })
+  const sorted = [...followups].sort(FU_SORTERS[sort] || FU_SORTERS.added)
 
   return (
     <div className="overflow-x-auto rounded-lg border border-(--color-border)">
@@ -629,6 +632,8 @@ export default function LeadDetailPage({ params }) {
   const [newTask,   setNewTask]   = useState({ title: '', priority: 'Medium', due_date: '' })
   const [showFuForm,   setShowFuForm]   = useState(false)
   const [fuView,       setFuView]       = useState('regular') // 'regular' | 'table'
+  const [fuSort,       setFuSort]       = useState('added')   // 'added' | 'modified_desc' | 'modified_asc'
+  const [fuSortOpen,   setFuSortOpen]   = useState(false)
   const [notesEditing, setNotesEditing] = useState(false)
   const [notesDraft,   setNotesDraft]   = useState('')
   const [notesSaving,  setNotesSaving]  = useState(false)
@@ -1624,9 +1629,40 @@ export default function LeadDetailPage({ params }) {
                 ))}
               </div>
             </div>
-            {!showFuForm && fuView === 'regular' && (
-              <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
-            )}
+            <div className="flex items-center gap-2">
+              {fuView === 'table' && (
+                <div className="relative">
+                  <button type="button" title="Sort" onClick={() => setFuSortOpen(o => !o)}
+                    className="p-1.5 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-surface)"
+                    style={{ color: 'var(--color-text-muted)' }}>
+                    <ArrowUpDown size={14} />
+                  </button>
+                  {fuSortOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setFuSortOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-(--color-border) py-1"
+                        style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                        {[
+                          { id: 'added',         label: 'Date added' },
+                          { id: 'modified_desc', label: 'Last modified — newest first' },
+                          { id: 'modified_asc',  label: 'Last modified — oldest first' },
+                        ].map(o => (
+                          <button key={o.id} type="button" onClick={() => { setFuSort(o.id); setFuSortOpen(false) }}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left transition-colors hover:bg-(--color-surface-2)"
+                            style={{ color: 'var(--color-text-primary)' }}>
+                            {o.label}
+                            {fuSort === o.id && <Check size={13} style={{ color: 'var(--color-brand)' }} />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {!showFuForm && fuView === 'regular' && (
+                <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
+              )}
+            </div>
           </div>
           <div className="p-3 space-y-3">
             {showFuForm && fuView === 'regular' && (
@@ -1697,6 +1733,7 @@ export default function LeadDetailPage({ params }) {
                   typeStyle={TYPE_COLOR}
                   types={FOLLOWUP_TYPES}
                   outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
+                  sort={fuSort}
                 />
               </div>
             ) : followups.length === 0 ? (
