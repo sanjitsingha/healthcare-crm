@@ -406,8 +406,28 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
               </button>
               {showGuide && (
                 <div className="px-3 pb-3 space-y-3 border-t border-(--color-border) pt-2.5">
-                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                    Pick the method for your form plugin. All of them POST submissions to your webhook URL, which become new leads.
+                  {/* Recommended: plugin (captures every form, no per-form setup) */}
+                  <div className="rounded-lg border p-3" style={{ borderColor: 'var(--color-brand)' + '40', background: 'var(--color-brand-50)' }}>
+                    <p className="text-xs font-700 mb-1 flex items-center gap-1.5" style={{ color: 'var(--color-brand)' }}>
+                      <Check size={13} /> Recommended — HealthCRM plugin
+                    </p>
+                    <p className="text-[11px] mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                      Install one plugin and <b>every form</b> on your site (Contact Form 7, WPForms, Gravity, Elementor, Fluent, Ninja) is captured automatically — no per-form setup.
+                    </p>
+                    <ol className="text-[11px] space-y-1 list-decimal pl-4 mb-2.5" style={{ color: 'var(--color-text-secondary)' }}>
+                      <li>Download the plugin and install it in WordPress (<b>Plugins → Add New → Upload Plugin</b>), then activate.</li>
+                      <li>Go to <b>Settings → HealthCRM</b> and paste your Webhook URL{secret ? ' and Shared Secret' : ''}.</li>
+                      <li>Click <b>Send test lead</b> to confirm, then submit any form.</li>
+                    </ol>
+                    <a href="/healthcrm-lead-capture.zip" download
+                      className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg text-white"
+                      style={{ background: 'var(--color-brand)' }}>
+                      <Copy size={13} /> Download plugin (.zip)
+                    </a>
+                  </div>
+
+                  <p className="text-[11px] pt-1" style={{ color: 'var(--color-text-muted)' }}>
+                    Prefer to wire a single form yourself? Use one of these instead.
                   </p>
 
                   {/* Elementor Pro */}
