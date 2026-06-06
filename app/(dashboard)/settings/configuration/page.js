@@ -7,7 +7,7 @@ import {
 import { Button, Card, Input } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
 import { useOrg } from '@/lib/context/OrgContext'
-import { updateOrganization } from '@/lib/supabase/queries'
+import { updateOrganization, getOrganization } from '@/lib/supabase/queries'
 
 // ── Provider catalog ───────────────────────────────────────────
 // Each provider defines the config fields it needs.
@@ -169,9 +169,13 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const [saving,  setSaving]  = useState(false)
   const [copied,  setCopied]  = useState('')
   const [showGuide, setShowGuide] = useState(false)
+  const { orgId } = useOrg()
   const [mapRows, setMapRows] = useState(() => integration.config?.field_map || [])
   const [savingMap, setSavingMap] = useState(false)
-  const detected = integration.config?.detected_fields || []
+  const [mapOpen, setMapOpen] = useState(false)
+  const [liveDetected, setLiveDetected] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const detected = liveDetected ?? (integration.config?.detected_fields || [])
 
   const addMapRow    = () => setMapRows(r => [...r, { form_field: '', lead_field: '' }])
   const setMapRow    = (i, p) => setMapRows(r => r.map((x, idx) => idx === i ? { ...x, ...p } : x))
@@ -181,6 +185,16 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
     try { await onSave(integration.id, { field_map: mapRows.filter(r => r.form_field && r.lead_field) }) }
     catch (err) { alert(err.message) }
     finally { setSavingMap(false) }
+  }
+  // Pull the latest detected form fields from the DB (no full page reload).
+  const refreshFields = async () => {
+    setRefreshing(true)
+    try {
+      const o = await getOrganization(orgId)
+      const integ = (o?.settings?.integrations || []).find(i => i.id === integration.id)
+      setLiveDetected(integ?.config?.detected_fields || [])
+    } catch (err) { alert(err.message) }
+    finally { setRefreshing(false) }
   }
 
   if (!provider) return null
@@ -280,47 +294,65 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
         })}
 
         {(integration.config?.webhook_url != null) && (
-          <div className="rounded-lg border border-(--color-border) p-3 space-y-2.5" style={{ background: 'var(--color-surface)' }}>
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+          <div className="rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
+            <button type="button" onClick={() => setMapOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2.5">
+              <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
                 <Link2 size={13} /> Field Mapping
-              </p>
-              <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-                {detected.length ? `${detected.length} form field${detected.length !== 1 ? 's' : ''} detected` : 'Submit once to detect fields'}
+                <span className="text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>
+                  · {detected.length ? `${detected.length} field${detected.length !== 1 ? 's' : ''} detected` : 'submit once to detect'}
+                </span>
               </span>
-            </div>
-            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              Map each form question to a lead field. Unmapped questions are still auto-detected and saved.
-            </p>
-            {mapRows.length > 0 && (
-              <div className="space-y-2">
-                {mapRows.map((row, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <FieldCombobox
-                      value={row.form_field}
-                      onChange={v => setMapRow(i, { form_field: v })}
-                      options={detected}
-                      placeholder="Form question"
-                    />
-                    <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>→</span>
-                    <select
-                      value={row.lead_field}
-                      onChange={e => setMapRow(i, { lead_field: e.target.value })}
-                      className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
-                    >
-                      <option value="">Select lead field…</option>
-                      {LEAD_FIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                    <button type="button" onClick={() => removeMapRow(i)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+              <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: mapOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+            </button>
+            {mapOpen && (
+              <div className="px-3 pb-3 space-y-2.5 border-t border-(--color-border) pt-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                    Map each form question to a lead field. Unmapped questions are still auto-detected and saved.
+                  </p>
+                  <button type="button" onClick={refreshFields} disabled={refreshing}
+                    className="shrink-0 inline-flex items-center gap-1 text-[11px] font-600 px-2 py-1 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                    style={{ color: 'var(--color-text-muted)' }}>
+                    <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> Refresh fields
+                  </button>
+                </div>
+                {mapRows.length > 0 && (
+                  <div className="space-y-2">
+                    {mapRows.map((row, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <FieldCombobox
+                          value={row.form_field}
+                          onChange={v => setMapRow(i, { form_field: v })}
+                          options={detected}
+                          placeholder="Form question"
+                        />
+                        <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>→</span>
+                        <select
+                          value={row.lead_field}
+                          onChange={e => setMapRow(i, { lead_field: e.target.value })}
+                          className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                          style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
+                        >
+                          <option value="">Select lead field…</option>
+                          {LEAD_FIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <button type="button" onClick={() => removeMapRow(i)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+                {detected.length === 0 && mapRows.length === 0 && (
+                  <p className="text-[11px] px-2.5 py-2 rounded-md" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+                    No fields detected yet. Submit the form once (or use the plugin’s “Send test lead”), then click <b>Refresh fields</b>.
+                  </p>
+                )}
+                <div className="flex items-center justify-between pt-1">
+                  <Button variant="secondary" size="sm" type="button" onClick={addMapRow}>+ Add mapping</Button>
+                  <Button size="sm" type="button" onClick={saveMap} disabled={savingMap}>{savingMap ? 'Saving…' : 'Save mapping'}</Button>
+                </div>
               </div>
             )}
-            <div className="flex items-center justify-between pt-1">
-              <Button variant="secondary" size="sm" type="button" onClick={addMapRow}>+ Add mapping</Button>
-              <Button size="sm" type="button" onClick={saveMap} disabled={savingMap}>{savingMap ? 'Saving…' : 'Save mapping'}</Button>
-            </div>
           </div>
         )}
 

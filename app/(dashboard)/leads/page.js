@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
 import { getLeads, deleteLead, updateLead } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -333,11 +333,23 @@ export default function LeadsPage() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Leads</h1>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            {loading ? '—' : `${filtered.length} lead${filtered.length !== 1 ? 's' : ''}${hasFilters ? ' (filtered)' : ''}`}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <div>
+            <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Leads</h1>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              {loading ? '—' : `${filtered.length} lead${filtered.length !== 1 ? 's' : ''}${hasFilters ? ' (filtered)' : ''}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadLeads}
+            disabled={loading}
+            title="Refresh leads"
+            className="p-2 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2) disabled:opacity-50"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
         <Link href="/leads/new">
           <button
