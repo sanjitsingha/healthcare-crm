@@ -72,6 +72,7 @@ const STATUS_STYLE = {
 // gets clipped by the table's overflow containers.
 function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
   const btnRef = useRef(null)
+  const menuRef = useRef(null)
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0, width: 176, maxH: 224 })
   const s = value && styleFor ? styleFor(value) : null
@@ -93,10 +94,12 @@ function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
   }
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
-    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close) }
+    // Close on outside scroll, but ignore scrolling inside the menu itself.
+    const onScroll = (e) => { if (menuRef.current && menuRef.current.contains(e.target)) return; setOpen(false) }
+    const onResize = () => setOpen(false)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', onResize) }
   }, [open])
 
   return (
@@ -112,7 +115,7 @@ function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="fixed z-50 overflow-y-auto rounded-lg border border-(--color-border) py-1"
+          <div ref={menuRef} className="fixed z-50 overflow-y-auto rounded-lg border border-(--color-border) py-1"
             style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxH, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
             {options.length === 0 && <p className="px-3 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
             {options.map(o => {
