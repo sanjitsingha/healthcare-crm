@@ -120,8 +120,8 @@ function mapToLead(fields, fieldMap) {
     last_name = last_name || (parts.length ? parts.join(' ') : null)
   }
 
-  const phone = pick(fields, ['phone', 'mobile', 'contact', 'contact number', 'phone number', 'whatsapp', 'cell'])
-  const email = pick(fields, ['email', 'e-mail', 'email address'])
+  const phone = pick(fields, ['phone', 'mobile', 'contact', 'contact number', 'phone number', 'whatsapp', 'cell', 'your phone', 'tel'])
+  const email = pick(fields, ['email', 'e-mail', 'email address', 'your email'])
   const genderRaw = pick(fields, ['gender', 'sex'])
   const gender = genderRaw && /^(male|female|other)$/i.test(genderRaw)
     ? genderRaw[0].toUpperCase() + genderRaw.slice(1).toLowerCase()
@@ -131,8 +131,8 @@ function mapToLead(fields, fieldMap) {
   // Keep the raw answers (minus the mapped ones) in custom_data for reference.
   const mappedKeys = new Set(['name', 'full name', 'fullname', 'your name', 'patient name',
     'first name', 'firstname', 'fname', 'last name', 'lastname', 'lname', 'surname',
-    'phone', 'mobile', 'contact', 'contact number', 'phone number', 'whatsapp', 'cell',
-    'email', 'e-mail', 'email address', 'gender', 'sex',
+    'phone', 'mobile', 'contact', 'contact number', 'phone number', 'whatsapp', 'cell', 'your phone', 'tel',
+    'email', 'e-mail', 'email address', 'your email', 'gender', 'sex',
     'message', 'notes', 'comments', 'comment', 'enquiry', 'inquiry', 'details', 'how can we help']
     .map(k => k.toLowerCase().replace(/[\s_-]+/g, '')))
   const extra = { ...custom }

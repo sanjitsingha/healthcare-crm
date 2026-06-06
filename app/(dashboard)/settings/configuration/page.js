@@ -377,6 +377,86 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
           )
         })()}
 
+        {integration.type === 'wordpress' && (() => {
+          const url = integration.config?.webhook_url || 'YOUR_WEBHOOK_URL'
+          const secret = integration.config?.secret
+          const postUrl = secret ? `${url}?secret=${encodeURIComponent(secret)}` : url
+          const snippet = `add_action('wpcf7_before_send_mail', function ($contact_form) {
+  $submission = WPCF7_Submission::get_instance();
+  if (!$submission) return;
+  $data = $submission->get_posted_data();
+  $fields = array();
+  foreach ($data as $key => $value) {
+    if (substr($key, 0, 1) === '_') continue; // skip CF7 internals
+    $fields[$key] = is_array($value) ? implode(', ', $value) : $value;
+  }
+  wp_remote_post('${postUrl}', array(
+    'headers' => array('Content-Type' => 'application/json'),
+    'body'    => wp_json_encode(array('fields' => $fields)),
+    'timeout' => 15,
+  ));
+});`
+          return (
+            <div className="rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
+              <button type="button" onClick={() => setShowGuide(g => !g)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-600"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="flex items-center gap-1.5"><Globe size={13} /> Setup guide (WordPress forms)</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>{showGuide ? 'Hide' : 'Show'}</span>
+              </button>
+              {showGuide && (
+                <div className="px-3 pb-3 space-y-3 border-t border-(--color-border) pt-2.5">
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                    Pick the method for your form plugin. All of them POST submissions to your webhook URL, which become new leads.
+                  </p>
+
+                  {/* Elementor Pro */}
+                  <div>
+                    <p className="text-xs font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>Elementor Pro Forms — no code</p>
+                    <ol className="text-[11px] space-y-1 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
+                      <li>Edit the form → <b>Actions After Submit</b> → add <b>Webhook</b>.</li>
+                      <li>Paste your webhook URL into the <b>Webhook URL</b> field and update.</li>
+                      <li>Submit a test entry — a lead appears in your CRM.</li>
+                    </ol>
+                  </div>
+
+                  {/* WPForms */}
+                  <div>
+                    <p className="text-xs font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>WPForms (Pro) — Webhooks addon</p>
+                    <ol className="text-[11px] space-y-1 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
+                      <li>Install the <b>Webhooks</b> addon, then edit your form → <b>Settings → Webhooks</b>.</li>
+                      <li>Set <b>Request URL</b> to your webhook URL, <b>Method</b> POST, <b>Format</b> JSON.</li>
+                      <li>Save and submit a test entry.</li>
+                    </ol>
+                  </div>
+
+                  {/* Contact Form 7 */}
+                  <div>
+                    <p className="text-xs font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>Contact Form 7 — code snippet</p>
+                    <ol className="text-[11px] space-y-1 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
+                      <li>Add the snippet below to your (child) theme’s <b>functions.php</b>, or use a “Code Snippets” plugin.</li>
+                      <li>Submit a test entry — a lead appears in your CRM.</li>
+                    </ol>
+                    <div className="relative mt-2">
+                      <pre className="text-[11px] font-mono p-3 rounded-lg overflow-x-auto whitespace-pre"
+                        style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{snippet}</pre>
+                      <button type="button" onClick={() => copy(snippet, 'wpsnippet')}
+                        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md border border-(--color-border) text-[11px] font-600"
+                        style={{ background: 'var(--color-surface)', color: copied === 'wpsnippet' ? '#15803d' : 'var(--color-text-muted)' }}>
+                        {copied === 'wpsnippet' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                    Tip: name your fields <b>Name</b>, <b>Phone</b>, <b>Email</b> for automatic mapping — or map them precisely in the Field Mapping panel above.
+                  </p>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         <div className="flex justify-end gap-2 pt-1">
           {editing ? (
             <>
