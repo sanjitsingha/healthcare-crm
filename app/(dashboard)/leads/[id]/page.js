@@ -73,12 +73,22 @@ const STATUS_STYLE = {
 function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
   const btnRef = useRef(null)
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 176 })
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 176, maxH: 224 })
   const s = value && styleFor ? styleFor(value) : null
 
   const openMenu = () => {
     const r = btnRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 176) })
+    if (r) {
+      const estH = Math.min((options.length || 1) * 30 + 8, 224)
+      const below = window.innerHeight - r.bottom
+      const openUp = below < estH && r.top > below
+      setPos({
+        top: openUp ? Math.max(8, r.top - estH - 4) : r.bottom + 4,
+        left: r.left,
+        width: Math.max(r.width, 176),
+        maxH: openUp ? Math.min(estH, r.top - 12) : Math.min(estH, below - 12),
+      })
+    }
     setOpen(true)
   }
   useEffect(() => {
@@ -102,8 +112,8 @@ function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="fixed z-50 max-h-56 overflow-y-auto rounded-lg border border-(--color-border) py-1"
-            style={{ top: pos.top, left: pos.left, width: pos.width, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+          <div className="fixed z-50 overflow-y-auto rounded-lg border border-(--color-border) py-1"
+            style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxH, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
             {options.length === 0 && <p className="px-3 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
             {options.map(o => {
               const os = styleFor ? styleFor(o) : null
@@ -619,6 +629,9 @@ export default function LeadDetailPage({ params }) {
   const [newTask,   setNewTask]   = useState({ title: '', priority: 'Medium', due_date: '' })
   const [showFuForm,   setShowFuForm]   = useState(false)
   const [fuView,       setFuView]       = useState('regular') // 'regular' | 'table'
+  const [notesEditing, setNotesEditing] = useState(false)
+  const [notesDraft,   setNotesDraft]   = useState('')
+  const [notesSaving,  setNotesSaving]  = useState(false)
   const [newFu,        setNewFu]        = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
   const [appointments,    setAppointments]    = useState([])
   const [showBookForm,    setShowBookForm]    = useState(false)
@@ -939,6 +952,18 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       await applyRules('followup_logged')
     } catch (err) { alert(err.message) }
+  }
+
+  const handleSaveNotes = async () => {
+    setNotesSaving(true)
+    try {
+      const updated = await updateLead(id, { description: notesDraft || null })
+      setLead(prev => ({ ...prev, description: updated.description }))
+      await logActivity('note', 'Notes updated')
+      await refreshActivities()
+      setNotesEditing(false)
+    } catch (err) { alert(err.message) }
+    finally { setNotesSaving(false) }
   }
 
   const handleRescheduleAppointment = async () => {
@@ -1312,14 +1337,6 @@ export default function LeadDetailPage({ params }) {
                 ))}
               </div>
             </Card>
-
-            {/* Notes */}
-            {lead.description && (
-              <Card className="p-5 border-(--color-border)">
-                <p className="text-[10px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>Notes</p>
-                <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-text-secondary)' }}>{lead.description}</p>
-              </Card>
-            )}
 
             {/* Custom modules */}
             {(org?.settings?.modules || []).filter(m => m.page === 'leads' && m.active).map(m => (
@@ -1703,6 +1720,38 @@ export default function LeadDetailPage({ params }) {
                   />
                 ))}
               </div>
+            )}
+          </div>
+        </Card>
+
+        {/* ── Notes (full-width, last section) ── */}
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Notes</p>
+            {!notesEditing && (
+              <Button size="sm" variant="secondary" onClick={() => { setNotesDraft(lead.description || ''); setNotesEditing(true) }}>
+                <Edit2 size={13} /> {lead.description ? 'Edit' : 'Add note'}
+              </Button>
+            )}
+          </div>
+          <div className="p-4">
+            {notesEditing ? (
+              <div className="space-y-3">
+                <Textarea
+                  placeholder="Write a note about this lead…"
+                  value={notesDraft}
+                  onChange={e => setNotesDraft(e.target.value)}
+                  rows={5}
+                />
+                <div className="flex gap-2 justify-end">
+                  <Button variant="secondary" size="sm" type="button" onClick={() => setNotesEditing(false)}>Cancel</Button>
+                  <Button size="sm" type="button" onClick={handleSaveNotes} disabled={notesSaving}>{notesSaving ? 'Saving…' : 'Save'}</Button>
+                </div>
+              </div>
+            ) : lead.description ? (
+              <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-text-secondary)' }}>{lead.description}</p>
+            ) : (
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No notes yet. Click “Add note” to write one.</p>
             )}
           </div>
         </Card>
