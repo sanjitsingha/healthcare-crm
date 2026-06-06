@@ -18,9 +18,9 @@ export default function SettingsLayout({ children }) {
   const pathname = usePathname()
 
   return (
-    <div className="flex min-h-screen" style={{ background: 'var(--color-bg)' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>
       <aside
-        className="w-52 shrink-0 border-r border-(--color-border) sticky top-0 h-screen flex flex-col p-4"
+        className="w-52 shrink-0 border-r border-(--color-border) h-screen flex flex-col p-4"
         style={{ background: 'var(--color-surface)' }}
       >
         <div className="mb-6">
@@ -51,7 +51,7 @@ export default function SettingsLayout({ children }) {
         </nav>
       </aside>
 
-      <div className="flex-1 min-w-0 p-6 overflow-y-auto">
+      <div className="flex-1 min-w-0 h-screen overflow-y-auto p-6 pb-16">
         {children}
       </div>
     </div>
