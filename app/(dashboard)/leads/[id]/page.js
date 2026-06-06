@@ -66,6 +66,113 @@ const STATUS_STYLE = {
   Rescheduled: { bg: '#f3e8ff', color: '#7c3aed' },
 }
 
+// ── Spreadsheet (table view) cells ────────────────────────────
+// Google-Sheets-style chip dropdown.
+function ChipCell({ value, options, onChange, placeholder = '—', styleFor }) {
+  const [open, setOpen] = useState(false)
+  const s = value && styleFor ? styleFor(value) : null
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-1 px-2 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors">
+        {value
+          ? <span className="text-[11px] font-600 px-2 py-0.5 rounded-full truncate"
+              style={s ? { background: s.bg, color: s.color } : { background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{value}</span>
+          : <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{placeholder}</span>}
+        <ChevronDown size={12} className="shrink-0 opacity-40" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-1 top-full mt-0.5 z-50 min-w-44 max-h-56 overflow-y-auto rounded-lg border border-(--color-border) py-1"
+            style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+            {options.length === 0 && <p className="px-3 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
+            {options.map(o => {
+              const os = styleFor ? styleFor(o) : null
+              return (
+                <button key={o} type="button" onClick={() => { onChange(o); setOpen(false) }}
+                  className="w-full flex items-center px-2.5 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors">
+                  <span className="text-[11px] font-600 px-2 py-0.5 rounded-full"
+                    style={os ? { background: os.bg, color: os.color } : { color: 'var(--color-text-primary)' }}>{o}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Plain text cell — edits on blur / Enter.
+function TextCell({ value, onCommit, placeholder = '—', type = 'text' }) {
+  const [v, setV] = useState(value ?? '')
+  useEffect(() => { setV(value ?? '') }, [value])
+  const commit = () => { if ((v || '') !== (value || '')) onCommit(v) }
+  return (
+    <input
+      value={v}
+      type={type}
+      placeholder={placeholder}
+      onChange={e => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+      className="w-full px-2 py-1.5 text-[11px] bg-transparent outline-none focus:bg-(--color-surface-2)"
+      style={{ color: 'var(--color-text-primary)' }}
+    />
+  )
+}
+
+function FollowupTable({ followups, staff, onField, statusStyle, typeStyle, types, outcomeOptions }) {
+  const COLS = '120px 170px minmax(180px,1fr) 140px minmax(160px,1.2fr) 130px'
+  const head = ['Type', 'Date & Time', 'Outcome', 'Called By', 'Response', 'Status']
+  const toLocalInput = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const pad = n => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  return (
+    <div className="overflow-x-auto rounded-xl border border-(--color-border)">
+      <div style={{ minWidth: '900px' }}>
+        {/* Header row */}
+        <div className="grid" style={{ gridTemplateColumns: COLS, background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+          {head.map(h => (
+            <div key={h} className="px-2 py-2 text-[10px] font-700 uppercase tracking-wider border-r border-(--color-border) last:border-r-0" style={{ color: 'var(--color-text-muted)' }}>{h}</div>
+          ))}
+        </div>
+        {/* Data rows */}
+        {[...followups].sort((a, b) => {
+          const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
+          return (order[a.status] ?? 9) - (order[b.status] ?? 9)
+        }).map(f => (
+          <div key={f.id} className="grid items-stretch border-b border-(--color-border) last:border-b-0" style={{ gridTemplateColumns: COLS }}>
+            <div className="border-r border-(--color-border)">
+              <ChipCell value={f.type} options={types} styleFor={(v) => typeStyle[v]} onChange={(v) => onField(f.id, { type: v })} />
+            </div>
+            <div className="border-r border-(--color-border) flex items-center">
+              <TextCell value={toLocalInput(f.scheduled_at)} type="datetime-local"
+                onCommit={(v) => onField(f.id, { scheduled_at: v ? new Date(v).toISOString() : null })} />
+            </div>
+            <div className="border-r border-(--color-border)">
+              <ChipCell value={f.outcome} options={outcomeOptions(f.type)} placeholder="Set outcome" onChange={(v) => onField(f.id, { outcome: v })} />
+            </div>
+            <div className="border-r border-(--color-border)">
+              <ChipCell value={f.caller_name} options={staff.map(m => m.name)} placeholder="—" onChange={(v) => onField(f.id, { caller_name: v })} />
+            </div>
+            <div className="border-r border-(--color-border) flex items-center">
+              <TextCell value={f.notes} placeholder="Add response…" onCommit={(v) => onField(f.id, { notes: v || null })} />
+            </div>
+            <div>
+              <ChipCell value={f.status} options={['Scheduled', 'Completed', 'Missed', 'Rescheduled']} styleFor={(v) => statusStyle[v]} onChange={(v) => onField(f.id, { status: v })} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const ACTIVITY_ICON = {
   comment:       MessageSquare,
   call:          Phone,
@@ -454,6 +561,7 @@ export default function LeadDetailPage({ params }) {
   const [taskOpen,  setTaskOpen]  = useState(false)
   const [newTask,   setNewTask]   = useState({ title: '', priority: 'Medium', due_date: '' })
   const [showFuForm,   setShowFuForm]   = useState(false)
+  const [fuView,       setFuView]       = useState('regular') // 'regular' | 'table'
   const [newFu,        setNewFu]        = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
   const [appointments,    setAppointments]    = useState([])
   const [showBookForm,    setShowBookForm]    = useState(false)
@@ -735,6 +843,20 @@ export default function LeadDetailPage({ params }) {
     setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
     await logActivity('note', `Follow-up rescheduled to ${format(new Date(newDate), 'MMM d, h:mm a')}`)
     await refreshActivities()
+  }
+
+  // Inline cell edit from the spreadsheet/table view.
+  const handleFollowupField = async (fuId, patch) => {
+    const prev = followups.find(f => f.id === fuId)
+    // Optimistic update so the cell reflects instantly.
+    setFollowups(list => list.map(f => f.id === fuId ? { ...f, ...patch } : f))
+    try {
+      const updated = await updateFollowup(fuId, patch)
+      setFollowups(list => list.map(f => f.id === fuId ? updated : f))
+    } catch (err) {
+      setFollowups(list => list.map(f => f.id === fuId ? prev : f)) // rollback
+      alert(err.message)
+    }
   }
 
   const handleRescheduleAppointment = async () => {
@@ -1390,9 +1512,22 @@ export default function LeadDetailPage({ params }) {
         <Card className="border-(--color-border) overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
             <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
-            {!showFuForm && (
-              <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
-            )}
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg overflow-hidden border border-(--color-border)">
+                {[{ id: 'regular', label: 'Regular' }, { id: 'table', label: 'Table' }].map(v => (
+                  <button key={v.id} type="button" onClick={() => setFuView(v.id)}
+                    className="px-2.5 py-1 text-[11px] font-600 transition-all"
+                    style={fuView === v.id
+                      ? { background: 'var(--color-brand)', color: 'white' }
+                      : { color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              {!showFuForm && (
+                <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>
+              )}
+            </div>
           </div>
           <div className="p-5 space-y-3">
             {showFuForm && (
@@ -1457,6 +1592,18 @@ export default function LeadDetailPage({ params }) {
                 <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups scheduled yet.</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email log to keep this lead moving.</p>
+              </div>
+            ) : fuView === 'table' ? (
+              <div className="max-h-150 overflow-y-auto">
+                <FollowupTable
+                  followups={followups}
+                  staff={org?.settings?.staff_members || []}
+                  onField={handleFollowupField}
+                  statusStyle={STATUS_STYLE}
+                  typeStyle={TYPE_COLOR}
+                  types={FOLLOWUP_TYPES}
+                  outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
+                />
               </div>
             ) : (
               <div className="space-y-3 max-h-150 overflow-y-auto pr-1">
