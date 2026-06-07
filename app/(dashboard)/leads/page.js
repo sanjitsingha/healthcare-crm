@@ -6,7 +6,7 @@ import { getLeads, deleteLead, updateLead } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, startOfDay, endOfDay } from 'date-fns'
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -168,7 +168,7 @@ export default function LeadsPage() {
   // filters
   const [search,      setSearch]      = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [] })
+  const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [], dateFrom: '', dateTo: '' })
 
   // Build column list: base columns + one column per field in every active leads module
   const allColumns = useMemo(() => {
@@ -289,11 +289,14 @@ export default function LeadsPage() {
     if (filters.stages.length     && !filters.stages.includes(lead.stage))       return false
     if (filters.priorities.length && !filters.priorities.includes(lead.priority)) return false
     if (filters.sources.length    && !filters.sources.includes(lead.source))      return false
+    if (filters.dateFrom && new Date(lead.created_at) < startOfDay(new Date(filters.dateFrom))) return false
+    if (filters.dateTo   && new Date(lead.created_at) > endOfDay(new Date(filters.dateTo)))     return false
     return true
   })
 
-  const hasFilters = filters.stages.length || filters.priorities.length || filters.sources.length
-  const clearFilters = () => setFilters({ stages: [], priorities: [], sources: [] })
+  const filterCount = filters.stages.length + filters.priorities.length + filters.sources.length + (filters.dateFrom || filters.dateTo ? 1 : 0)
+  const hasFilters = filterCount > 0
+  const clearFilters = () => setFilters({ stages: [], priorities: [], sources: [], dateFrom: '', dateTo: '' })
 
   const visibleCols = allColumns.filter(c => visible[c.id])
 
@@ -393,9 +396,9 @@ export default function LeadsPage() {
         >
           <SlidersHorizontal size={15} />
           Filters
-          {hasFilters > 0 && (
+          {hasFilters && (
             <span className="bg-white/30 text-[10px] font-700 px-1.5 py-0.5 rounded-full">
-              {filters.stages.length + filters.priorities.length + filters.sources.length}
+              {filterCount}
             </span>
           )}
         </button>
@@ -411,6 +414,33 @@ export default function LeadsPage() {
             <MultiPill label="Stage"    options={STAGES}     selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
             <MultiPill label="Priority" options={PRIORITIES} selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
             <MultiPill label="Source"   options={SOURCES}    selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
+          </div>
+
+          {/* Created date range */}
+          <div className="pt-3 border-t border-(--color-border)">
+            <p className="text-xs font-600 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Created date</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>From</span>
+                <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined}
+                  onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>To</span>
+                <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined}
+                  onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              </div>
+              {(filters.dateFrom || filters.dateTo) && (
+                <button type="button" onClick={() => setFilters(f => ({ ...f, dateFrom: '', dateTo: '' }))}
+                  className="text-[11px] font-600 px-2 py-1 rounded-md hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
+                  Clear dates
+                </button>
+              )}
+            </div>
           </div>
           {hasFilters ? (
             <div className="flex justify-end pt-2 border-t border-(--color-border)">
