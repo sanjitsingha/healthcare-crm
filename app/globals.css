@@ -32,3 +32,13 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
 .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 99px; }
+
+/* recharts: remove focus outline that appears when clicking a chart */
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+.recharts-wrapper svg:focus,
+.recharts-wrapper *:focus {
+  outline: none !important;
+}

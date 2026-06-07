@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3, TrendingUp, Users, Calendar, IndianRupee, PhoneCall,
   Target, RefreshCw, ChevronDown, CalendarDays, Check, UserRound, Building2,
+  Activity, PieChart as PieIcon,
 } from 'lucide-react'
 import { Card, Spinner } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -16,7 +17,7 @@ import {
 } from 'date-fns'
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 
 const STAGES = ['New', 'Contacted', 'Interested', 'Follow-up', 'Converted', 'Lost']
@@ -64,15 +65,37 @@ function StatTile({ icon: Icon, label, value, sub }) {
   )
 }
 
-function Panel({ title, subtitle, children, className = '' }) {
+function Panel({ title, subtitle, children, right, className = '' }) {
   return (
     <Card className={`p-5 ${className}`}>
-      <div className="mb-4">
-        <p className="text-sm font-700" style={{ color: 'var(--color-text-primary)' }}>{title}</p>
-        {subtitle && <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{subtitle}</p>}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-700" style={{ color: 'var(--color-text-primary)' }}>{title}</p>
+          {subtitle && <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{subtitle}</p>}
+        </div>
+        {right}
       </div>
       {children}
     </Card>
+  )
+}
+
+const TYPE_ICON = { area: TrendingUp, line: Activity, bar: BarChart3, pie: PieIcon }
+function ChartToggle({ types, value, onChange }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border border-(--color-border) p-0.5 shrink-0">
+      {types.map(t => {
+        const Icon = TYPE_ICON[t]
+        const active = value === t
+        return (
+          <button key={t} type="button" onClick={() => onChange(t)} title={`${t[0].toUpperCase() + t.slice(1)} view`}
+            className="p-1.5 rounded-md transition-all"
+            style={active ? { background: 'var(--color-brand)', color: 'white' } : { color: 'var(--color-text-muted)' }}>
+            <Icon size={13} />
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -83,29 +106,6 @@ function Empty() {
 const hasData = (rows) => rows.some(r => r.value)
 
 // Recharts wrappers
-function AreaTrend({ data, color, valueName, prefix = '' }) {
-  if (!hasData(data)) return <Empty />
-  return (
-    <ResponsiveContainer width="100%" height={230}>
-      <AreaChart data={data} margin={{ top: 5, right: 8, left: -18, bottom: 0 }}>
-        <defs>
-          <linearGradient id={`grad-${valueName}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-        <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={20} />
-        <YAxis allowDecimals={false} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44}
-          tickFormatter={prefix === '₹' ? (v) => inr(v) : undefined} />
-        <Tooltip {...TOOLTIP} formatter={(v) => [prefix === '₹' ? inr(v) : v, valueName]} />
-        <Area type="monotone" dataKey="value" name={valueName} stroke={color} strokeWidth={2.5}
-          fill={`url(#grad-${valueName})`} activeDot={{ r: 4 }} />
-      </AreaChart>
-    </ResponsiveContainer>
-  )
-}
-
 function BarRows({ rows }) {
   if (!hasData(rows)) return <Empty />
   return (
@@ -137,6 +137,61 @@ function DonutChart({ segments }) {
       </PieChart>
     </ResponsiveContainer>
   )
+}
+
+// Time-series chart: area / line / bar(column).
+function TimeChart({ type, data, color, valueName, prefix = '' }) {
+  if (!hasData(data)) return <Empty />
+  const grid = <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+  const xa = <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={20} />
+  const ya = <YAxis allowDecimals={false} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44}
+    tickFormatter={prefix === '₹' ? (v) => inr(v) : undefined} />
+  const tip = <Tooltip {...TOOLTIP} formatter={(v) => [prefix === '₹' ? inr(v) : v, valueName]} />
+  const margin = { top: 5, right: 10, left: -8, bottom: 0 }
+  return (
+    <ResponsiveContainer width="100%" height={230}>
+      {type === 'bar' ? (
+        <BarChart data={data} margin={margin}>{grid}{xa}{ya}{tip}
+          <Bar dataKey="value" name={valueName} fill={color} radius={[6, 6, 0, 0]} maxBarSize={46} />
+        </BarChart>
+      ) : type === 'line' ? (
+        <LineChart data={data} margin={margin}>{grid}{xa}{ya}{tip}
+          <Line type="monotone" dataKey="value" name={valueName} stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+        </LineChart>
+      ) : (
+        <AreaChart data={data} margin={margin}>
+          <defs>
+            <linearGradient id={`grad-${valueName}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {grid}{xa}{ya}{tip}
+          <Area type="monotone" dataKey="value" name={valueName} stroke={color} strokeWidth={2.5} fill={`url(#grad-${valueName})`} activeDot={{ r: 4 }} />
+        </AreaChart>
+      )}
+    </ResponsiveContainer>
+  )
+}
+
+// Categorical chart: bar(horizontal) / pie / line.
+function CategoryChart({ type, rows }) {
+  if (!hasData(rows)) return <Empty />
+  if (type === 'pie') return <DonutChart segments={rows} />
+  if (type === 'line') {
+    return (
+      <ResponsiveContainer width="100%" height={Math.max(220, rows.length * 36)}>
+        <LineChart data={rows} margin={{ top: 5, right: 12, left: -8, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+          <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+          <YAxis allowDecimals={false} tick={AXIS_TICK} axisLine={false} tickLine={false} width={36} />
+          <Tooltip {...TOOLTIP} />
+          <Line type="monotone" dataKey="value" name="Count" stroke="var(--color-brand)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 4 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    )
+  }
+  return <BarRows rows={rows} />
 }
 
 // ── Dropdowns ────────────────────────────────────────────────
@@ -234,6 +289,10 @@ export default function ReportsPage() {
   const [rangeKey, setRangeKey] = useState('30')
   const [custom, setCustom] = useState({ start: '', end: '' })
   const [person, setPerson] = useState('org')
+  const [chartType, setChartType] = useState({
+    leads: 'area', stage: 'bar', source: 'bar', appts: 'pie', outcomes: 'bar', revenue: 'area', team: 'bar',
+  })
+  const setType = (k, v) => setChartType(c => ({ ...c, [k]: v }))
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState({ leads: [], patients: [], appts: [], followups: [], payments: [] })
 
@@ -353,23 +412,42 @@ export default function ReportsPage() {
         <StatTile icon={IndianRupee} label="Revenue" value={inr(m.revenue)} sub={isOrg ? `${m.payments.length} payments` : 'org-wide'} />
       </div>
 
-      <Panel title="Leads over time" subtitle="New leads created per period">
-        <AreaTrend data={m.leadsSeries} color="var(--color-brand)" valueName="Leads" />
+      <Panel title="Leads over time" subtitle="New leads created per period"
+        right={<ChartToggle types={['area', 'line', 'bar']} value={chartType.leads} onChange={v => setType('leads', v)} />}>
+        <TimeChart type={chartType.leads} data={m.leadsSeries} color="var(--color-brand)" valueName="Leads" />
       </Panel>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <Panel title="Pipeline by stage" subtitle="Where your leads currently sit"><BarRows rows={m.byStage} /></Panel>
-        <Panel title="Lead sources" subtitle="Where leads are coming from"><BarRows rows={m.bySource} /></Panel>
+        <Panel title="Pipeline by stage" subtitle="Where your leads currently sit"
+          right={<ChartToggle types={['bar', 'pie', 'line']} value={chartType.stage} onChange={v => setType('stage', v)} />}>
+          <CategoryChart type={chartType.stage} rows={m.byStage} />
+        </Panel>
+        <Panel title="Lead sources" subtitle="Where leads are coming from"
+          right={<ChartToggle types={['bar', 'pie', 'line']} value={chartType.source} onChange={v => setType('source', v)} />}>
+          <CategoryChart type={chartType.source} rows={m.bySource} />
+        </Panel>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <Panel title="Appointments by status"><DonutChart segments={m.apptStatus} /></Panel>
-        <Panel title="Follow-up outcomes" subtitle="Top recorded outcomes"><BarRows rows={m.outcomes} /></Panel>
+        <Panel title="Appointments by status"
+          right={<ChartToggle types={['pie', 'bar', 'line']} value={chartType.appts} onChange={v => setType('appts', v)} />}>
+          <CategoryChart type={chartType.appts} rows={m.apptStatus} />
+        </Panel>
+        <Panel title="Follow-up outcomes" subtitle="Top recorded outcomes"
+          right={<ChartToggle types={['bar', 'pie', 'line']} value={chartType.outcomes} onChange={v => setType('outcomes', v)} />}>
+          <CategoryChart type={chartType.outcomes} rows={m.outcomes} />
+        </Panel>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <Panel title="Revenue over time" subtitle="Payments collected per period"><AreaTrend data={m.revenueSeries} color="#10b981" valueName="Revenue" prefix="₹" /></Panel>
-        <Panel title="Team performance" subtitle="Leads by assigned member"><BarRows rows={m.team} /></Panel>
+        <Panel title="Revenue over time" subtitle="Payments collected per period"
+          right={<ChartToggle types={['area', 'line', 'bar']} value={chartType.revenue} onChange={v => setType('revenue', v)} />}>
+          <TimeChart type={chartType.revenue} data={m.revenueSeries} color="#10b981" valueName="Revenue" prefix="₹" />
+        </Panel>
+        <Panel title="Team performance" subtitle="Leads by assigned member"
+          right={<ChartToggle types={['bar', 'pie', 'line']} value={chartType.team} onChange={v => setType('team', v)} />}>
+          <CategoryChart type={chartType.team} rows={m.team} />
+        </Panel>
       </div>
     </div>
   )
