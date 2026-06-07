@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, useRef } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
   CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
-  List, Table2, ArrowUpDown,
+  List, Table2, ArrowUpDown, Search,
 } from 'lucide-react'
 import { Button, Card, Input, Textarea, Spinner, Modal, Select } from '@/components/ui'
 import {
@@ -174,7 +174,9 @@ export default function PatientDetailPage({ params }) {
   const [followups, setFollowups] = useState([])
   const [availableTags, setAvailableTags] = useState([])
   const [addingTag, setAddingTag] = useState(false)
-  const [selectedTagId, setSelectedTagId] = useState('')
+  const [tagSearch, setTagSearch] = useState('')
+  const tagBtnRef = useRef(null)
+  const [tagMenuPos, setTagMenuPos] = useState({ top: 0, left: 0 })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tasks')
   const [bottomTab, setBottomTab] = useState('history')
@@ -350,13 +352,11 @@ export default function PatientDetailPage({ params }) {
   const linkedTagIds = (patient?.tags || []).map(t => t.tags?.id).filter(Boolean)
   const unlinkedTags = availableTags.filter(t => !linkedTagIds.includes(t.id))
 
-  const handleAddTag = async () => {
-    if (!selectedTagId) return
+  const handleAddTag = async (tagId) => {
     try {
-      await assignTagToPatient(id, selectedTagId)
+      await assignTagToPatient(id, tagId)
       const updated = await getPatient(id)
       setPatient(updated)
-      setSelectedTagId('')
       setAddingTag(false)
       await applyRules('tag_added')
     } catch (err) { alert(err.message) }
@@ -369,6 +369,20 @@ export default function PatientDetailPage({ params }) {
       setPatient(updated)
     } catch (err) { alert(err.message) }
   }
+
+  const openTagMenu = () => {
+    const r = tagBtnRef.current?.getBoundingClientRect()
+    if (r) setTagMenuPos({ top: r.bottom + 6, left: r.left })
+    setTagSearch('')
+    setAddingTag(true)
+  }
+  // Close the tag menu on scroll (it's fixed-positioned)
+  useEffect(() => {
+    if (!addingTag) return
+    const close = () => setAddingTag(false)
+    window.addEventListener('scroll', close, true)
+    return () => window.removeEventListener('scroll', close, true)
+  }, [addingTag])
 
   const handleAssignPatient = async (memberId) => {
     if (memberId === patient.assigned_to) { setAssigningPatient(false); return }
@@ -494,67 +508,69 @@ export default function PatientDetailPage({ params }) {
             <Card className="p-5 border-(--color-border)">
               <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
               <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p><div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
-              <div className="mb-4 space-y-2">
-                <div className="flex flex-wrap gap-1.5">
+              <div className="mb-4">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
                     const tc = tag.color || '#6366f1'
                     return (
-                    <span
-                      key={tag.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-600"
-                      style={{ backgroundColor: `${tc}28`, borderColor: `${tc}70`, color: tc }}
-                    >
-                      <Tag size={11} />
-                      {tag.name}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTag(tag.id)}
-                        className="ml-0.5 opacity-50 hover:opacity-100 transition-opacity"
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  )})}
-                  {!addingTag && (
-                    <button
-                      type="button"
-                      onClick={() => setAddingTag(true)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-dashed text-[11px] font-600 transition-colors hover:bg-(--color-surface-2)"
-                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
-                    >
-                      <Plus size={11} /> Add Tag
-                    </button>
+                      <span key={tag.id}
+                        className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"
+                        style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                        {tag.name}
+                        <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-70 hover:opacity-100 transition-opacity">
+                          <X size={11} />
+                        </button>
+                      </span>
+                    )
+                  })}
+
+                  {/* Add Tag + searchable dropdown (fixed-positioned so it never gets clipped) */}
+                  <button ref={tagBtnRef} type="button" onClick={() => addingTag ? setAddingTag(false) : openTagMenu()}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                    <Plus size={10} /> Add Tag
+                  </button>
+                  {addingTag && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setAddingTag(false)} />
+                      <div className="fixed w-56 rounded-lg border border-(--color-border) overflow-hidden z-50"
+                        style={{ top: tagMenuPos.top, left: tagMenuPos.left, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                        <div className="p-2 border-b border-(--color-border)">
+                          <div className="relative">
+                            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+                            <input
+                              autoFocus
+                              value={tagSearch}
+                              onChange={e => setTagSearch(e.target.value)}
+                              placeholder="Search tags…"
+                              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-(--color-border) outline-none"
+                              style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-52 overflow-y-auto py-1">
+                          {unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 ? (
+                            <p className="px-3 py-3 text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
+                              {availableTags.length === 0 ? 'No patient tags. Create them in Settings → Tags.' : 'No matching tags.'}
+                            </p>
+                          ) : (
+                            unlinkedTags
+                              .filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()))
+                              .map(tag => (
+                                <button key={tag.id} type="button" onClick={() => handleAddTag(tag.id)}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tag.color }} />
+                                  <span className="flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
+                                  <Plus size={11} style={{ color: 'var(--color-text-muted)' }} />
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
-                {addingTag && (
-                  <div className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
-                    <p className="text-[10px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Select a tag</p>
-                    {unlinkedTags.length === 0 ? (
-                      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>All tags already applied.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {unlinkedTags.map(tag => (
-                          <button
-                            key={tag.id}
-                            type="button"
-                            onClick={() => setSelectedTagId(tag.id)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-600 transition-all"
-                            style={selectedTagId === tag.id
-                              ? { background: tag.color, borderColor: tag.color, color: 'white' }
-                              : { background: `${tag.color}15`, borderColor: `${tag.color}50`, color: tag.color }}
-                          >
-                            <Tag size={11} />
-                            {tag.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Button size="sm" type="button" onClick={handleAddTag} disabled={!selectedTagId}>Add</Button>
-                      <Button size="sm" variant="secondary" type="button" onClick={() => { setAddingTag(false); setSelectedTagId('') }}>Cancel</Button>
-                    </div>
-                  </div>
-                )}
               </div>
               <div className="space-y-2.5">
                 {patient.phone && <div className="flex items-center gap-2"><Phone size={13} /><span className="text-xs">{patient.phone}</span></div>}
