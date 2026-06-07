@@ -4,6 +4,7 @@
 --  pg_cron part separate — if it fails it would roll back the table.)
 -- ════════════════════════════════════════════════════════════════
 
+-- Fresh installs: create the org-wide table.
 create table if not exists notifications (
   id              uuid default gen_random_uuid() primary key,
   organization_id uuid references organizations(id) on delete cascade not null,
@@ -13,6 +14,15 @@ create table if not exists notifications (
   message         text,
   created_at      timestamptz default now()
 );
+
+-- Reconcile an EXISTING (older, per-user) notifications table to the org-wide
+-- model used by the app: user_id optional, and an eid column for dedupe.
+alter table notifications add column if not exists eid text;
+do $$
+begin
+  alter table notifications alter column user_id drop not null;
+exception when undefined_column then null;  -- fresh table has no user_id
+end $$;
 
 create index if not exists notifications_org_created_idx
   on notifications (organization_id, created_at desc);
