@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import { LifeBuoy } from 'lucide-react'
 import { useSidebar } from '@/lib/context/SidebarContext'
+import NotificationBell from '@/components/crm/NotificationBell'
 
 // Static strings so Tailwind v4 scanner picks up both classes
 const _expanded = 'md:left-[220px]'
@@ -17,13 +18,16 @@ export default function BottomBar() {
       <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
         © {new Date().getFullYear()} HealthCRM
       </span>
-      <Link
-        href="/tickets/new"
-        className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-600 transition-opacity hover:opacity-85"
-        style={{ background: 'var(--color-brand)', color: 'white' }}
-      >
-        <LifeBuoy size={13} /> Raise a Complaint
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          href="/tickets/new"
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-600 transition-opacity hover:opacity-85"
+          style={{ background: 'var(--color-brand)', color: 'white' }}
+        >
+          <LifeBuoy size={13} /> Raise a Complaint
+        </Link>
+        <NotificationBell />
+      </div>
     </div>
   )
 }

@@ -58,3 +58,9 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
   from { transform: translateX(0); opacity: 1; }
   to   { transform: translateX(120%); opacity: 0; }
 }
+
+/* Notification panel: slide up from the bottom bar */
+@keyframes panelUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
