@@ -13,6 +13,7 @@ import clsx from 'clsx'
 const STAGES     = ['New', 'Contacted', 'Interested', 'Follow-up', 'Converted', 'Lost']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
 const SOURCES    = ['WhatsApp', 'Meta Ads', 'Website', 'Referral', 'Call', 'Email', 'Walk-in', 'Event', 'Other']
+const GENDERS    = ['Male', 'Female', 'Other']
 
 const STAGE_STYLE = {
   New:        { bg: '#ede9fe', color: '#6d28d9' },
@@ -168,7 +169,20 @@ export default function LeadsPage() {
   // filters
   const [search,      setSearch]      = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [], dateFrom: '', dateTo: '' })
+  const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [], genders: [], dateFrom: '', dateTo: '', custom: {} })
+
+  // Custom module fields available to filter on (leads modules).
+  const leadModuleFields = useMemo(() =>
+    (org?.settings?.modules || [])
+      .filter(m => m.page === 'leads' && m.active)
+      .flatMap(m => (m.fields || []).map(f => ({
+        colId: `mod::${m.id}::${f.id}`,
+        moduleId: m.id, fieldId: f.id, label: f.label, type: f.type,
+        options: (f.options || '').split(',').map(s => s.trim()).filter(Boolean),
+      }))),
+    [org])
+
+  const setCustom = (colId, value) => setFilters(f => ({ ...f, custom: { ...f.custom, [colId]: value } }))
 
   // Build column list: base columns + one column per field in every active leads module
   const allColumns = useMemo(() => {
@@ -289,14 +303,25 @@ export default function LeadsPage() {
     if (filters.stages.length     && !filters.stages.includes(lead.stage))       return false
     if (filters.priorities.length && !filters.priorities.includes(lead.priority)) return false
     if (filters.sources.length    && !filters.sources.includes(lead.source))      return false
+    if (filters.genders.length    && !filters.genders.includes(patientGender(lead))) return false
     if (filters.dateFrom && new Date(lead.created_at) < startOfDay(new Date(filters.dateFrom))) return false
     if (filters.dateTo   && new Date(lead.created_at) > endOfDay(new Date(filters.dateTo)))     return false
+    // Custom module-field filters
+    for (const [colId, val] of Object.entries(filters.custom)) {
+      if (!val || (Array.isArray(val) && !val.length)) continue
+      const fld = leadModuleFields.find(f => f.colId === colId)
+      if (!fld) continue
+      const cell = lead?.custom_data?.[fld.moduleId]?.[fld.fieldId] ?? ''
+      if (Array.isArray(val)) { if (!val.includes(cell)) return false }
+      else if (!String(cell).toLowerCase().includes(String(val).toLowerCase())) return false
+    }
     return true
   })
 
-  const filterCount = filters.stages.length + filters.priorities.length + filters.sources.length + (filters.dateFrom || filters.dateTo ? 1 : 0)
+  const customCount = Object.values(filters.custom).filter(v => Array.isArray(v) ? v.length : v).length
+  const filterCount = filters.stages.length + filters.priorities.length + filters.sources.length + filters.genders.length + (filters.dateFrom || filters.dateTo ? 1 : 0) + customCount
   const hasFilters = filterCount > 0
-  const clearFilters = () => setFilters({ stages: [], priorities: [], sources: [], dateFrom: '', dateTo: '' })
+  const clearFilters = () => setFilters({ stages: [], priorities: [], sources: [], genders: [], dateFrom: '', dateTo: '', custom: {} })
 
   const visibleCols = allColumns.filter(c => visible[c.id])
 
@@ -336,13 +361,13 @@ export default function LeadsPage() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div>
-            <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Leads</h1>
-            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-              {loading ? '—' : `${filtered.length} lead${filtered.length !== 1 ? 's' : ''}${hasFilters ? ' (filtered)' : ''}`}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Leads</h1>
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {loading ? '—' : `${filtered.length} lead${filtered.length !== 1 ? 's' : ''}${hasFilters ? ' (filtered)' : ''}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={loadLeads}
@@ -353,15 +378,15 @@ export default function LeadsPage() {
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
+          <Link href="/leads/new">
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
+              style={{ background: 'var(--color-brand)' }}
+            >
+              <Plus size={16} /> New Lead
+            </button>
+          </Link>
         </div>
-        <Link href="/leads/new">
-          <button
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-            style={{ background: 'var(--color-brand)' }}
-          >
-            <Plus size={16} /> New Lead
-          </button>
-        </Link>
       </div>
 
       {/* Filter bar */}
@@ -409,49 +434,60 @@ export default function LeadsPage() {
 
       {/* Advanced filter panel */}
       {filtersOpen && (
-        <Card className="p-4 border-(--color-border) space-y-4">
-          <div className="grid grid-cols-3 gap-6">
+        <Card className="p-3.5 border-(--color-border) space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-3">
             <MultiPill label="Stage"    options={STAGES}     selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
             <MultiPill label="Priority" options={PRIORITIES} selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
             <MultiPill label="Source"   options={SOURCES}    selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
-          </div>
+            <MultiPill label="Gender"   options={GENDERS}    selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
 
-          {/* Created date range */}
-          <div className="pt-3 border-t border-(--color-border)">
-            <p className="text-xs font-600 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Created date</p>
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Created date range */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-600 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Created date</p>
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>From</span>
                 <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined}
                   onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-                  className="px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                  className="flex-1 min-w-0 px-2 py-1 text-xs rounded-lg border border-(--color-border) outline-none"
                   style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>To</span>
+                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>–</span>
                 <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined}
                   onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-                  className="px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                  className="flex-1 min-w-0 px-2 py-1 text-xs rounded-lg border border-(--color-border) outline-none"
                   style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
               </div>
-              {(filters.dateFrom || filters.dateTo) && (
-                <button type="button" onClick={() => setFilters(f => ({ ...f, dateFrom: '', dateTo: '' }))}
-                  className="text-[11px] font-600 px-2 py-1 rounded-md hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
-                  Clear dates
-                </button>
-              )}
             </div>
+
+            {/* Custom module-field filters */}
+            {leadModuleFields.map(fld => (
+              (fld.type === 'select' || fld.type === 'boolean') ? (
+                <MultiPill key={fld.colId} label={fld.label}
+                  options={fld.type === 'boolean' ? ['Yes', 'No'] : fld.options}
+                  selected={filters.custom[fld.colId] || []}
+                  onChange={v => setCustom(fld.colId, v)} />
+              ) : (
+                <div key={fld.colId} className="space-y-1.5">
+                  <p className="text-[10px] font-600 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{fld.label}</p>
+                  <input
+                    value={filters.custom[fld.colId] || ''}
+                    onChange={e => setCustom(fld.colId, e.target.value)}
+                    placeholder={`Filter ${fld.label.toLowerCase()}…`}
+                    className="w-full px-2 py-1 text-xs rounded-lg border border-(--color-border) outline-none"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                </div>
+              )
+            ))}
           </div>
-          {hasFilters ? (
-            <div className="flex justify-end pt-2 border-t border-(--color-border)">
+
+          {hasFilters && (
+            <div className="flex justify-end pt-2.5 border-t border-(--color-border)">
               <button
                 onClick={clearFilters}
-                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
               >
-                <X size={12} /> Clear All Filters
+                <X size={12} /> Clear all
               </button>
             </div>
-          ) : null}
+          )}
         </Card>
       )}
 
