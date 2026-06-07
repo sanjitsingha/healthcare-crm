@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
-import { getLeads, deleteLead, updateLead } from '@/lib/supabase/queries'
+import { getLeads, deleteLead, updateLead, getTags } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -96,6 +96,108 @@ function MultiPill({ label, options, selected, onChange }) {
   )
 }
 
+// ── Multi-select dropdown (used for stage/priority/source/gender/tags/custom) ──
+function MultiSelect({ label, icon: Icon, options, selected, onChange, align = 'left' }) {
+  // options: array of { value, label, color? }
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const toggle = (v) => onChange(selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v])
+  const count = selected.length
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors"
+        style={count
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        {Icon && <Icon size={13} />}
+        <span className="flex-1 text-left truncate">{label}</span>
+        {count > 0 && <span className="text-[10px] font-700 px-1.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{count}</span>}
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className={clsx('absolute z-30 mt-1 min-w-44 max-h-64 overflow-y-auto rounded-xl border border-(--color-border) p-1', align === 'right' ? 'right-0' : 'left-0')}
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          {options.length === 0 && <p className="px-2.5 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
+          {options.map(o => {
+            const on = selected.includes(o.value)
+            return (
+              <button key={o.value} type="button" onClick={() => toggle(o.value)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                  style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                  {on && <Check size={10} className="text-white" />}
+                </span>
+                {o.color && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: o.color }} />}
+                <span className="flex-1 truncate">{o.label}</span>
+              </button>
+            )
+          })}
+          {count > 0 && (
+            <button type="button" onClick={() => onChange([])}
+              className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-(--color-border) text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const opts = (arr) => arr.map(v => ({ value: v, label: v }))
+
+// "Custom" dropdown — pick which custom module fields to expose as filters.
+function CustomFieldPicker({ fields, active, onToggle }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors"
+        style={active.length
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        <SlidersHorizontal size={13} />
+        <span className="flex-1 text-left">Custom</span>
+        {active.length > 0 && <span className="text-[10px] font-700 px-1.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{active.length}</span>}
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 right-0 min-w-48 max-h-64 overflow-y-auto rounded-xl border border-(--color-border) p-1"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          <p className="px-2.5 py-1.5 text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Custom fields</p>
+          {fields.map(f => {
+            const on = active.includes(f.colId)
+            return (
+              <button key={f.colId} type="button" onClick={() => onToggle(f.colId)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                  style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                  {on && <Check size={10} className="text-white" />}
+                </span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Column visibility dropdown ─────────────────────────────────
 function ColumnToggle({ allColumns, visible, setVisible }) {
   const [open, setOpen] = useState(false)
@@ -169,7 +271,21 @@ export default function LeadsPage() {
   // filters
   const [search,      setSearch]      = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [], genders: [], dateFrom: '', dateTo: '', custom: {} })
+  const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [], genders: [], tags: [], dateFrom: '', dateTo: '', custom: {} })
+  const [availableTags, setAvailableTags] = useState([])
+  const [activeCustom, setActiveCustom] = useState([]) // colIds of custom fields shown as filters
+
+  useEffect(() => {
+    if (!orgId) return
+    getTags(orgId, 'leads').then(t => setAvailableTags(t || [])).catch(() => setAvailableTags([]))
+  }, [orgId])
+
+  // Stage options come from the org's configured lead stages.
+  const stageOptions = useMemo(() => {
+    const s = org?.settings?.lead_stages
+    const names = (s && s.length ? s : STAGES).map(x => typeof x === 'string' ? x : x.name)
+    return names.filter(Boolean)
+  }, [org])
 
   // Custom module fields available to filter on (leads modules).
   const leadModuleFields = useMemo(() =>
@@ -183,6 +299,10 @@ export default function LeadsPage() {
     [org])
 
   const setCustom = (colId, value) => setFilters(f => ({ ...f, custom: { ...f.custom, [colId]: value } }))
+  const toggleCustomField = (colId) => {
+    setActiveCustom(prev => prev.includes(colId) ? prev.filter(c => c !== colId) : [...prev, colId])
+    if (activeCustom.includes(colId)) setCustom(colId, undefined) // clearing value when hiding
+  }
 
   // Build column list: base columns + one column per field in every active leads module
   const allColumns = useMemo(() => {
@@ -304,6 +424,10 @@ export default function LeadsPage() {
     if (filters.priorities.length && !filters.priorities.includes(lead.priority)) return false
     if (filters.sources.length    && !filters.sources.includes(lead.source))      return false
     if (filters.genders.length    && !filters.genders.includes(patientGender(lead))) return false
+    if (filters.tags.length) {
+      const leadTagIds = (lead.tags || []).map(t => t.tags?.id).filter(Boolean)
+      if (!filters.tags.some(id => leadTagIds.includes(id))) return false
+    }
     if (filters.dateFrom && new Date(lead.created_at) < startOfDay(new Date(filters.dateFrom))) return false
     if (filters.dateTo   && new Date(lead.created_at) > endOfDay(new Date(filters.dateTo)))     return false
     // Custom module-field filters
@@ -319,9 +443,9 @@ export default function LeadsPage() {
   })
 
   const customCount = Object.values(filters.custom).filter(v => Array.isArray(v) ? v.length : v).length
-  const filterCount = filters.stages.length + filters.priorities.length + filters.sources.length + filters.genders.length + (filters.dateFrom || filters.dateTo ? 1 : 0) + customCount
+  const filterCount = filters.stages.length + filters.priorities.length + filters.sources.length + filters.genders.length + filters.tags.length + (filters.dateFrom || filters.dateTo ? 1 : 0) + customCount
   const hasFilters = filterCount > 0
-  const clearFilters = () => setFilters({ stages: [], priorities: [], sources: [], genders: [], dateFrom: '', dateTo: '', custom: {} })
+  const clearFilters = () => { setFilters({ stages: [], priorities: [], sources: [], genders: [], tags: [], dateFrom: '', dateTo: '', custom: {} }); setActiveCustom([]) }
 
   const visibleCols = allColumns.filter(c => visible[c.id])
 
@@ -434,56 +558,61 @@ export default function LeadsPage() {
 
       {/* Advanced filter panel */}
       {filtersOpen && (
-        <Card className="p-3.5 border-(--color-border) space-y-3">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-3">
-            <MultiPill label="Stage"    options={STAGES}     selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
-            <MultiPill label="Priority" options={PRIORITIES} selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
-            <MultiPill label="Source"   options={SOURCES}    selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
-            <MultiPill label="Gender"   options={GENDERS}    selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
+        <Card className="p-3 border-(--color-border) space-y-2.5">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+            <MultiSelect label="Stage"    options={opts(stageOptions)} selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
+            <MultiSelect label="Priority" options={opts(PRIORITIES)}   selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
+            <MultiSelect label="Source"   options={opts(SOURCES)}      selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
+            <MultiSelect label="Gender"   options={opts(GENDERS)}      selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
+            <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
+              selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
 
-            {/* Created date range */}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-600 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Created date</p>
-              <div className="flex items-center gap-1.5">
-                <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined}
-                  onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-                  className="flex-1 min-w-0 px-2 py-1 text-xs rounded-lg border border-(--color-border) outline-none"
-                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>–</span>
-                <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined}
-                  onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-                  className="flex-1 min-w-0 px-2 py-1 text-xs rounded-lg border border-(--color-border) outline-none"
-                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-              </div>
+            {/* Custom field picker — choose which custom fields to filter by */}
+            {leadModuleFields.length > 0 && (
+              <CustomFieldPicker fields={leadModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+            )}
+          </div>
+
+          {/* Date range + activated custom filters */}
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 items-start">
+            <div className="col-span-2 flex items-center gap-1.5">
+              <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined}
+                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>–</span>
+              <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined}
+                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
             </div>
 
-            {/* Custom module-field filters */}
-            {leadModuleFields.map(fld => (
-              (fld.type === 'select' || fld.type === 'boolean') ? (
-                <MultiPill key={fld.colId} label={fld.label}
-                  options={fld.type === 'boolean' ? ['Yes', 'No'] : fld.options}
-                  selected={filters.custom[fld.colId] || []}
-                  onChange={v => setCustom(fld.colId, v)} />
-              ) : (
-                <div key={fld.colId} className="space-y-1.5">
-                  <p className="text-[10px] font-600 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>{fld.label}</p>
-                  <input
-                    value={filters.custom[fld.colId] || ''}
-                    onChange={e => setCustom(fld.colId, e.target.value)}
-                    placeholder={`Filter ${fld.label.toLowerCase()}…`}
-                    className="w-full px-2 py-1 text-xs rounded-lg border border-(--color-border) outline-none"
+            {activeCustom.map(colId => {
+              const fld = leadModuleFields.find(f => f.colId === colId)
+              if (!fld) return null
+              if (fld.type === 'select' || fld.type === 'boolean') {
+                return <MultiSelect key={colId} label={fld.label}
+                  options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
+                  selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
+              }
+              return (
+                <div key={colId} className="relative">
+                  <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
+                    placeholder={fld.label}
+                    className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
                     style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
+                    <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                  </button>
                 </div>
               )
-            ))}
+            })}
           </div>
 
           {hasFilters && (
-            <div className="flex justify-end pt-2.5 border-t border-(--color-border)">
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
-              >
+            <div className="flex justify-end pt-2 border-t border-(--color-border)">
+              <button onClick={clearFilters}
+                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
                 <X size={12} /> Clear all
               </button>
             </div>
