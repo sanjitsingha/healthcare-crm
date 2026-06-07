@@ -37,25 +37,6 @@ function LoginContent() {
 
   const supabase = createClient()
 
-  // If we land on /login already signed in but a second factor is pending
-  // (e.g. proxy redirected here, or after Google sign-in), resume the code step.
-  useEffect(() => {
-    let active = true
-    ;(async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user || !active) return
-        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-        if (aal?.currentLevel === 'aal1' && aal?.nextLevel === 'aal2') {
-          const { data: factors } = await supabase.auth.mfa.listFactors()
-          const totp = (factors?.totp || []).find(f => f.status === 'verified')
-          if (totp && active) { setMfaFactorId(totp.id); setMfaStep(true) }
-        }
-      } catch { /* ignore */ }
-    })()
-    return () => { active = false }
-  }, []) // eslint-disable-line
-
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true)
     setError('')

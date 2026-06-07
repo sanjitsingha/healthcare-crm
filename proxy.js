@@ -37,27 +37,18 @@ export async function proxy(request) {
   const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute
   const isProtectedRoute = !isPublicRoute && !isSetupRoute
 
-  // Unauthenticated + protected/setup → login
-  if (!user && (isProtectedRoute || isSetupRoute)) {
+  // Unauthenticated + protected → login
+  if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Authenticated but a verified second factor exists and hasn't been used
-  // this session (currentLevel aal1, nextLevel aal2) → force MFA on /login.
-  let mfaPending = false
-  if (user) {
-    try {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      mfaPending = aal?.currentLevel === 'aal1' && aal?.nextLevel === 'aal2'
-    } catch { /* ignore */ }
+  // Unauthenticated + setup → login
+  if (!user && isSetupRoute) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && mfaPending && (isProtectedRoute || isSetupRoute)) {
-    return NextResponse.redirect(new URL('/login?mfa=1', request.url))
-  }
-
-  // Fully authenticated (no pending factor) visiting login → into the app
-  if (user && !mfaPending && pathname === '/login') {
+  // Authenticated + login page → let dashboard layout decide (setup vs dashboard)
+  if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
