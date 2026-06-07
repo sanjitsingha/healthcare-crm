@@ -99,7 +99,7 @@ export default function ToastHost() {
       addToast(opts)
       if (orgId) {
         createNotification({ organization_id: orgId, eid: opts?.eid, type: opts?.type, title: opts?.title, message: opts?.message })
-          .catch(() => { /* table may not exist yet; toast still shows */ })
+          .catch((e) => { console.warn('[notifications] insert failed:', e?.message || e) })
       }
     })
   }, [orgId])

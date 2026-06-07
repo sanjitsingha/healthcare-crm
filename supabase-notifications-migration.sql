@@ -1,6 +1,8 @@
--- ── Notifications table ────────────────────────────────────────
--- Org-wide notification feed. Read/dismissed state is tracked per-user on the
--- client; this table only stores the notification content.
+-- ════════════════════════════════════════════════════════════════
+-- STEP 1 — Core table. Run this first, on its own. It MUST succeed.
+-- (Supabase SQL editor runs a script as one transaction, so keep the
+--  pg_cron part separate — if it fails it would roll back the table.)
+-- ════════════════════════════════════════════════════════════════
 
 create table if not exists notifications (
   id              uuid default gen_random_uuid() primary key,
@@ -15,23 +17,32 @@ create table if not exists notifications (
 create index if not exists notifications_org_created_idx
   on notifications (organization_id, created_at desc);
 
--- RLS — kept permissive to match the rest of the project (tighten before prod).
+-- RLS — permissive to match the rest of the project (tighten before prod).
 alter table notifications enable row level security;
 drop policy if exists "notifications all" on notifications;
 create policy "notifications all" on notifications for all using (true) with check (true);
 
--- Realtime: let clients subscribe to inserts.
-alter publication supabase_realtime add table notifications;
+-- Realtime: let clients subscribe to inserts (ignore if already added).
+do $$
+begin
+  alter publication supabase_realtime add table notifications;
+exception when duplicate_object then null;
+end $$;
 
--- ── Auto-delete after 30 days (pg_cron) ────────────────────────
-create extension if not exists pg_cron;
+-- Quick check — should return the columns above:
+-- select * from notifications limit 1;
 
--- (Re)schedule the daily purge at 03:00 UTC.
-select cron.unschedule('purge-old-notifications')
-where exists (select 1 from cron.job where jobname = 'purge-old-notifications');
 
-select cron.schedule(
-  'purge-old-notifications',
-  '0 3 * * *',
-  $$ delete from notifications where created_at < now() - interval '30 days' $$
-);
+-- ════════════════════════════════════════════════════════════════
+-- STEP 2 — Auto-delete after 30 days (pg_cron). Run SEPARATELY, after
+-- Step 1 succeeds. If pg_cron isn't enabled, enable it first:
+--   Dashboard → Database → Extensions → search "pg_cron" → enable.
+-- This step is optional; the table works without it.
+-- ════════════════════════════════════════════════════════════════
+
+-- create extension if not exists pg_cron;
+-- select cron.schedule(
+--   'purge-old-notifications',
+--   '0 3 * * *',
+--   $$ delete from notifications where created_at < now() - interval '30 days' $$
+-- );
