@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Bell, TrendingUp, UserRound, Calendar, PhoneCall, CheckSquare, Stethoscope } from 'lucide-react'
 import { subscribeToast } from '@/lib/toast'
+import { createClient } from '@/lib/supabase/client'
+import { useOrg } from '@/lib/context/OrgContext'
 
 // Icon + color per notification type.
 export const NOTIF_STYLE = {
@@ -55,19 +57,38 @@ export function ToastCard({ type = 'default', title, message, onClose, duration 
 // Global host: listens for toast() calls and renders them bottom-right with a
 // slide-in → stay → slide-out animation. Mounted once in the dashboard layout.
 export default function ToastHost() {
+  const { orgId } = useOrg()
   const [toasts, setToasts] = useState([])
   const idRef = useRef(0)
+  const channelRef = useRef(null)
 
+  // Push a toast into the stack + schedule its exit.
+  const addToast = (opts) => {
+    const id = ++idRef.current
+    const duration = opts?.duration ?? 5000
+    setToasts(list => [...list, { id, leaving: false, duration, ...opts }])
+    setTimeout(() => {
+      setToasts(list => list.map(t => t.id === id ? { ...t, leaving: true } : t))
+      setTimeout(() => setToasts(list => list.filter(t => t.id !== id)), 320)
+    }, duration)
+  }
+
+  // Org-wide realtime channel: receive toasts broadcast by other clients.
+  useEffect(() => {
+    if (!orgId) return
+    const supabase = createClient()
+    const channel = supabase.channel(`org-notify-${orgId}`, { config: { broadcast: { self: false } } })
+    channel.on('broadcast', { event: 'toast' }, ({ payload }) => addToast(payload))
+    channel.subscribe()
+    channelRef.current = channel
+    return () => { try { supabase.removeChannel(channel) } catch {} channelRef.current = null }
+  }, [orgId])
+
+  // Local toast() calls: show here immediately, and broadcast to other clients.
   useEffect(() => {
     return subscribeToast((opts) => {
-      const id = ++idRef.current
-      const duration = opts?.duration ?? 5000
-      setToasts(list => [...list, { id, leaving: false, duration, ...opts }])
-      // Auto start the exit animation, then remove.
-      setTimeout(() => {
-        setToasts(list => list.map(t => t.id === id ? { ...t, leaving: true } : t))
-        setTimeout(() => setToasts(list => list.filter(t => t.id !== id)), 320)
-      }, duration)
+      addToast(opts)
+      try { channelRef.current?.send({ type: 'broadcast', event: 'toast', payload: opts }) } catch {}
     })
   }, [])
 
