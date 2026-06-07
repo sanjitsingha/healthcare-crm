@@ -27,6 +27,8 @@ export default function TwoFactorSettings() {
   const [busy, setBusy]         = useState(false)
   const [error, setError]       = useState('')
   const [copied, setCopied]     = useState(false)
+  const [disableFactor, setDisableFactor] = useState(null) // factorId awaiting a code to confirm removal
+  const [disableCode, setDisableCode]     = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -72,8 +74,36 @@ export default function TwoFactorSettings() {
   const remove = async (factorId) => {
     if (!confirm('Disable two-factor authentication? You will no longer be asked for a code at sign-in.')) return
     setBusy(true); setError('')
-    try { await supabase.auth.mfa.unenroll({ factorId }); await load() }
-    catch (e) { setError(e.message) }
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId })
+      if (error) {
+        // Removing a verified factor needs an elevated (AAL2) session — ask for a code.
+        if (/aal2|assurance|insufficient|elevated|level/i.test(error.message)) {
+          setDisableFactor(factorId)
+        } else {
+          setError(error.message)
+        }
+        return
+      }
+      await load()
+    } catch (e) { setError(e.message) }
+    finally { setBusy(false) }
+  }
+
+  // Step up to AAL2 with a current code, then remove the factor.
+  const confirmDisable = async (e) => {
+    e?.preventDefault?.()
+    if (!disableFactor || disableCode.replace(/\s/g, '').length < 6) return
+    setBusy(true); setError('')
+    try {
+      const { data: ch, error: cErr } = await supabase.auth.mfa.challenge({ factorId: disableFactor })
+      if (cErr) throw cErr
+      const { error: vErr } = await supabase.auth.mfa.verify({ factorId: disableFactor, challengeId: ch.id, code: disableCode.replace(/\s/g, '') })
+      if (vErr) throw vErr
+      const { error: uErr } = await supabase.auth.mfa.unenroll({ factorId: disableFactor })
+      if (uErr) throw uErr
+      setDisableFactor(null); setDisableCode(''); await load()
+    } catch (e2) { setError('Could not disable — check the 6-digit code and try again.') }
     finally { setBusy(false) }
   }
 
@@ -134,19 +164,47 @@ export default function TwoFactorSettings() {
         </div>
       ) : verified ? (
         /* ── Enabled state ── */
-        <div className="flex items-center gap-3 p-3 rounded-xl border" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#dcfce7' }}>
-            <ShieldCheck size={18} style={{ color: '#15803d' }} />
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 p-3 rounded-xl border" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#dcfce7' }}>
+              <ShieldCheck size={18} style={{ color: '#15803d' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-600" style={{ color: '#15803d' }}>Two-factor authentication is on</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>You'll enter a code from your authenticator app at sign-in.</p>
+            </div>
+            {!disableFactor && (
+              <button type="button" onClick={() => remove(verified.id)} disabled={busy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border transition-colors hover:bg-red-50 shrink-0"
+                style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
+                <Trash2 size={13} /> Disable
+              </button>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-600" style={{ color: '#15803d' }}>Two-factor authentication is on</p>
-            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>You'll enter a code from your authenticator app at sign-in.</p>
-          </div>
-          <button type="button" onClick={() => remove(verified.id)} disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border transition-colors hover:bg-red-50 shrink-0"
-            style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
-            <Trash2 size={13} /> Disable
-          </button>
+
+          {disableFactor && (
+            <form onSubmit={confirmDisable} className="p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+              <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                Enter a current 6-digit code from your authenticator to confirm turning 2FA off.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={disableCode}
+                  onChange={e => setDisableCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                  placeholder="123456"
+                  inputMode="numeric"
+                  className="w-32 px-3 py-2 rounded-lg border text-sm font-mono tracking-widest outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                />
+                <Button type="submit" size="sm" disabled={busy || disableCode.length < 6}>{busy ? 'Disabling…' : 'Confirm disable'}</Button>
+                <Button variant="secondary" size="sm" type="button" onClick={() => { setDisableFactor(null); setDisableCode(''); setError('') }}>Cancel</Button>
+              </div>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--color-text-muted)' }}>
+                Lost your authenticator? Remove the factor from Supabase → Authentication → Users, or run the SQL your developer provided.
+              </p>
+            </form>
+          )}
         </div>
       ) : (
         /* ── Not enabled ── */
