@@ -42,3 +42,9 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
 .recharts-wrapper *:focus {
   outline: none !important;
 }
+
+/* Toast timer bar: deplete width 100% -> 0 over the toast duration */
+@keyframes toastTimer {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
