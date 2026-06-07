@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Bell, TrendingUp, UserRound, Calendar, PhoneCall, CheckSquare, Stethoscope } from 'lucide-react'
 import { subscribeToast } from '@/lib/toast'
+import { addNotification } from '@/lib/notifications'
 import { createClient } from '@/lib/supabase/client'
 import { useOrg } from '@/lib/context/OrgContext'
 
@@ -57,13 +58,14 @@ export function ToastCard({ type = 'default', title, message, onClose, duration 
 // Global host: listens for toast() calls and renders them bottom-right with a
 // slide-in → stay → slide-out animation. Mounted once in the dashboard layout.
 export default function ToastHost() {
-  const { orgId } = useOrg()
+  const { orgId, user } = useOrg()
   const [toasts, setToasts] = useState([])
   const idRef = useRef(0)
   const channelRef = useRef(null)
 
-  // Push a toast into the stack + schedule its exit.
+  // Push a toast into the stack + schedule its exit, and record it in history.
   const addToast = (opts) => {
+    addNotification(user?.id, { eid: opts?.eid, type: opts?.type, title: opts?.title, message: opts?.message })
     const id = ++idRef.current
     const duration = opts?.duration ?? 5000
     setToasts(list => [...list, { id, leaving: false, duration, ...opts }])

@@ -35,7 +35,7 @@ import { useSidebar } from "@/lib/context/SidebarContext";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/reminders", icon: BellRing, label: "Reminders" },
+  { href: "/notifications", icon: BellRing, label: "Notifications" },
   { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/patients", icon: UserRound, label: "Patients" },
   { href: "/appointments", icon: CalendarDays, label: "Appointments" },
