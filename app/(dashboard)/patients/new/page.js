@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ArrowLeft, Save } from 'lucide-react'
 import { Button, Card, Input, Select, Textarea } from '@/components/ui'
 import { createPatient } from '@/lib/supabase/queries'
+import { toast } from '@/lib/toast'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -51,6 +52,7 @@ export default function NewPatientPage() {
         medical_history: form.notes ? [{ note: form.notes, date: new Date().toISOString() }] : [],
         organization_id: orgId,
       })
+      toast({ type: 'patient_created', title: 'Patient Created', message: `${[form.first_name, form.last_name].filter(Boolean).join(' ').trim()} was registered.` })
       router.push(`/patients/${patient.id}`)
     } catch (err) {
       alert('Error: ' + err.message)

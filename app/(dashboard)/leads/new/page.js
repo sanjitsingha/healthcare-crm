@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ArrowLeft, Save } from 'lucide-react'
 import { Button, Card, Input, Select, Textarea } from '@/components/ui'
 import { createLead } from '@/lib/supabase/queries'
+import { toast } from '@/lib/toast'
 import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -167,6 +168,7 @@ export default function NewLeadPage() {
         custom_data:     Object.keys(customData).length ? customData : null,
       })
 
+      toast({ type: 'lead_created', title: 'Lead Created', message: `${fullName} was added as a new lead.` })
       router.push(`/leads/${lead.id}`)
     } catch (err) {
       alert('Error: ' + err.message)

@@ -21,6 +21,7 @@ import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
+import { toast } from '@/lib/toast'
 import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
 import clsx from 'clsx'
@@ -656,6 +657,7 @@ export default function LeadDetailPage({ params }) {
       // …and the first entry on the new patient's timeline.
       await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}` })
       await refreshActivities(pat.id)
+      toast({ type: 'patient_created', title: 'Converted to Patient', message: `${displayName} is now a patient.` })
     } catch (err) { alert(err.message) }
   }
 
@@ -670,6 +672,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setTaskOpen(false)
       setNewTask({ title: '', priority: 'Medium', due_date: '' })
+      toast({ type: 'task', title: 'Task Added', message: `${displayName}: ${t.title}` })
       await applyRules('task_added')
     } catch (e) { alert(e.message) }
   }
@@ -707,6 +710,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setShowFuForm(false)
       setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+      toast({ type: 'followup', title: `${f.type} logged`, message: `${displayName}${f.outcome ? ` — ${f.outcome}` : ''}` })
       // Event-based automation (configured in Settings → Rules)
       await applyRules('followup_logged')
     } catch (e) { alert(e.message) }
@@ -792,6 +796,7 @@ export default function LeadDetailPage({ params }) {
       await logActivity(String(f.type).toLowerCase() === 'call' ? 'call' : 'note',
         `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
       await refreshActivities()
+      toast({ type: 'followup', title: `${f.type} logged`, message: `${displayName}${f.outcome ? ` — ${f.outcome}` : ''}` })
       await applyRules('followup_logged')
     } catch (err) { alert(err.message) }
   }
@@ -871,6 +876,8 @@ export default function LeadDetailPage({ params }) {
 
       await logActivity('meeting', `Appointment booked for ${format(apptDate, 'MMM d, yyyy')}`)
       await refreshActivities(patientId)
+      const apptDoctor = doctors.find(d => d.id === newAppt.doctor_id)
+      toast({ type: 'appointment', title: 'Appointment Booked', message: `${newAppt.name || displayName} on ${format(apptDate, 'MMM d, h:mm a')}${apptDoctor ? ` with ${apptDoctor.name}` : ''}` })
       setShowBookForm(false)
       setNewAppt({ date: '', name: '', phone: '', notes: '', doctor_id: '' })
       // Event-based automation (configured in Settings → Rules)

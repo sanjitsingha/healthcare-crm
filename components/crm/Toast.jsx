@@ -1,5 +1,7 @@
 'use client'
+import { useEffect, useRef, useState } from 'react'
 import { X, Bell, TrendingUp, UserRound, Calendar, PhoneCall, CheckSquare, Stethoscope } from 'lucide-react'
+import { subscribeToast } from '@/lib/toast'
 
 // Icon + color per notification type.
 export const NOTIF_STYLE = {
@@ -50,17 +52,39 @@ export function ToastCard({ type = 'default', title, message, onClose, duration 
   )
 }
 
-// Temporary static preview so the UI can be reviewed before wiring animation + triggers.
-export default function ToastPreview() {
+// Global host: listens for toast() calls and renders them bottom-right with a
+// slide-in → stay → slide-out animation. Mounted once in the dashboard layout.
+export default function ToastHost() {
+  const [toasts, setToasts] = useState([])
+  const idRef = useRef(0)
+
+  useEffect(() => {
+    return subscribeToast((opts) => {
+      const id = ++idRef.current
+      const duration = opts?.duration ?? 5000
+      setToasts(list => [...list, { id, leaving: false, duration, ...opts }])
+      // Auto start the exit animation, then remove.
+      setTimeout(() => {
+        setToasts(list => list.map(t => t.id === id ? { ...t, leaving: true } : t))
+        setTimeout(() => setToasts(list => list.filter(t => t.id !== id)), 320)
+      }, duration)
+    })
+  }, [])
+
+  const dismiss = (id) => {
+    setToasts(list => list.map(t => t.id === id ? { ...t, leaving: true } : t))
+    setTimeout(() => setToasts(list => list.filter(t => t.id !== id)), 320)
+  }
+
+  if (toasts.length === 0) return null
+
   return (
-    <div className="fixed right-5 bottom-16 z-50">
-      <ToastCard
-        type="appointment"
-        title="Appointment Booked"
-        message="PT1 has an appointment with Dr. Sharma on Jun 12, 10:00 AM"
-        duration={4000}
-        loop
-      />
+    <div className="fixed right-5 bottom-16 z-50 flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div key={t.id} className="pointer-events-auto" style={{ animation: `${t.leaving ? 'toastOut' : 'toastIn'} 0.3s cubic-bezier(0.22,1,0.36,1) forwards` }}>
+          <ToastCard type={t.type} title={t.title} message={t.message} duration={t.duration} onClose={() => dismiss(t.id)} />
+        </div>
+      ))}
     </div>
   )
 }

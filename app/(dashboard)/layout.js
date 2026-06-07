@@ -5,7 +5,7 @@ import { SidebarStateProvider } from '@/lib/context/SidebarContext'
 import Sidebar from '@/components/crm/Sidebar'
 import MainContent from '@/components/crm/MainContent'
 import ThemeApplier from '@/components/crm/ThemeApplier'
-import ToastPreview from '@/components/crm/Toast'
+import ToastHost from '@/components/crm/Toast'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -29,7 +29,7 @@ export default async function DashboardLayout({ children }) {
           <Sidebar />
           <MainContent>{children}</MainContent>
         </div>
-        <ToastPreview />
+        <ToastHost />
       </SidebarStateProvider>
     </OrgProvider>
   )

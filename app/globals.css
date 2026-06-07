@@ -48,3 +48,13 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
   from { width: 100%; }
   to   { width: 0%; }
 }
+
+/* Toast slide in/out (from the right) */
+@keyframes toastIn {
+  from { transform: translateX(120%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@keyframes toastOut {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(120%); opacity: 0; }
+}

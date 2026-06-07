@@ -21,6 +21,7 @@ import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
+import { toast } from '@/lib/toast'
 import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import clsx from 'clsx'
@@ -246,7 +247,7 @@ export default function PatientDetailPage({ params }) {
   const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
   const handleEdit = async (e) => { e.preventDefault(); try { const updated = await updatePatient(id, editForm); setPatient(prev => ({ ...prev, ...updated })); setEditOpen(false) } catch (err) { alert(err.message) } }
   const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)); if (status === 'Completed') await applyRules('task_completed') }
-  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); await applyRules('task_added') }
+  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); toast({ type: 'task', title: 'Task Added', message: `${fullName}: ${t.title}` }); await applyRules('task_added') }
 
   const handleAddRecord = async (e) => {
     e.preventDefault()
@@ -269,6 +270,7 @@ export default function PatientDetailPage({ params }) {
     setFollowups(prev => [f, ...prev])
     await logActivity('note', `${newFu.type} logged: ${newFu.status_detail}${newFu.response ? ` | Response: ${newFu.response}` : ''}`)
     setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
+    toast({ type: 'followup', title: `${f.type} logged`, message: `${fullName}${f.outcome ? ` — ${f.outcome}` : ''}` })
   }
   const handleCompleteFollowup = async (fuId, outcome) => { const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
@@ -297,6 +299,7 @@ export default function PatientDetailPage({ params }) {
       })
       setFollowups(prev => [f, ...prev])
       await logActivity('note', `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
+      toast({ type: 'followup', title: `${f.type} logged`, message: `${fullName}${f.outcome ? ` — ${f.outcome}` : ''}` })
     } catch (err) { alert(err.message) }
   }
 
@@ -340,6 +343,8 @@ export default function PatientDetailPage({ params }) {
       })
       setAppointments(prev => [appt, ...prev])
       await logActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
+      const apptDoc = doctors.find(d => d.id === apptForm.doctor_id)
+      toast({ type: 'appointment', title: 'Appointment Booked', message: `${fullName} on ${format(scheduledAt, 'MMM d, h:mm a')}${apptDoc ? ` with ${apptDoc.name}` : ''}` })
       setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
       await applyRules('appointment_booked')
     } catch (err) { alert(err.message) } finally { setSavingAppt(false) }
