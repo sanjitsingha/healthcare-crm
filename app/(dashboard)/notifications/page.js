@@ -1,11 +1,13 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import { BellRing, CheckCheck, Trash2, X } from 'lucide-react'
-import { Card } from '@/components/ui'
+import { BellRing, CheckCheck, Trash2, X, RefreshCw } from 'lucide-react'
+import { Card, Spinner } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { NOTIF_STYLE } from '@/components/crm/Toast'
+import { getNotifications } from '@/lib/supabase/queries'
+import { createClient } from '@/lib/supabase/client'
 import {
-  getNotifications, subscribeNotifications, markAllRead, removeNotification, clearNotifications,
+  getReadIds, getDismissedIds, markRead, markAllRead, dismiss, clearAll, subscribeNotifState,
 } from '@/lib/notifications'
 import { isToday, isYesterday, format, formatDistanceToNow } from 'date-fns'
 
@@ -18,35 +20,50 @@ const FILTERS = [
   { id: 'task',            label: 'Tasks' },
 ]
 
-function dayBucket(d) {
-  if (isToday(d)) return 'Today'
-  if (isYesterday(d)) return 'Yesterday'
-  return 'Earlier'
-}
+const dayBucket = (d) => isToday(d) ? 'Today' : isYesterday(d) ? 'Yesterday' : 'Earlier'
 
 export default function NotificationsPage() {
-  const { user } = useOrg()
+  const { orgId, user } = useOrg()
   const uid = user?.id
-  const [items, setItems] = useState([])
-
-  useEffect(() => {
-    setItems(getNotifications(uid))
-    return subscribeNotifications(setItems)
-  }, [uid])
-
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
-  const shown = filter === 'all' ? items : items.filter(n => n.type === filter)
-  const unread = items.filter(n => !n.read).length
+  const [, force] = useState(0) // re-render on read/dismiss changes
 
-  // Group by day, preserving newest-first order.
+  const load = () => {
+    if (!orgId) return
+    setLoading(true)
+    getNotifications({ orgId }).then(r => setRows(r || [])).catch(() => setRows([])).finally(() => setLoading(false))
+  }
+  useEffect(load, [orgId])
+
+  // Live updates: new rows + read/dismiss state changes.
+  useEffect(() => {
+    if (!orgId) return
+    const supabase = createClient()
+    const ch = supabase
+      .channel(`notif-page-${orgId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `organization_id=eq.${orgId}` },
+        ({ new: row }) => setRows(list => list.some(x => x.id === row.id) ? list : [row, ...list]))
+      .subscribe()
+    return () => { try { supabase.removeChannel(ch) } catch {} }
+  }, [orgId])
+  useEffect(() => subscribeNotifState(() => force(n => n + 1)), [])
+
+  const readIds = getReadIds(uid)
+  const dismissed = getDismissedIds(uid)
+
+  const visible = rows.filter(n => !dismissed.has(n.id))
+  const shown = filter === 'all' ? visible : visible.filter(n => n.type === filter)
+  const unread = visible.filter(n => !readIds.has(n.id)).length
+
   const groups = useMemo(() => {
     const g = {}
-    for (const n of shown) {
-      const b = dayBucket(new Date(n.created_at))
-      ;(g[b] ||= []).push(n)
-    }
+    for (const n of shown) (g[dayBucket(new Date(n.created_at))] ||= []).push(n)
     return ['Today', 'Yesterday', 'Earlier'].filter(k => g[k]?.length).map(k => [k, g[k]])
   }, [shown])
+
+  if (loading) return <div className="p-6 flex items-center justify-center h-[60vh]"><Spinner /></div>
 
   return (
     <div className="p-6 space-y-4">
@@ -59,20 +76,24 @@ export default function NotificationsPage() {
           <div>
             <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Notifications</h1>
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-              {unread > 0 ? <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>{unread} unread</span> : `${items.length} notification${items.length !== 1 ? 's' : ''}`}
+              {unread > 0 ? <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>{unread} unread</span> : `${visible.length} notification${visible.length !== 1 ? 's' : ''}`}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => markAllRead(uid)} disabled={!unread}
+          <button type="button" onClick={() => markAllRead(uid, visible.map(n => n.id))} disabled={!unread}
             className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors disabled:opacity-40"
             style={{ color: 'var(--color-text-secondary)' }}>
             <CheckCheck size={14} /> Mark all read
           </button>
-          <button type="button" onClick={() => { if (confirm('Clear all notifications?')) clearNotifications(uid) }} disabled={!items.length}
+          <button type="button" onClick={() => { if (confirm('Clear all notifications from your view?')) clearAll(uid, visible.map(n => n.id)) }} disabled={!visible.length}
             className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
             style={{ color: 'var(--color-text-secondary)' }}>
             <Trash2 size={14} /> Clear
+          </button>
+          <button type="button" onClick={load} title="Refresh"
+            className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
+            <RefreshCw size={15} />
           </button>
         </div>
       </div>
@@ -107,15 +128,17 @@ export default function NotificationsPage() {
                 {list.map(n => {
                   const s = NOTIF_STYLE[n.type] || NOTIF_STYLE.default
                   const Icon = s.icon
+                  const isUnread = !readIds.has(n.id)
                   return (
-                    <div key={n.id} className="group flex items-start gap-3 px-4 py-3 border-b border-(--color-border) last:border-b-0 transition-colors"
-                      style={{ background: n.read ? 'transparent' : 'var(--color-brand-50)' }}>
+                    <div key={n.id} onClick={() => isUnread && markRead(uid, n.id)}
+                      className="group flex items-start gap-3 px-4 py-3 border-b border-(--color-border) last:border-b-0 transition-colors cursor-default"
+                      style={{ background: isUnread ? 'var(--color-brand-50)' : 'transparent' }}>
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: s.color + '1a' }}>
                         <Icon size={15} style={{ color: s.color }} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          {!n.read && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-brand)' }} />}
+                          {isUnread && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-brand)' }} />}
                           <p className="text-sm font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{n.title}</p>
                         </div>
                         {n.message && <p className="text-xs mt-0.5 leading-snug" style={{ color: 'var(--color-text-muted)' }}>{n.message}</p>}
@@ -123,7 +146,7 @@ export default function NotificationsPage() {
                           {format(new Date(n.created_at), 'h:mm a')} · {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
                         </p>
                       </div>
-                      <button type="button" onClick={() => removeNotification(uid, n.id)} title="Dismiss"
+                      <button type="button" onClick={(e) => { e.stopPropagation(); dismiss(uid, n.id) }} title="Dismiss"
                         className="shrink-0 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-(--color-surface-2) transition-all" style={{ color: 'var(--color-text-muted)' }}>
                         <X size={14} />
                       </button>

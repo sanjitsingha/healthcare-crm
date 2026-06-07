@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Bell, TrendingUp, UserRound, Calendar, PhoneCall, CheckSquare, Stethoscope } from 'lucide-react'
 import { subscribeToast } from '@/lib/toast'
-import { addNotification } from '@/lib/notifications'
+import { createNotification } from '@/lib/supabase/queries'
 import { createClient } from '@/lib/supabase/client'
 import { useOrg } from '@/lib/context/OrgContext'
 
@@ -58,14 +58,13 @@ export function ToastCard({ type = 'default', title, message, onClose, duration 
 // Global host: listens for toast() calls and renders them bottom-right with a
 // slide-in → stay → slide-out animation. Mounted once in the dashboard layout.
 export default function ToastHost() {
-  const { orgId, user } = useOrg()
+  const { orgId } = useOrg()
   const [toasts, setToasts] = useState([])
   const idRef = useRef(0)
-  const channelRef = useRef(null)
+  const shownEids = useRef(new Set())
 
-  // Push a toast into the stack + schedule its exit, and record it in history.
+  // Push a toast into the stack + schedule its exit.
   const addToast = (opts) => {
-    addNotification(user?.id, { eid: opts?.eid, type: opts?.type, title: opts?.title, message: opts?.message })
     const id = ++idRef.current
     const duration = opts?.duration ?? 5000
     setToasts(list => [...list, { id, leaving: false, duration, ...opts }])
@@ -75,24 +74,35 @@ export default function ToastHost() {
     }, duration)
   }
 
-  // Org-wide realtime channel: receive toasts broadcast by other clients.
+  // Realtime: every inserted notification surfaces as a toast on all clients in
+  // the org (deduped against locally-shown ones by event id).
   useEffect(() => {
     if (!orgId) return
     const supabase = createClient()
-    const channel = supabase.channel(`org-notify-${orgId}`, { config: { broadcast: { self: false } } })
-    channel.on('broadcast', { event: 'toast' }, ({ payload }) => addToast(payload))
-    channel.subscribe()
-    channelRef.current = channel
-    return () => { try { supabase.removeChannel(channel) } catch {} channelRef.current = null }
+    const channel = supabase
+      .channel(`notif-${orgId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `organization_id=eq.${orgId}` },
+        ({ new: row }) => {
+          if (row?.eid && shownEids.current.has(row.eid)) return
+          if (row?.eid) shownEids.current.add(row.eid)
+          addToast({ type: row.type, title: row.title, message: row.message })
+        })
+      .subscribe()
+    return () => { try { supabase.removeChannel(channel) } catch {} }
   }, [orgId])
 
-  // Local toast() calls: show here immediately, and broadcast to other clients.
+  // Local toast() calls: show immediately, and persist to the DB (which fans
+  // out to every other client via the realtime subscription above).
   useEffect(() => {
     return subscribeToast((opts) => {
+      if (opts?.eid) shownEids.current.add(opts.eid)
       addToast(opts)
-      try { channelRef.current?.send({ type: 'broadcast', event: 'toast', payload: opts }) } catch {}
+      if (orgId) {
+        createNotification({ organization_id: orgId, eid: opts?.eid, type: opts?.type, title: opts?.title, message: opts?.message })
+          .catch(() => { /* table may not exist yet; toast still shows */ })
+      }
     })
-  }, [])
+  }, [orgId])
 
   const dismiss = (id) => {
     setToasts(list => list.map(t => t.id === id ? { ...t, leaving: true } : t))
