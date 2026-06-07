@@ -4,6 +4,7 @@ import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
   CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
+  List, Table2, ArrowUpDown,
 } from 'lucide-react'
 import { Button, Card, Input, Textarea, Spinner, Modal, Select } from '@/components/ui'
 import {
@@ -19,6 +20,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
+import FollowupTable from '@/components/crm/FollowupTable'
 import { matchingRules } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
 import clsx from 'clsx'
@@ -185,6 +187,9 @@ export default function PatientDetailPage({ params }) {
   const [savingRecord, setSavingRecord] = useState(false)
   const [showFuForm, setShowFuForm] = useState(false)
   const [newFu, setNewFu] = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
+  const [fuView, setFuView] = useState('regular')
+  const [fuSort, setFuSort] = useState('added')
+  const [fuSortOpen, setFuSortOpen] = useState(false)
   const [assigningPatient, setAssigningPatient] = useState(false)
   const [appointments, setAppointments] = useState([])
   const [addingAppt, setAddingAppt] = useState(false)
@@ -259,6 +264,32 @@ export default function PatientDetailPage({ params }) {
   const handleCompleteFollowup = async (fuId, outcome) => { const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
   const handleRescheduleFollowup = async (fuId, newDate, newType) => { const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
+
+  // Inline cell edit from the table view.
+  const handleFollowupField = async (fuId, patch) => {
+    const prev = followups.find(f => f.id === fuId)
+    setFollowups(list => list.map(f => f.id === fuId ? { ...f, ...patch } : f))
+    try {
+      const updated = await updateFollowup(fuId, patch)
+      setFollowups(list => list.map(f => f.id === fuId ? updated : f))
+    } catch (err) { setFollowups(list => list.map(f => f.id === fuId ? prev : f)); alert(err.message) }
+  }
+  // Inline create from the table's empty bottom row.
+  const handleCreateFollowupInline = async (patch) => {
+    if (!orgId) return
+    try {
+      const scheduled_at = patch.scheduled_at || new Date().toISOString()
+      const isFuture = new Date(scheduled_at).getTime() > Date.now()
+      const f = await createFollowup({
+        type: patch.type || 'Call', scheduled_at, notes: patch.notes ?? null,
+        outcome: patch.outcome ?? null, caller_name: patch.caller_name ?? null,
+        status: patch.status || (isFuture ? 'Scheduled' : 'Completed'),
+        organization_id: orgId, patient_id: id, lead_id: null,
+      })
+      setFollowups(prev => [f, ...prev])
+      await logActivity('note', `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
+    } catch (err) { alert(err.message) }
+  }
 
   // Apply configured automation rules (Settings → Rules) for a patient event.
   const applyRules = async (eventKey) => {
@@ -631,12 +662,63 @@ export default function PatientDetailPage({ params }) {
         ))}
 
         <Card className="border-(--color-border) overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <div className="flex items-center gap-2.5">
+              <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
+              <div className="flex items-center gap-0.5">
+                {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id: vid, Icon, title }) => (
+                  <button key={vid} type="button" title={title} onClick={() => setFuView(vid)}
+                    className="p-1.5 rounded-md transition-all"
+                    style={fuView === vid ? { background: 'var(--color-brand)', color: 'white' } : { color: 'var(--color-text-muted)' }}>
+                    <Icon size={14} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {fuView === 'table' && (
+                <div className="relative">
+                  <button type="button" title="Sort" onClick={() => setFuSortOpen(o => !o)}
+                    className="p-1.5 rounded-md border border-(--color-border) hover:bg-(--color-surface)" style={{ color: 'var(--color-text-muted)' }}>
+                    <ArrowUpDown size={14} />
+                  </button>
+                  {fuSortOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setFuSortOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-(--color-border) py-1" style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                        {[{ id: 'added', label: 'Date added' }, { id: 'modified_desc', label: 'Last modified — newest first' }, { id: 'modified_asc', label: 'Last modified — oldest first' }].map(o => (
+                          <button key={o.id} type="button" onClick={() => { setFuSort(o.id); setFuSortOpen(false) }}
+                            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-primary)' }}>
+                            {o.label}{fuSort === o.id && <Check size={13} style={{ color: 'var(--color-brand)' }} />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {!showFuForm && fuView === 'regular' && <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>}
+            </div>
           </div>
-          <div className="p-5 space-y-3">
+          <div className="p-3 space-y-3">
+            {fuView === 'table' ? (
+              <div className="max-h-150 overflow-y-auto">
+                <FollowupTable
+                  followups={followups}
+                  staff={org?.settings?.staff_members || []}
+                  onField={handleFollowupField}
+                  onCreate={handleCreateFollowupInline}
+                  statusStyle={FU_STATUS_STYLE}
+                  typeStyle={TYPE_COLOR}
+                  types={FOLLOWUP_TYPES}
+                  outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
+                  sort={fuSort}
+                />
+              </div>
+            ) : (<>
             {!showFuForm ? <div className="flex justify-end"><Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button></div> : <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="space-y-1.5"><label className="block text-xs font-500">Type</label><div className="flex flex-wrap gap-1.5">{FOLLOWUP_TYPES.map(t => <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))} className="px-3 py-1.5 rounded-full text-[11px] font-600 border" style={newFu.type === t ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{t}</button>)}</div></div><Select label="Status *" value={newFu.status_detail} onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))} options={[{ value: '', label: 'Select status' }, ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s }))]} /><CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} /><Textarea label="Response" value={newFu.response} onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setShowFuForm(false)}>Cancel</Button><Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>Save</Button></div></form>}
             {followups.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="space-y-3 max-h-150 overflow-y-auto pr-1">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
+            </>)}
           </div>
         </Card>
       </div>

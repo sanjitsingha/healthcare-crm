@@ -1,12 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, Download, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, Download, ToggleLeft, ToggleRight, RefreshCw, ChevronDown, Tag, Check } from 'lucide-react'
 import { Card, Spinner } from '@/components/ui'
-import { getPatients, deletePatient, updatePatient } from '@/lib/supabase/queries'
+import { getPatients, deletePatient, updatePatient, getTags } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { format, differenceInYears } from 'date-fns'
+import { format, differenceInYears, startOfDay, endOfDay } from 'date-fns'
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -68,6 +68,107 @@ function MultiPill({ label, options, selected, onChange }) {
   )
 }
 
+// ── Multi-select dropdown (status/gender/tags/custom) ──
+function MultiSelect({ label, icon: Icon, options, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const toggle = (v) => onChange(selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v])
+  const count = selected.length
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors"
+        style={count
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        {Icon && <Icon size={13} />}
+        <span className="flex-1 text-left truncate">{label}</span>
+        {count > 0 && <span className="text-[10px] font-700 px-1.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{count}</span>}
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 min-w-44 max-h-64 overflow-y-auto rounded-xl border border-(--color-border) p-1"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          {options.length === 0 && <p className="px-2.5 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
+          {options.map(o => {
+            const on = selected.includes(o.value)
+            return (
+              <button key={o.value} type="button" onClick={() => toggle(o.value)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                  style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                  {on && <Check size={10} className="text-white" />}
+                </span>
+                {o.color && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: o.color }} />}
+                <span className="flex-1 truncate">{o.label}</span>
+              </button>
+            )
+          })}
+          {count > 0 && (
+            <button type="button" onClick={() => onChange([])}
+              className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-(--color-border) text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const opts = (arr) => arr.map(v => ({ value: v, label: v }))
+
+// "Custom" dropdown — pick which custom module fields to expose as filters.
+function CustomFieldPicker({ fields, active, onToggle }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors"
+        style={active.length
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        <SlidersHorizontal size={13} />
+        <span className="flex-1 text-left">Custom</span>
+        {active.length > 0 && <span className="text-[10px] font-700 px-1.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{active.length}</span>}
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 right-0 min-w-48 max-h-64 overflow-y-auto rounded-xl border border-(--color-border) p-1"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          <p className="px-2.5 py-1.5 text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Custom fields</p>
+          {fields.map(f => {
+            const on = active.includes(f.colId)
+            return (
+              <button key={f.colId} type="button" onClick={() => onToggle(f.colId)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                  style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                  {on && <Check size={10} className="text-white" />}
+                </span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ColumnToggle({ allColumns, visible, setVisible }) {
   const [open, setOpen] = useState(false)
   const ref = useRef()
@@ -116,8 +217,32 @@ export default function PatientsPage() {
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filters, setFilters]   = useState({ genders: [], statuses: [] })
+  const [filters, setFilters]   = useState({ genders: [], statuses: [], tags: [], dateFrom: '', dateTo: '', custom: {} })
+  const [availableTags, setAvailableTags] = useState([])
+  const [activeCustom, setActiveCustom] = useState([])
   const [selected, setSelected] = useState(new Set())
+
+  useEffect(() => {
+    if (!orgId) return
+    getTags(orgId, 'patients').then(t => setAvailableTags(t || [])).catch(() => setAvailableTags([]))
+  }, [orgId])
+
+  // Custom patient-module fields available to filter on.
+  const patientModuleFields = useMemo(() =>
+    (org?.settings?.modules || [])
+      .filter(m => m.page === 'patients' && m.active)
+      .flatMap(m => (m.fields || []).map(f => ({
+        colId: `mod::${m.id}::${f.id}`,
+        moduleId: m.id, fieldId: f.id, label: f.label, type: f.type,
+        options: (f.options || '').split(',').map(s => s.trim()).filter(Boolean),
+      }))),
+    [org])
+
+  const setCustom = (colId, value) => setFilters(f => ({ ...f, custom: { ...f.custom, [colId]: value } }))
+  const toggleCustomField = (colId) => {
+    setActiveCustom(prev => prev.includes(colId) ? prev.filter(c => c !== colId) : [...prev, colId])
+    if (activeCustom.includes(colId)) setCustom(colId, undefined)
+  }
 
   // ── Dynamic columns: base + active patient modules ──
   const allColumns = useMemo(() => {
@@ -164,11 +289,27 @@ export default function PatientsPage() {
     }
     if (filters.genders.length  && !filters.genders.includes(p.gender))   return false
     if (filters.statuses.length && !filters.statuses.includes(p.status))  return false
+    if (filters.tags.length) {
+      const ptags = (p.tags || []).map(t => t.tags?.id).filter(Boolean)
+      if (!filters.tags.some(id => ptags.includes(id))) return false
+    }
+    if (filters.dateFrom && new Date(p.created_at) < startOfDay(new Date(filters.dateFrom))) return false
+    if (filters.dateTo   && new Date(p.created_at) > endOfDay(new Date(filters.dateTo)))     return false
+    for (const [colId, val] of Object.entries(filters.custom)) {
+      if (!val || (Array.isArray(val) && !val.length)) continue
+      const fld = patientModuleFields.find(f => f.colId === colId)
+      if (!fld) continue
+      const cell = p?.custom_data?.[fld.moduleId]?.[fld.fieldId] ?? ''
+      if (Array.isArray(val)) { if (!val.includes(cell)) return false }
+      else if (!String(cell).toLowerCase().includes(String(val).toLowerCase())) return false
+    }
     return true
   })
 
-  const hasFilters  = filters.genders.length || filters.statuses.length
-  const clearFilters = () => setFilters({ genders: [], statuses: [] })
+  const customCount = Object.values(filters.custom).filter(v => Array.isArray(v) ? v.length : v).length
+  const filterCount = filters.genders.length + filters.statuses.length + filters.tags.length + (filters.dateFrom || filters.dateTo ? 1 : 0) + customCount
+  const hasFilters  = filterCount > 0
+  const clearFilters = () => { setFilters({ genders: [], statuses: [], tags: [], dateFrom: '', dateTo: '', custom: {} }); setActiveCustom([]) }
 
   // ── Selection ──
   const toggleOne  = id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -253,11 +394,18 @@ export default function PatientsPage() {
             {loading ? '—' : `${filtered.length} patient${filtered.length !== 1 ? 's' : ''}${hasFilters ? ' (filtered)' : ''}`}
           </p>
         </div>
-        <Link href="/patients/new">
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90" style={{ background: 'var(--color-brand)' }}>
-            <Plus size={16} /> New Patient
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={loadPatients} disabled={loading} title="Refresh patients"
+            className="p-2 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2) disabled:opacity-50"
+            style={{ color: 'var(--color-text-muted)' }}>
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-        </Link>
+          <Link href="/patients/new">
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90" style={{ background: 'var(--color-brand)' }}>
+              <Plus size={16} /> New Patient
+            </button>
+          </Link>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -279,22 +427,63 @@ export default function PatientsPage() {
           style={filtersOpen || hasFilters ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
         >
           <SlidersHorizontal size={15} /> Filters
-          {hasFilters ? <span className="bg-white/30 text-[10px] font-700 px-1.5 py-0.5 rounded-full">{filters.genders.length + filters.statuses.length}</span> : null}
+          {hasFilters ? <span className="bg-white/30 text-[10px] font-700 px-1.5 py-0.5 rounded-full">{filterCount}</span> : null}
         </button>
         <ColumnToggle allColumns={allColumns} visible={visible} setVisible={setVisible} />
       </div>
 
       {/* Filter panel */}
       {filtersOpen && (
-        <Card className="p-4 border-(--color-border) space-y-4">
-          <div className="grid grid-cols-2 gap-6">
-            <MultiPill label="Gender" options={GENDERS}  selected={filters.genders}  onChange={v => setFilters(f => ({ ...f, genders: v }))} />
-            <MultiPill label="Status" options={STATUSES} selected={filters.statuses} onChange={v => setFilters(f => ({ ...f, statuses: v }))} />
+        <Card className="p-3 border-(--color-border) space-y-2.5">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+            <MultiSelect label="Status" options={opts(STATUSES)} selected={filters.statuses} onChange={v => setFilters(f => ({ ...f, statuses: v }))} />
+            <MultiSelect label="Gender" options={opts(GENDERS)}  selected={filters.genders}  onChange={v => setFilters(f => ({ ...f, genders: v }))} />
+            <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
+              selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
+            {patientModuleFields.length > 0 && (
+              <CustomFieldPicker fields={patientModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+            )}
           </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 items-start">
+            <div className="col-span-2 flex items-center gap-1.5">
+              <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined}
+                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>–</span>
+              <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined}
+                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+            </div>
+
+            {activeCustom.map(colId => {
+              const fld = patientModuleFields.find(f => f.colId === colId)
+              if (!fld) return null
+              if (fld.type === 'select' || fld.type === 'boolean') {
+                return <MultiSelect key={colId} label={fld.label}
+                  options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
+                  selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
+              }
+              return (
+                <div key={colId} className="relative">
+                  <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
+                    placeholder={fld.label}
+                    className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
+                    <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
           {hasFilters && (
             <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters} className="flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
-                <X size={12} /> Clear All Filters
+              <button onClick={clearFilters} className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                <X size={12} /> Clear all
               </button>
             </div>
           )}

@@ -1,0 +1,87 @@
+ID,Category,Feature,Description,Status,Priority,Notes
+1,Auth,Email/Password login,Supabase email + password sign in,Done,High,
+2,Auth,Google OAuth login,Sign in with Google via Supabase,Done,High,Required Supabase Site URL + redirect URLs set to prod
+3,Auth,Auth proxy/middleware,Next 16 proxy.js guards protected routes; exempts /docs and /api/webhooks,Done,High,
+4,Auth,2FA (TOTP),Two-factor enrollment/verify,Deferred,Medium,Started then paused; not enforced
+5,Dashboard,Dashboard overview,Stats + recent leads/tasks/followups/appointments,Done,High,
+6,Leads,Leads list (table),Searchable/sortable table with column visibility toggle,Done,High,
+7,Leads,Lead detail page,Full profile + activity timeline,Done,High,
+8,Leads,Lead pipeline (Kanban),Drag stages view,Done,Medium,
+9,Leads,New lead form,Create lead,Done,High,
+10,Leads,Stage dropdown on detail,Change stage from pill dropdown,Done,High,
+11,Leads,Convert lead to patient,One-click conversion carrying details,Done,High,
+12,Leads,Lead tags,Assign/remove color tags (searchable dropdown),Done,High,
+13,Leads,Tasks on lead,Add/complete tasks,Done,Medium,
+14,Leads,Timeline on lead,System activity feed,Done,Medium,
+15,Leads,Notes section,Editable notes as last section,Done,Medium,
+16,Leads,Custom modules on lead,User-defined sections/fields render + edit,Done,High,
+17,Leads,Filters - search,Name/phone/email search,Done,High,
+18,Leads,Filters - dropdowns,Stage/Priority/Source/Gender multi-select dropdowns,Done,High,Stage options from org configured stages
+19,Leads,Filters - Tag,Filter by lead tags,Done,High,
+20,Leads,Filters - Date range,Created date From/To,Done,Medium,
+21,Leads,Filters - Custom fields,Custom dropdown to pick module fields to filter,Done,Medium,
+22,Leads,Bulk actions,Multi-select delete / move to patient / export CSV,Done,Medium,
+23,Leads,Refresh button,Reload table without page refresh,Done,Low,
+24,Follow-ups,Follow-up cards (regular view),Schedule/log calls/WhatsApp/email; outcomes; next step,Done,High,
+25,Follow-ups,Follow-up table view,Spreadsheet-style editable grid with chip dropdowns,Done,High,Lead page only
+26,Follow-ups,Inline add row,Empty bottom row creates follow-up Excel-style,Done,Medium,
+27,Follow-ups,Sort dropdown,Sort by date added / last modified,Done,Low,
+28,Follow-ups,Auto-create next task,Task created when scheduling next follow-up,Done,Medium,
+29,Follow-ups,Table view on patients,Regular/Table toggle on patient page,To Build,Medium,Currently lead-only
+30,Patients,Patients list,Searchable list,Done,High,
+31,Patients,Patient detail,Demographics + history + appointments + tasks,Done,High,
+32,Patients,Medical history records,Add diagnosis/treatment/notes,Done,High,
+33,Patients,Custom modules on patient,User-defined sections render + edit,Done,High,
+34,Patients,Patient code generator,Auto patient_code from configurable format,Done,Medium,Needs patients.patient_code column on live DB
+35,Patients,Patient list tag/custom filters,Same filter system as leads,To Build,Medium,
+36,Appointments,Appointments module,Book/confirm/reschedule/track,Done,High,
+37,Appointments,Cross-link lead<->patient appts,Merged view across linked records,Done,Medium,
+38,Consultations,Consultation records,Clinical visit: diagnosis/treatment/visit details,Partial,High,PENDING DB migration (consultations + visit_details)
+39,Tasks,Tasks page,Global task list,Done,Medium,
+40,Billing,Invoices,Generate invoices,Partial,High,Invoice UI present
+41,Billing,Payments flow,Record payments end-to-end,To Build,High,Payments capture flow incomplete
+42,Billing,Outstanding/aging report,Unpaid invoice tracking,To Build,Medium,
+43,Contacts,Contacts module,Contact records,Done,Low,
+44,Organizations,Organizations module,Org records list,Done,Low,
+45,Reports,Reports page,KPIs + charts,Done,High,New this build
+46,Reports,Interactive charts,recharts area/bar/donut/line with tooltips,Done,High,
+47,Reports,Date range dropdown + custom,Presets + custom date range,Done,Medium,
+48,Reports,Person filter,Organization default + staff/doctors,Done,Medium,Revenue stays org-wide (no owner field)
+49,Reports,Chart type toggle,Per-section area/line/bar/pie switch,Done,Low,
+50,Reports,Export/print reports,Download CSV / PDF of reports,To Build,Medium,
+51,Reports,Persist chart prefs,Remember chart-type choices,To Build,Low,
+52,Reports,Per-person revenue,Attribute revenue to staff/doctor,To Build,Medium,
+53,Settings,Account settings,Profile/account,Done,Medium,
+54,Settings,Organization settings,Clinic details + theme + patient ID format builder,Done,High,
+55,Settings,People (team),Doctors + staff members,Done,High,
+56,Settings,Tags settings,Create tags with page (Leads/Patients) selector,Done,High,Needs tags.page column on live DB
+57,Settings,Modules (custom fields),Build custom sections for leads/patients,Done,High,
+58,Settings,Rules (automation),Event/condition/action rules for lead+patient,Done,High,
+59,Settings,Configuration (integrations),Connect providers + webhook URLs + field mapping,Done,High,
+60,Automation,Rules engine,Apply set_stage/set_status/add_tag on events; logs to timeline,Done,High,
+61,Automation,Field mapping,Map form fields to lead fields; learns detected fields,Done,High,
+62,Integrations,Inbound webhook receiver,/api/webhooks/[provider]/[token] creates leads,Done,High,Uses anon key - see security row
+63,Integrations,Google Forms,Apps Script guide + capture,Done,High,Guide moved to /docs
+64,Integrations,WordPress plugin,One plugin captures all form plugins,Done,High,Downloadable zip in /public
+65,Integrations,WordPress manual methods,Elementor/WPForms/CF7 snippets,Done,Medium,
+66,Integrations,Meta Lead Ads,Receive FB/IG lead-gen forms,To Build,Medium,Card stub only; no receiver/verify webhook
+67,Integrations,Zapier,Use webhook as Zap action,Partial,Low,Works via generic webhook; not tested
+68,Integrations,WhatsApp Business,Capture inbound WhatsApp as leads,To Build,Medium,Card stub only; needs Cloud API or open-wa
+69,Integrations,WordPress field discovery,Zero-submission field detection from plugin,To Build,Low,Currently needs one submission + Refresh
+70,Docs,Public docs page,/docs Mintlify-style sidebar + TOC + search,Done,Medium,
+71,Docs,Setup guides in docs,Google Forms + WordPress sections,Done,Medium,
+72,Docs,Docs button on integrations,Each card links to its docs section,Done,Low,
+73,Docs,Mobile docs layout,Drawer/menu for small screens,To Build,Low,Sidebar hidden under md
+74,Support,Support tickets,Raise a Complaint -> ticket + status,Partial,Medium,PENDING DB migration (tickets table)
+75,Support,Master admin app,Separate admin to manage tickets,To Build,Low,Planned later
+76,UI,Theme switching,Green/Indigo brand themes,Done,Low,
+77,UI,Shared Timeline component,Reusable activity timeline,Done,Low,
+78,UI,Bottom bar,Global Raise a Complaint bar,Done,Low,
+79,UI,Landing page,Marketing page with features + blue brand,Done,Medium,
+80,UI,Settings nav fixed,Side nav stays put while content scrolls,Done,Low,
+81,DB/Security,Live DB migrations,Apply pending migrations on Supabase,To Fix,High,consultations/tickets/tags.page/lead_tags/patient_code/assigned_to/caller_name
+82,DB/Security,RLS policies,Currently using(true) on all tables,To Fix,High,Tighten before production
+83,DB/Security,Indexes,Composite indexes + GIN for custom_data,To Fix,Medium,Performance pre-production
+84,DB/Security,Webhook service-role key,Move webhook off anon key to service role,To Fix,High,Public endpoint hardening
+85,DB/Security,Webhook shared secret,Encourage/require secret on integrations,To Fix,Medium,Optional today
+86,Layout,Layout Builder,Drag/resize sections on lead page,Deferred,Low,Built then reverted by request
