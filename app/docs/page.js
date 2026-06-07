@@ -5,6 +5,7 @@ import {
   BookOpen, Rocket, TrendingUp, Users, Calendar, Stethoscope, CheckSquare,
   PhoneCall, Tag, Workflow, LayoutGrid, Plug, CreditCard, LifeBuoy,
   Settings, ArrowRight, Star, AlertCircle, ChevronRight, Search, Sparkles,
+  Globe, Copy, Check, Download,
 } from 'lucide-react'
 
 // Blue (Indigo) brand to match the marketing site. Set on the root so every
@@ -60,6 +61,8 @@ const NAV = [
     group: 'Integrations',
     items: [
       { id: 'integrations',  label: 'Lead Capture',  icon: Plug },
+      { id: 'google-forms',  label: 'Google Forms',  icon: BookOpen },
+      { id: 'wordpress',     label: 'WordPress',     icon: Globe },
       { id: 'field-mapping', label: 'Field Mapping', icon: ArrowRight },
     ],
   },
@@ -80,7 +83,7 @@ const LABEL = Object.fromEntries(ALL.map(i => [i.id, i.label]))
 function Doc({ id, eyebrow, title, lead, children }) {
   return (
     <section id={id} className="scroll-mt-8 pb-12 mb-12 border-b border-(--color-border) last:border-b-0 last:mb-0">
-      {eyebrow && <p className="text-[11px] font-700 uppercase tracking-[0.12em] mb-2" style={{ color: 'var(--color-brand)' }}>{eyebrow}</p>}
+      {eyebrow && <p className="text-[11px] font-700 uppercase tracking-widest mb-2" style={{ color: 'var(--color-brand)' }}>{eyebrow}</p>}
       <h2 className="text-[26px] font-800 tracking-tight leading-tight" style={{ color: 'var(--color-text-primary)' }}>{title}</h2>
       {lead && <p className="text-[15px] leading-relaxed mt-3" style={{ color: 'var(--color-text-muted)' }}>{lead}</p>}
       <div className="space-y-4 mt-5">{children}</div>
@@ -136,6 +139,24 @@ function Note({ children }) {
     <div className="flex gap-3 px-4 py-3 rounded-xl border" style={{ background: '#fff7ed', borderColor: '#fed7aa' }}>
       <AlertCircle size={15} className="shrink-0 mt-0.5" style={{ color: '#c2410c' }} />
       <p className="text-[13px] leading-6" style={{ color: '#9a3412' }}>{children}</p>
+    </div>
+  )
+}
+
+// Copyable code block.
+function Code({ children }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(children); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch {}
+  }
+  return (
+    <div className="relative">
+      <pre className="text-[12px] font-mono p-4 rounded-xl overflow-x-auto whitespace-pre leading-6 border" style={{ background: '#0f1230', color: '#dfe2f5', borderColor: '#1c2150' }}>{children}</pre>
+      <button type="button" onClick={copy}
+        className="absolute top-2.5 right-2.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600"
+        style={{ background: 'rgba(255,255,255,0.1)', color: copied ? '#86efac' : '#c7cbf0' }}>
+        {copied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+      </button>
     </div>
   )
 }
@@ -235,7 +256,7 @@ export default function DocsPage() {
           <nav className="space-y-6">
             {filteredNav.map(g => (
               <div key={g.group}>
-                <p className="px-3 mb-1.5 text-[11px] font-700 uppercase tracking-[0.1em]" style={{ color: 'var(--color-text-muted)' }}>{g.group}</p>
+                <p className="px-3 mb-1.5 text-[11px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>{g.group}</p>
                 <div className="space-y-0.5">
                   {g.items.map(({ id, label, icon: Icon }) => (
                     <button key={id} type="button" onClick={() => scrollTo(id)}
@@ -393,9 +414,77 @@ export default function DocsPage() {
               <Note>The webhook URL must be publicly reachable — use your deployed site URL, not localhost.</Note>
             </Doc>
 
+            <Doc id="google-forms" eyebrow="Integrations" title="Google Forms setup"
+              lead="Send every Google Form response into your CRM as a lead via a small Apps Script.">
+              <H3>Steps</H3>
+              <Steps items={[
+                'In Settings → Configuration, connect Google Forms and copy your webhook URL.',
+                'Open your Google Form → ⋮ menu → Apps Script.',
+                'Delete any sample code, paste the script below, and replace YOUR_WEBHOOK_URL with the URL you copied. Save.',
+                'Click the clock icon (Triggers) → Add Trigger.',
+                'Choose function onFormSubmit, event source "From form", event type "On form submit" → Save (authorize when prompted).',
+                'Submit a test response — a new lead appears in your CRM.',
+              ]} />
+              <Code>{`function onFormSubmit(e) {
+  var url = "YOUR_WEBHOOK_URL";
+  var fields = {};
+  var answers = e.response.getItemResponses();
+  for (var i = 0; i < answers.length; i++) {
+    fields[answers[i].getItem().getTitle()] = answers[i].getResponse();
+  }
+  UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ fields: fields }),
+    muteHttpExceptions: true
+  });
+}`}</Code>
+              <Tip>Name your questions Name, Phone, Email so they map automatically. The “Deploy” button is not needed — only the trigger.</Tip>
+              <Note>The webhook URL must be publicly reachable — use your deployed site URL, not localhost.</Note>
+            </Doc>
+
+            <Doc id="wordpress" eyebrow="Integrations" title="WordPress setup"
+              lead="The easiest way is our plugin — install once and every form on your site is captured.">
+              <H3>Recommended — HealthCRM plugin</H3>
+              <P>One plugin captures all forms (Contact Form 7, WPForms, Gravity, Elementor Pro, Fluent, Ninja) — no per-form setup.</P>
+              <Steps items={[
+                'Download the plugin and install it in WordPress (Plugins → Add New → Upload Plugin), then activate.',
+                'Go to Settings → HealthCRM and paste your Webhook URL (and Shared Secret if you set one).',
+                'Click “Send test lead” to confirm, then submit any form.',
+              ]} />
+              <a href="/healthcrm-lead-capture.zip" download
+                className="inline-flex items-center gap-1.5 text-[13px] font-600 px-4 py-2 rounded-xl text-white" style={{ background: 'var(--color-brand)' }}>
+                <Download size={14} /> Download plugin (.zip)
+              </a>
+
+              <H3>Alternatives (single form)</H3>
+              <Bullets items={[
+                'Elementor Pro — edit the form → Actions After Submit → add Webhook → paste your webhook URL.',
+                'WPForms (Pro) — install the Webhooks addon → form Settings → Webhooks → Request URL = your webhook, POST, JSON.',
+                'Contact Form 7 — add the snippet below to your (child) theme’s functions.php.',
+              ]} />
+              <Code>{`add_action('wpcf7_before_send_mail', function ($contact_form) {
+  $submission = WPCF7_Submission::get_instance();
+  if (!$submission) return;
+  $data = $submission->get_posted_data();
+  $fields = array();
+  foreach ($data as $key => $value) {
+    if (substr($key, 0, 1) === '_') continue;
+    $fields[$key] = is_array($value) ? implode(', ', $value) : $value;
+  }
+  wp_remote_post('YOUR_WEBHOOK_URL', array(
+    'headers' => array('Content-Type' => 'application/json'),
+    'body'    => wp_json_encode(array('fields' => $fields)),
+    'timeout' => 15,
+  ));
+});`}</Code>
+              <Tip>Name your fields Name, Phone, Email for automatic mapping — or map them precisely in the Field Mapping panel.</Tip>
+            </Doc>
+
             <Doc id="field-mapping" eyebrow="Integrations" title="Field Mapping"
               lead="Map each form question to the exact lead field it should fill.">
               <P>After a form submits once, open its integration and use the Field Mapping panel. Choose a detected form question on the left and the lead field on the right (or store it as a custom field). Unmapped questions are still auto-detected and saved.</P>
+              <P>Click <b>Refresh fields</b> in the panel to pull the latest detected fields without reloading the page.</P>
             </Doc>
 
             <Doc id="billing" eyebrow="More" title="Billing"
@@ -416,7 +505,7 @@ export default function DocsPage() {
 
         {/* Right "On this page" TOC */}
         <aside className="w-56 shrink-0 h-full overflow-y-auto px-4 py-12 hidden xl:block">
-          <p className="text-[11px] font-700 uppercase tracking-[0.1em] mb-3" style={{ color: 'var(--color-text-muted)' }}>On this page</p>
+          <p className="text-[11px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>On this page</p>
           <div className="space-y-0.5 border-l border-(--color-border)">
             {ALL.map(({ id }) => (
               <button key={id} type="button" onClick={() => scrollTo(id)}

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import {
-  Plug, FileText, Globe, Webhook, MessageCircle,
+  Plug, Globe, Webhook, MessageCircle, BookOpen,
   Check, X, Copy, Trash2, ToggleLeft, ToggleRight, Link2, RefreshCw, ChevronDown,
 } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
@@ -86,6 +86,16 @@ const PROVIDERS = [
 
 const PROVIDER_MAP = Object.fromEntries(PROVIDERS.map(p => [p.type, p]))
 
+// Per-provider docs section anchors on /docs.
+const DOCS_ANCHOR = {
+  google_forms:  'google-forms',
+  wordpress:     'wordpress',
+  meta_lead_ads: 'integrations',
+  zapier:        'integrations',
+  webhook:       'integrations',
+  whatsapp:      'integrations',
+}
+
 // Lead fields a form question can be mapped to (used by the field-mapping editor).
 const LEAD_FIELD_OPTIONS = [
   { value: 'first_name',    label: 'First name' },
@@ -168,7 +178,6 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const [values,  setValues]  = useState({ ...integration.config })
   const [saving,  setSaving]  = useState(false)
   const [copied,  setCopied]  = useState('')
-  const [showGuide, setShowGuide] = useState(false)
   const { orgId } = useOrg()
   const [mapRows, setMapRows] = useState(() => integration.config?.field_map || [])
   const [savingMap, setSavingMap] = useState(false)
@@ -356,168 +365,22 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
           </div>
         )}
 
-        {integration.type === 'google_forms' && (() => {
-          const url = integration.config?.webhook_url || 'YOUR_WEBHOOK_URL'
-          const secret = integration.config?.secret
-          const postUrl = secret ? `${url}?secret=${encodeURIComponent(secret)}` : url
-          const script = `function onFormSubmit(e) {
-  var url = "${postUrl}";
-  var fields = {};
-  var answers = e.response.getItemResponses();
-  for (var i = 0; i < answers.length; i++) {
-    fields[answers[i].getItem().getTitle()] = answers[i].getResponse();
-  }
-  UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({ fields: fields }),
-    muteHttpExceptions: true
-  });
-}`
-          return (
-            <div className="rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
-              <button type="button" onClick={() => setShowGuide(g => !g)}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs font-600"
-                style={{ color: 'var(--color-text-primary)' }}>
-                <span className="flex items-center gap-1.5"><FileText size={13} /> Setup guide (Apps Script)</span>
-                <span style={{ color: 'var(--color-text-muted)' }}>{showGuide ? 'Hide' : 'Show'}</span>
-              </button>
-              {showGuide && (
-                <div className="px-3 pb-3 space-y-2.5 border-t border-(--color-border) pt-2.5">
-                  <ol className="text-xs space-y-1.5 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
-                    <li>Open your Google Form → <b>⋮ menu</b> → <b>Apps Script</b>.</li>
-                    <li>Delete any sample code, paste the script below, and <b>Save</b>.</li>
-                    <li>Click the <b>clock</b> icon (Triggers) → <b>Add Trigger</b>.</li>
-                    <li>Choose function <b>onFormSubmit</b>, event source <b>From form</b>, event type <b>On form submit</b> → <b>Save</b> (authorize when prompted).</li>
-                    <li>Submit a test response — a new lead appears in your CRM.</li>
-                  </ol>
-                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                    Tip: name your form questions <b>Name</b>, <b>Phone</b>, <b>Email</b> so they map automatically. Anything else is saved on the lead too.
-                  </p>
-                  <div className="relative">
-                    <pre className="text-[11px] font-mono p-3 rounded-lg overflow-x-auto whitespace-pre"
-                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{script}</pre>
-                    <button type="button" onClick={() => copy(script, 'script')}
-                      className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md border border-(--color-border) text-[11px] font-600"
-                      style={{ background: 'var(--color-surface)', color: copied === 'script' ? '#15803d' : 'var(--color-text-muted)' }}>
-                      {copied === 'script' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        {integration.type === 'wordpress' && (() => {
-          const url = integration.config?.webhook_url || 'YOUR_WEBHOOK_URL'
-          const secret = integration.config?.secret
-          const postUrl = secret ? `${url}?secret=${encodeURIComponent(secret)}` : url
-          const snippet = `add_action('wpcf7_before_send_mail', function ($contact_form) {
-  $submission = WPCF7_Submission::get_instance();
-  if (!$submission) return;
-  $data = $submission->get_posted_data();
-  $fields = array();
-  foreach ($data as $key => $value) {
-    if (substr($key, 0, 1) === '_') continue; // skip CF7 internals
-    $fields[$key] = is_array($value) ? implode(', ', $value) : $value;
-  }
-  wp_remote_post('${postUrl}', array(
-    'headers' => array('Content-Type' => 'application/json'),
-    'body'    => wp_json_encode(array('fields' => $fields)),
-    'timeout' => 15,
-  ));
-});`
-          return (
-            <div className="rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
-              <button type="button" onClick={() => setShowGuide(g => !g)}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs font-600"
-                style={{ color: 'var(--color-text-primary)' }}>
-                <span className="flex items-center gap-1.5"><Globe size={13} /> Setup guide (WordPress forms)</span>
-                <span style={{ color: 'var(--color-text-muted)' }}>{showGuide ? 'Hide' : 'Show'}</span>
-              </button>
-              {showGuide && (
-                <div className="px-3 pb-3 space-y-3 border-t border-(--color-border) pt-2.5">
-                  {/* Recommended: plugin (captures every form, no per-form setup) */}
-                  <div className="rounded-lg border p-3" style={{ borderColor: 'var(--color-brand)' + '40', background: 'var(--color-brand-50)' }}>
-                    <p className="text-xs font-700 mb-1 flex items-center gap-1.5" style={{ color: 'var(--color-brand)' }}>
-                      <Check size={13} /> Recommended — HealthCRM plugin
-                    </p>
-                    <p className="text-[11px] mb-2" style={{ color: 'var(--color-text-secondary)' }}>
-                      Install one plugin and <b>every form</b> on your site (Contact Form 7, WPForms, Gravity, Elementor, Fluent, Ninja) is captured automatically — no per-form setup.
-                    </p>
-                    <ol className="text-[11px] space-y-1 list-decimal pl-4 mb-2.5" style={{ color: 'var(--color-text-secondary)' }}>
-                      <li>Download the plugin and install it in WordPress (<b>Plugins → Add New → Upload Plugin</b>), then activate.</li>
-                      <li>Go to <b>Settings → HealthCRM</b> and paste your Webhook URL{secret ? ' and Shared Secret' : ''}.</li>
-                      <li>Click <b>Send test lead</b> to confirm, then submit any form.</li>
-                    </ol>
-                    <a href="/healthcrm-lead-capture.zip" download
-                      className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg text-white"
-                      style={{ background: 'var(--color-brand)' }}>
-                      <Copy size={13} /> Download plugin (.zip)
-                    </a>
-                  </div>
-
-                  <p className="text-[11px] pt-1" style={{ color: 'var(--color-text-muted)' }}>
-                    Prefer to wire a single form yourself? Use one of these instead.
-                  </p>
-
-                  {/* Elementor Pro */}
-                  <div>
-                    <p className="text-xs font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>Elementor Pro Forms — no code</p>
-                    <ol className="text-[11px] space-y-1 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
-                      <li>Edit the form → <b>Actions After Submit</b> → add <b>Webhook</b>.</li>
-                      <li>Paste your webhook URL into the <b>Webhook URL</b> field and update.</li>
-                      <li>Submit a test entry — a lead appears in your CRM.</li>
-                    </ol>
-                  </div>
-
-                  {/* WPForms */}
-                  <div>
-                    <p className="text-xs font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>WPForms (Pro) — Webhooks addon</p>
-                    <ol className="text-[11px] space-y-1 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
-                      <li>Install the <b>Webhooks</b> addon, then edit your form → <b>Settings → Webhooks</b>.</li>
-                      <li>Set <b>Request URL</b> to your webhook URL, <b>Method</b> POST, <b>Format</b> JSON.</li>
-                      <li>Save and submit a test entry.</li>
-                    </ol>
-                  </div>
-
-                  {/* Contact Form 7 */}
-                  <div>
-                    <p className="text-xs font-700 mb-1" style={{ color: 'var(--color-text-primary)' }}>Contact Form 7 — code snippet</p>
-                    <ol className="text-[11px] space-y-1 list-decimal pl-4" style={{ color: 'var(--color-text-secondary)' }}>
-                      <li>Add the snippet below to your (child) theme’s <b>functions.php</b>, or use a “Code Snippets” plugin.</li>
-                      <li>Submit a test entry — a lead appears in your CRM.</li>
-                    </ol>
-                    <div className="relative mt-2">
-                      <pre className="text-[11px] font-mono p-3 rounded-lg overflow-x-auto whitespace-pre"
-                        style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{snippet}</pre>
-                      <button type="button" onClick={() => copy(snippet, 'wpsnippet')}
-                        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md border border-(--color-border) text-[11px] font-600"
-                        style={{ background: 'var(--color-surface)', color: copied === 'wpsnippet' ? '#15803d' : 'var(--color-text-muted)' }}>
-                        {copied === 'wpsnippet' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                    Tip: name your fields <b>Name</b>, <b>Phone</b>, <b>Email</b> for automatic mapping — or map them precisely in the Field Mapping panel above.
-                  </p>
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        <div className="flex justify-end gap-2 pt-1">
-          {editing ? (
-            <>
-              <Button variant="secondary" size="sm" type="button" onClick={() => { setValues({ ...integration.config }); setEditing(false) }}>Cancel</Button>
-              <Button size="sm" type="button" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
-            </>
-          ) : (
-            <Button variant="secondary" size="sm" type="button" onClick={() => { setValues({ ...integration.config }); setEditing(true) }}>Configure</Button>
-          )}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <a href={`/docs#${DOCS_ANCHOR[integration.type] || 'integrations'}`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+            style={{ color: 'var(--color-text-secondary)' }}>
+            <BookOpen size={13} /> Docs
+          </a>
+          <div className="flex gap-2">
+            {editing ? (
+              <>
+                <Button variant="secondary" size="sm" type="button" onClick={() => { setValues({ ...integration.config }); setEditing(false) }}>Cancel</Button>
+                <Button size="sm" type="button" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+              </>
+            ) : (
+              <Button variant="secondary" size="sm" type="button" onClick={() => { setValues({ ...integration.config }); setEditing(true) }}>Configure</Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
