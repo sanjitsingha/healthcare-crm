@@ -25,6 +25,7 @@ import {
   Kanban,
   ListFilter,
   Stethoscope,
+  BarChart3,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import clsx from "clsx";
@@ -33,6 +34,7 @@ import { useSidebar } from "@/lib/context/SidebarContext";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/patients", icon: UserRound, label: "Patients" },
   { href: "/appointments", icon: CalendarDays, label: "Appointments" },
   { href: "/consultation", icon: Stethoscope, label: "Consultations" },
