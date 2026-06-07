@@ -479,8 +479,17 @@ export default function LeadDetailPage({ params }) {
   const logActivity = (type, content) =>
     orgId && createActivity({ organization_id: orgId, entity_type: 'lead', entity_id: id, type, content })
 
-  const refreshActivities = async () =>
-    setActivities(await getActivities('lead', id, orgId))
+  // Lead timeline shows the lead's own activities + the linked patient's
+  // (after conversion), so the history stays continuous. pidOverride lets the
+  // conversion handler merge immediately, before `lead` state updates.
+  const refreshActivities = async (pidOverride) => {
+    const pid = pidOverride ?? lead?.patient_id ?? null
+    const [a, pa] = await Promise.all([
+      getActivities('lead', id, orgId),
+      pid ? getActivities('patient', pid, orgId) : Promise.resolve([]),
+    ])
+    setActivities([...(a || []), ...(pa || [])].sort((x, y) => new Date(y.created_at) - new Date(x.created_at)))
+  }
 
   const loadAll = async () => {
     setLoading(true)
@@ -642,8 +651,11 @@ export default function LeadDetailPage({ params }) {
       })
       await updateLead(id, { patient_id: pat.id, stage: 'Converted' })
       setLead(prev => ({ ...prev, patient_id: pat.id, stage: 'Converted' }))
+      // Boundary marker on the lead timeline…
       await logActivity('status_change', `Lead converted to patient`)
-      await refreshActivities()
+      // …and the first entry on the new patient's timeline.
+      await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}` })
+      await refreshActivities(pat.id)
     } catch (err) { alert(err.message) }
   }
 
@@ -830,6 +842,7 @@ export default function LeadDetailPage({ params }) {
         await updateLead(id, { patient_id: pat.id })
         setLead(prev => ({ ...prev, patient_id: pat.id }))
         patientId = pat.id
+        await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}` })
       }
       const appt = await createAppointment({
         organization_id: orgId,
@@ -857,7 +870,7 @@ export default function LeadDetailPage({ params }) {
       setTasks(prev => [reminderTask, ...prev])
 
       await logActivity('meeting', `Appointment booked for ${format(apptDate, 'MMM d, yyyy')}`)
-      await refreshActivities()
+      await refreshActivities(patientId)
       setShowBookForm(false)
       setNewAppt({ date: '', name: '', phone: '', notes: '', doctor_id: '' })
       // Event-based automation (configured in Settings → Rules)

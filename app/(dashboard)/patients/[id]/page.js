@@ -216,7 +216,14 @@ export default function PatientDetailPage({ params }) {
         getAppointments({ orgId }),
       ])
 
-      const mergedActs = [...(patientActs || []), ...leadActsList.flat()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      // Patient timeline starts at conversion: include only the linked lead's
+      // post-conversion activities (created at/after this patient was created),
+      // and drop the lead-side "converted to patient" line (the patient has its
+      // own "Converted from lead" entry).
+      const convAt = p?.created_at ? new Date(p.created_at).getTime() : 0
+      const leadActsPost = leadActsList.flat().filter(a =>
+        new Date(a.created_at).getTime() >= convAt && !/converted to patient/i.test(a.content || ''))
+      const mergedActs = [...(patientActs || []), ...leadActsPost].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       const mergedTasks = [...(patientTasks || []), ...leadTasksList.flat()].reduce((acc, t) => (acc.some(x => x.id === t.id) ? acc : [...acc, t]), [])
       const mergedFollowups = [...(patientFollowups || []), ...leadFollowupsList.flat()].reduce((acc, f) => (acc.some(x => x.id === f.id) ? acc : [...acc, f]), [])
       const mergedAppts = (allAppts || []).filter(a => allIds.has(a.patient_id) || allIds.has(a.lead_id))
