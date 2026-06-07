@@ -28,29 +28,53 @@ import {
   BarChart3,
   BellRing,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { useOrg } from "@/lib/context/OrgContext";
 import { useSidebar } from "@/lib/context/SidebarContext";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/notifications", icon: BellRing, label: "Notifications" },
-  { href: "/reports", icon: BarChart3, label: "Reports" },
-  { href: "/patients", icon: UserRound, label: "Patients" },
-  { href: "/appointments", icon: CalendarDays, label: "Appointments" },
-  { href: "/consultation", icon: Stethoscope, label: "Consultations" },
-  { href: "/billing", icon: CreditCard, label: "Billing & Finance" },
-  { href: "/contacts", icon: Users, label: "Contacts" },
-  { href: "/organizations", icon: Building2, label: "Organizations" },
-  { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-  { href: "/followups", icon: Bell, label: "Follow-ups" },
-  { href: "/automation", icon: Zap, label: "Automation" },
+const navGroups = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+      { href: "/notifications", icon: BellRing, label: "Notifications" },
+      { href: "/reports", icon: BarChart3, label: "Reports" },
+    ],
+  },
+  {
+    label: "Sales",
+    items: [
+      { type: "leads" },
+      { href: "/contacts", icon: Users, label: "Contacts" },
+      { href: "/organizations", icon: Building2, label: "Organizations" },
+      { href: "/followups", icon: Bell, label: "Follow-ups" },
+    ],
+  },
+  {
+    label: "Care Delivery",
+    items: [
+      { href: "/patients", icon: UserRound, label: "Patients" },
+      { href: "/appointments", icon: CalendarDays, label: "Appointments" },
+      { href: "/consultation", icon: Stethoscope, label: "Consultations" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/tasks", icon: CheckSquare, label: "Tasks" },
+      { href: "/billing", icon: CreditCard, label: "Billing & Finance" },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [{ href: "/automation", icon: Zap, label: "Automation" }],
+  },
 ];
 
 const LEADS_SUB = [
-  { href: "/leads",          icon: ListFilter, label: "All Leads" },
-  { href: "/leads/pipeline", icon: Kanban,     label: "Lead Pipeline" },
+  { href: "/leads", icon: ListFilter, label: "All Leads" },
+  { href: "/leads/pipeline", icon: Kanban, label: "Lead Pipeline" },
 ];
 
 function OrgLogo({ logoUrl, orgName }) {
@@ -84,10 +108,10 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
 
   const orgName = org?.name || "Your Clinic";
 
-  const [leadsOpen, setLeadsOpen] = useState(() => pathname.startsWith("/leads"));
-  useEffect(() => {
-    if (pathname.startsWith("/leads")) setLeadsOpen(true);
-  }, [pathname]);
+  const [leadsOpen, setLeadsOpen] = useState(() =>
+    pathname.startsWith("/leads"),
+  );
+  const leadsExpanded = leadsOpen || pathname.startsWith("/leads");
 
   const isActive = (href) =>
     href === "/dashboard"
@@ -105,6 +129,101 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
     active
       ? { background: "var(--color-brand)", color: "white" }
       : { color: "var(--color-text-secondary)" };
+
+  const renderNavLink = ({ href, icon: Icon, label }) => {
+    const active = isActive(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={() => setMobileOpen(false)}
+        title={collapsed ? label : undefined}
+        className={navLinkClass(active)}
+        style={navLinkStyle(active)}
+      >
+        <Icon size={17} />
+        {!collapsed && label}
+        {!collapsed && active && (
+          <ChevronRight size={14} className="ml-auto opacity-60" />
+        )}
+      </Link>
+    );
+  };
+
+  const renderLeadsNav = () => {
+    if (collapsed) {
+      return (
+        <Link
+          key="leads"
+          href="/leads"
+          onClick={() => setMobileOpen(false)}
+          title="Leads"
+          className={navLinkClass(isActive("/leads"))}
+          style={navLinkStyle(isActive("/leads"))}
+        >
+          <TrendingUp size={17} />
+        </Link>
+      );
+    }
+
+    return (
+      <div key="leads">
+        <button
+          type="button"
+          onClick={() => setLeadsOpen((o) => !o)}
+          className={clsx(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+            isActive("/leads") ? "text-white" : "hover:bg-(--color-brand-50)",
+          )}
+          style={
+            isActive("/leads")
+              ? { background: "var(--color-brand)", color: "white" }
+              : { color: "var(--color-text-secondary)" }
+          }
+        >
+          <TrendingUp size={17} />
+          <span className="flex-1 text-left">Leads</span>
+          <ChevronDown
+            size={14}
+            className="opacity-60 transition-transform duration-200"
+            style={{ transform: leadsExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          />
+        </button>
+
+        {leadsExpanded && (
+          <div className="mt-0.5 ml-3 space-y-0.5">
+            {LEADS_SUB.map(({ href, icon: Icon, label }) => {
+              const active = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2.5 pr-2.5 py-2 text-xs font-500 transition-colors"
+                  style={
+                    active
+                      ? {
+                          borderLeft: "2px solid var(--color-brand)",
+                          color: "var(--color-brand)",
+                          paddingLeft: "10px",
+                        }
+                      : {
+                          borderLeft: "2px solid transparent",
+                          color: "var(--color-text-secondary)",
+                          paddingLeft: "10px",
+                        }
+                  }
+                >
+                  <Icon size={14} />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -157,103 +276,27 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-        {/* Dashboard */}
-        {navItems.slice(0, 1).map(({ href, icon: Icon, label }) => {
-          const active = isActive(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setMobileOpen(false)}
-              title={collapsed ? label : undefined}
-              className={navLinkClass(active)}
-              style={navLinkStyle(active)}
-            >
-              <Icon size={17} />
-              {!collapsed && label}
-              {!collapsed && active && (
-                <ChevronRight size={14} className="ml-auto opacity-60" />
-              )}
-            </Link>
-          );
-        })}
-
-        {/* Leads — expandable group */}
-        {collapsed ? (
-          <Link
-            href="/leads"
-            onClick={() => setMobileOpen(false)}
-            title="Leads"
-            className={navLinkClass(isActive("/leads"))}
-            style={navLinkStyle(isActive("/leads"))}
+      <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:var(--color-border)_transparent] [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--color-border) [&::-webkit-scrollbar-thumb:hover]:bg-(--color-text-muted)">
+        {navGroups.map((group) => (
+          <div
+            key={group.label}
+            className={collapsed ? "space-y-0.5" : "space-y-1"}
           >
-            <TrendingUp size={17} />
-          </Link>
-        ) : (
-          <div>
-            <button
-              type="button"
-              onClick={() => setLeadsOpen((o) => !o)}
-              className={clsx(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                isActive("/leads") ? "text-white" : "hover:bg-(--color-brand-50)",
-              )}
-              style={isActive("/leads") ? { background: "var(--color-brand)", color: "white" } : { color: "var(--color-text-secondary)" }}
-            >
-              <TrendingUp size={17} />
-              <span className="flex-1 text-left">Leads</span>
-              <ChevronDown
-                size={14}
-                className="opacity-60 transition-transform duration-200"
-                style={{ transform: leadsOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-              />
-            </button>
-
-            {leadsOpen && (
-              <div className="mt-0.5 ml-3 space-y-0.5">
-                {LEADS_SUB.map(({ href, icon: Icon, label }) => {
-                  const active = pathname === href;
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-2.5 pr-2.5 py-2 text-xs font-500 transition-colors"
-                      style={active
-                        ? { borderLeft: "2px solid var(--color-brand)", color: "var(--color-brand)", paddingLeft: "10px" }
-                        : { borderLeft: "2px solid transparent", color: "var(--color-text-secondary)", paddingLeft: "10px" }}
-                    >
-                      <Icon size={14} />
-                      {label}
-                    </Link>
-                  );
-                })}
-              </div>
+            {!collapsed && (
+              <p
+                className="px-3 text-[10px] font-800 uppercase tracking-widest"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                {group.label}
+              </p>
             )}
-          </div>
-        )}
-
-        {/* Rest of nav items */}
-        {navItems.slice(1).map(({ href, icon: Icon, label }) => {
-          const active = isActive(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setMobileOpen(false)}
-              title={collapsed ? label : undefined}
-              className={navLinkClass(active)}
-              style={navLinkStyle(active)}
-            >
-              <Icon size={17} />
-              {!collapsed && label}
-              {!collapsed && active && (
-                <ChevronRight size={14} className="ml-auto opacity-60" />
+            <div className="space-y-0.5">
+              {group.items.map((item) =>
+                item.type === "leads" ? renderLeadsNav() : renderNavLink(item),
               )}
-            </Link>
-          );
-        })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Bottom: settings */}

@@ -6,6 +6,7 @@ import Sidebar from '@/components/crm/Sidebar'
 import MainContent from '@/components/crm/MainContent'
 import ThemeApplier from '@/components/crm/ThemeApplier'
 import ToastHost from '@/components/crm/Toast'
+import NotificationBell from '@/components/crm/NotificationBell'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -29,6 +30,7 @@ export default async function DashboardLayout({ children }) {
           <Sidebar />
           <MainContent>{children}</MainContent>
         </div>
+        <NotificationBell />
         <ToastHost />
       </SidebarStateProvider>
     </OrgProvider>
