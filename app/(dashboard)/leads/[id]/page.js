@@ -22,8 +22,8 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { toast } from '@/lib/toast'
-import { matchingRules } from '@/lib/rulesEngine'
-import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays } from 'date-fns'
+import { matchingRules, ruleActions } from '@/lib/rulesEngine'
+import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays, addDays } from 'date-fns'
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -609,31 +609,61 @@ export default function LeadDetailPage({ params }) {
   const applyRules = async (eventKey) => {
     if (!lead) return
     const rules = matchingRules(org?.settings?.rules || [], { target: 'lead', event: eventKey, entity: lead })
+    const orgStages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s => typeof s === 'string' ? s : s.name)
+    const staff = org?.settings?.staff_members || []
     let changed = false
+    const by = (rule) => rule.name ? ` by rule "${rule.name}"` : ' by rule'
     for (const rule of rules) {
-      const { type, value } = rule.action || {}
-      if (type === 'set_stage' && value) {
-        const orgStages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s => typeof s === 'string' ? s : s.name)
-        if (orgStages.includes(value) && !['Converted', 'Lost', value].includes(lead.stage)) {
-          try {
-            const updated = await updateLead(id, { stage: value })
-            setLead(prev => ({ ...prev, stage: updated.stage }))
-            await logActivity('status_change', `Stage auto-updated to ${value}`)
-            changed = true
-          } catch { /* ignore */ }
-        }
-      } else if (type === 'add_tag' && value) {
-        const already = (lead.tags || []).some(t => t.tags?.id === value)
-        if (!already) {
-          try {
-            await assignTagToLead(id, value)
-            const updated = await getLead(id)
-            setLead(prev => ({ ...prev, tags: updated.tags }))
-            const tag = availableTags.find(t => t.id === value)
-            await logActivity('note', `Tag "${tag?.name || 'tag'}" auto-added by rule${rule.name ? ` "${rule.name}"` : ''}`)
-            changed = true
-          } catch { /* ignore */ }
-        }
+      for (const act of ruleActions(rule)) {
+        const { type, value } = act
+        try {
+          if (type === 'set_stage' && value) {
+            if (orgStages.includes(value) && !['Converted', 'Lost', value].includes(lead.stage)) {
+              const u = await updateLead(id, { stage: value }); setLead(p => ({ ...p, stage: u.stage }))
+              await logActivity('status_change', `Stage auto-updated to ${value}${by(rule)}`); changed = true
+            }
+          } else if (type === 'set_priority' && value && lead.priority !== value) {
+            const u = await updateLead(id, { priority: value }); setLead(p => ({ ...p, priority: u.priority }))
+            await logActivity('note', `Priority set to ${value}${by(rule)}`); changed = true
+          } else if (type === 'set_source' && value && lead.source !== value) {
+            const u = await updateLead(id, { source: value }); setLead(p => ({ ...p, source: u.source }))
+            await logActivity('note', `Source set to ${value}${by(rule)}`); changed = true
+          } else if (type === 'set_value' && value !== '' && value != null) {
+            const n = Number(value)
+            if (!Number.isNaN(n) && n !== Number(lead.value)) {
+              const u = await updateLead(id, { value: n }); setLead(p => ({ ...p, value: u.value }))
+              await logActivity('note', `Deal value set to ${n}${by(rule)}`); changed = true
+            }
+          } else if (type === 'add_tag' && value) {
+            if (!(lead.tags || []).some(t => t.tags?.id === value)) {
+              await assignTagToLead(id, value); const u = await getLead(id); setLead(p => ({ ...p, tags: u.tags }))
+              const tag = availableTags.find(t => t.id === value)
+              await logActivity('note', `Tag "${tag?.name || 'tag'}" added${by(rule)}`); changed = true
+            }
+          } else if (type === 'remove_tag' && value) {
+            if ((lead.tags || []).some(t => t.tags?.id === value)) {
+              await removeTagFromLead(id, value); const u = await getLead(id); setLead(p => ({ ...p, tags: u.tags }))
+              const tag = availableTags.find(t => t.id === value)
+              await logActivity('note', `Tag "${tag?.name || 'tag'}" removed${by(rule)}`); changed = true
+            }
+          } else if (type === 'assign_to' && value && lead.assigned_to !== value) {
+            const u = await updateLead(id, { assigned_to: value }); setLead(p => ({ ...p, assigned_to: u.assigned_to }))
+            const m = staff.find(s => s.id === value)
+            await logActivity('note', `Assigned to ${m?.name || 'team member'}${by(rule)}`); changed = true
+          } else if (type === 'add_note' && value) {
+            await logActivity('note', value); changed = true
+          } else if (type === 'create_task' && act.title) {
+            const due = act.dueInDays ? addDays(new Date(), Number(act.dueInDays)).toISOString() : null
+            const t = await createTask({ title: act.title, priority: act.priority || 'Medium', due_date: due, status: 'Pending', organization_id: orgId, entity_type: 'lead', entity_id: id })
+            setTasks(p => [t, ...p]); await logActivity('note', `Task created${by(rule)}: ${act.title}`); changed = true
+          } else if (type === 'schedule_followup') {
+            const when = addDays(new Date(), Number(act.inDays || 0)).toISOString()
+            const f = await createFollowup({ type: act.fuType || 'Call', scheduled_at: when, status: 'Scheduled', organization_id: orgId, lead_id: id, patient_id: lead.patient_id || null })
+            setFollowups(p => [f, ...p]); await logActivity('note', `Follow-up scheduled${by(rule)}: ${act.fuType || 'Call'}`); changed = true
+          } else if (type === 'notify') {
+            toast({ type: 'default', title: act.title || `Automation: ${rule.name || 'rule'}`, message: act.message || '' })
+          }
+        } catch { /* ignore individual action failures */ }
       }
     }
     if (changed) await refreshActivities()

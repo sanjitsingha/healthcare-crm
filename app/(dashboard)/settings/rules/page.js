@@ -22,6 +22,10 @@ import {
   RULE_OPS,
   RULE_ACTIONS,
   FIELD_OPTIONS,
+  ACTION_KIND,
+  PRIORITIES,
+  FOLLOWUP_TYPES,
+  ruleActions,
   eventLabel,
 } from "@/lib/rulesEngine";
 
@@ -36,6 +40,8 @@ const DEFAULT_LEAD_STAGES = [
   "Lost",
 ];
 
+const blankAction = (target = "lead") => ({ type: RULE_ACTIONS[target][0].value, value: "" });
+
 const blankRule = (target = "lead") => ({
   id: uid(),
   name: "",
@@ -44,18 +50,28 @@ const blankRule = (target = "lead") => ({
   event: RULE_EVENTS[target][0].value,
   condition_match: "all",
   conditions: [],
-  action: { type: RULE_ACTIONS[target][0].value, value: "" },
+  actions: [blankAction(target)],
 });
 
-function RuleCard({ rule, stages, tags, onChange, onRemove }) {
+function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
   const [open, setOpen] = useState(!rule.name);
   const events = RULE_EVENTS[rule.target] || [];
   const fields = RULE_FIELDS[rule.target] || [];
-  const actions = RULE_ACTIONS[rule.target] || [];
+  const actionTypes = RULE_ACTIONS[rule.target] || [];
+  const ruleActionList = ruleActions(rule);
 
   const patch = (p) => onChange({ ...rule, ...p });
-  const setAction = (p) =>
-    onChange({ ...rule, action: { ...rule.action, ...p } });
+
+  // ── Actions (multiple) ──
+  const setActionAt = (i, p) =>
+    onChange({
+      ...rule,
+      actions: ruleActionList.map((a, idx) => (idx === i ? { ...a, ...p } : a)),
+    });
+  const addAction = () =>
+    onChange({ ...rule, action: undefined, actions: [...ruleActionList, blankAction(rule.target)] });
+  const removeAction = (i) =>
+    onChange({ ...rule, action: undefined, actions: ruleActionList.filter((_, idx) => idx !== i) });
 
   const addCond = () =>
     onChange({
@@ -236,30 +252,86 @@ function RuleCard({ rule, stages, tags, onChange, onRemove }) {
     </div>
   );
 
-  // when target changes, reset event + action to that target's options
+  // when target changes, reset event + actions to that target's options
   const changeTarget = (target) =>
     onChange({
       ...rule,
       target,
       event: RULE_EVENTS[target][0].value,
-      action: { type: RULE_ACTIONS[target][0].value, value: "" },
+      action: undefined,
+      actions: [blankAction(target)],
       conditions: [],
+      condition_groups: [],
     });
 
-  const actionValueOptions = () => {
-    if (rule.action.type === "set_stage")
-      return stages.map((s) => ({ value: s, label: s }));
-    if (rule.action.type === "set_status")
-      return ["Active", "Inactive"].map((s) => ({ value: s, label: s }));
-    if (rule.action.type === "add_tag")
-      return tags
-        .filter(
-          (t) =>
-            t.page === rule.target + "s" ||
-            (!t.page && rule.target === "patient"),
-        )
-        .map((t) => ({ value: t.id, label: t.name }));
-    return [];
+  const tagOptions = tags
+    .filter((t) => t.page === rule.target + "s" || (!t.page && rule.target === "patient"))
+    .map((t) => ({ value: t.id, label: t.name }));
+  const staffOptions = (staff || []).map((m) => ({ value: m.id, label: m.name }));
+
+  // Render the value input(s) for an action based on its kind.
+  const renderActionValue = (a, i) => {
+    const kind = ACTION_KIND[a.type];
+    const sel = (opts, placeholder = "Select…") => (
+      <select
+        value={a.value || ""}
+        onChange={(e) => setActionAt(i, { value: e.target.value })}
+        className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border outline-none"
+        style={{ background: "var(--color-surface)", color: "var(--color-text-primary)", borderColor: a.value ? "var(--color-border)" : "#f59e0b" }}
+      >
+        <option value="">{placeholder}</option>
+        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    );
+    const txt = (key, ph, opts = {}) => (
+      <input
+        value={a[key] ?? ""}
+        onChange={(e) => setActionAt(i, { [key]: e.target.value })}
+        placeholder={ph}
+        type={opts.type || "text"}
+        className="min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+        style={{ background: "var(--color-surface)", color: "var(--color-text-primary)", width: opts.width || "auto", flex: opts.flex }}
+      />
+    );
+    switch (kind) {
+      case "stage":    return sel(stages.map((s) => ({ value: s, label: s })));
+      case "status":   return sel(["Active", "Inactive"].map((s) => ({ value: s, label: s })));
+      case "priority": return sel(PRIORITIES.map((s) => ({ value: s, label: s })));
+      case "source":   return sel((FIELD_OPTIONS.source || []).map((s) => ({ value: s, label: s })));
+      case "tag":      return sel(tagOptions, tagOptions.length ? "Select tag…" : "No tags for this page");
+      case "staff":    return sel(staffOptions, staffOptions.length ? "Select member…" : "No team members");
+      case "number":   return txt("value", "e.g. 5000", { type: "number", flex: 1 });
+      case "text":     return txt("value", "Note text…", { flex: 1 });
+      case "task":
+        return (
+          <>
+            {txt("title", "Task title", { flex: 2 })}
+            <select value={a.priority || "Medium"} onChange={(e) => setActionAt(i, { priority: e.target.value })}
+              className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}>
+              {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {txt("dueInDays", "in days", { type: "number", width: "5.5rem" })}
+          </>
+        );
+      case "followup":
+        return (
+          <>
+            <select value={a.fuType || "Call"} onChange={(e) => setActionAt(i, { fuType: e.target.value })}
+              className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}>
+              {FOLLOWUP_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {txt("inDays", "in days", { type: "number", width: "5.5rem" })}
+          </>
+        );
+      case "notify":
+        return (
+          <>
+            {txt("title", "Notification title", { flex: 1 })}
+            {txt("message", "Message", { flex: 2 })}
+          </>
+        );
+      default: return null;
+    }
   };
 
   return (
@@ -439,52 +511,53 @@ function RuleCard({ rule, stages, tags, onChange, onRemove }) {
             </div>
           </div>
 
-          {/* THEN (action) */}
+          {/* THEN (actions) */}
           <div
             className="rounded-xl border border-(--color-border) p-3"
             style={{ background: "var(--color-surface-2)" }}
           >
-            <p
-              className="text-[10px] font-700 uppercase tracking-wide mb-2 flex items-center gap-1.5"
-              style={{ color: "#0ea5e9" }}
-            >
-              <Workflow size={12} /> Then
-            </p>
-            <div className="flex items-center gap-2">
-              <select
-                value={rule.action.type}
-                onChange={(e) => setAction({ type: e.target.value, value: "" })}
-                className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                style={{
-                  background: "var(--color-surface)",
-                  color: "var(--color-text-primary)",
-                }}
+            <div className="flex items-center justify-between mb-2">
+              <p
+                className="text-[10px] font-700 uppercase tracking-wide flex items-center gap-1.5"
+                style={{ color: "#0ea5e9" }}
               >
-                {actions.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={rule.action.value}
-                onChange={(e) => setAction({ value: e.target.value })}
-                className="flex-1 px-2 py-1.5 text-xs rounded-lg border outline-none"
-                style={{
-                  background: "var(--color-surface)",
-                  color: "var(--color-text-primary)",
-                  borderColor: rule.action.value
-                    ? "var(--color-border)"
-                    : "#f59e0b",
-                }}
+                <Workflow size={12} /> Then · do all of these
+              </p>
+              <button
+                type="button"
+                onClick={addAction}
+                className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface)"
+                style={{ color: "var(--color-brand)" }}
               >
-                <option value="">Select…</option>
-                {actionValueOptions().map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+                <Plus size={12} className="inline mr-1" /> Action
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {ruleActionList.map((a, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 flex-wrap p-2 rounded-xl border border-(--color-border)"
+                  style={{ background: "var(--color-surface)" }}
+                >
+                  <select
+                    value={a.type}
+                    onChange={(e) => setActionAt(i, { type: e.target.value, value: "" })}
+                    className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                    style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
+                  >
+                    {actionTypes.map((act) => (
+                      <option key={act.value} value={act.value}>{act.label}</option>
+                    ))}
+                  </select>
+                  {renderActionValue(a, i)}
+                  {ruleActionList.length > 1 && (
+                    <button type="button" onClick={() => removeAction(i)} className="p-1 text-gray-400 hover:text-red-500">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -511,7 +584,14 @@ export default function RulesPage() {
     // Seed from new rules, else migrate legacy stage_rules
     const existing = org?.settings?.rules;
     if (Array.isArray(existing)) {
-      setRules(existing);
+      // Migrate legacy single-action rules to an actions[] array.
+      setRules(
+        existing.map((r) =>
+          Array.isArray(r.actions)
+            ? r
+            : { ...r, actions: r.action ? [r.action] : [], action: undefined },
+        ),
+      );
     } else if (Array.isArray(org?.settings?.stage_rules)) {
       setRules(
         org.settings.stage_rules.map((r) => ({
@@ -692,6 +772,7 @@ export default function RulesPage() {
               rule={rule}
               stages={stages}
               tags={tags}
+              staff={org?.settings?.staff_members || []}
               onChange={updateRule}
               onRemove={() => removeRule(rule.id)}
             />

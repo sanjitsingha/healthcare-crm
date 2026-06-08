@@ -22,8 +22,8 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { toast } from '@/lib/toast'
-import { matchingRules } from '@/lib/rulesEngine'
-import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth } from 'date-fns'
+import { matchingRules, ruleActions } from '@/lib/rulesEngine'
+import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, addDays } from 'date-fns'
 import clsx from 'clsx'
 
 const STATUS_STYLE = {
@@ -307,25 +307,46 @@ export default function PatientDetailPage({ params }) {
   const applyRules = async (eventKey) => {
     if (!patient) return
     const rules = matchingRules(org?.settings?.rules || [], { target: 'patient', event: eventKey, entity: patient })
+    const staff = org?.settings?.staff_members || []
     let changed = false
+    const by = (rule) => rule.name ? ` by rule "${rule.name}"` : ' by rule'
     for (const rule of rules) {
-      const { type, value } = rule.action || {}
-      if (type === 'set_status' && value && patient.status !== value) {
+      for (const act of ruleActions(rule)) {
+        const { type, value } = act
         try {
-          const u = await updatePatient(id, { status: value }); setPatient(prev => ({ ...prev, status: u.status }))
-          await logActivity('status_change', `Status auto-updated to ${value} by rule${rule.name ? ` "${rule.name}"` : ''}`)
-          changed = true
-        } catch {}
-      } else if (type === 'add_tag' && value) {
-        const already = (patient.tags || []).some(t => t.tags?.id === value)
-        if (!already) {
-          try {
-            await assignTagToPatient(id, value); const u = await getPatient(id); setPatient(u)
-            const tag = availableTags.find(t => t.id === value)
-            await logActivity('note', `Tag "${tag?.name || 'tag'}" auto-added by rule${rule.name ? ` "${rule.name}"` : ''}`)
-            changed = true
-          } catch {}
-        }
+          if (type === 'set_status' && value && patient.status !== value) {
+            const u = await updatePatient(id, { status: value }); setPatient(p => ({ ...p, status: u.status }))
+            await logActivity('status_change', `Status auto-updated to ${value}${by(rule)}`); changed = true
+          } else if (type === 'add_tag' && value) {
+            if (!(patient.tags || []).some(t => t.tags?.id === value)) {
+              await assignTagToPatient(id, value); const u = await getPatient(id); setPatient(u)
+              const tag = availableTags.find(t => t.id === value)
+              await logActivity('note', `Tag "${tag?.name || 'tag'}" added${by(rule)}`); changed = true
+            }
+          } else if (type === 'remove_tag' && value) {
+            if ((patient.tags || []).some(t => t.tags?.id === value)) {
+              await removeTagFromPatient(id, value); const u = await getPatient(id); setPatient(u)
+              const tag = availableTags.find(t => t.id === value)
+              await logActivity('note', `Tag "${tag?.name || 'tag'}" removed${by(rule)}`); changed = true
+            }
+          } else if (type === 'assign_to' && value && patient.assigned_to !== value) {
+            const u = await updatePatient(id, { assigned_to: value }); setPatient(p => ({ ...p, assigned_to: u.assigned_to }))
+            const m = staff.find(s => s.id === value)
+            await logActivity('note', `Assigned to ${m?.name || 'team member'}${by(rule)}`); changed = true
+          } else if (type === 'add_note' && value) {
+            await logActivity('note', value); changed = true
+          } else if (type === 'create_task' && act.title) {
+            const due = act.dueInDays ? addDays(new Date(), Number(act.dueInDays)).toISOString() : null
+            const t = await createTask({ title: act.title, priority: act.priority || 'Medium', due_date: due, status: 'Pending', organization_id: orgId, entity_type: 'patient', entity_id: id })
+            setTasks(p => [t, ...p]); await logActivity('note', `Task created${by(rule)}: ${act.title}`); changed = true
+          } else if (type === 'schedule_followup') {
+            const when = addDays(new Date(), Number(act.inDays || 0)).toISOString()
+            const f = await createFollowup({ type: act.fuType || 'Call', scheduled_at: when, status: 'Scheduled', organization_id: orgId, patient_id: id, lead_id: null })
+            setFollowups(p => [f, ...p]); await logActivity('note', `Follow-up scheduled${by(rule)}: ${act.fuType || 'Call'}`); changed = true
+          } else if (type === 'notify') {
+            toast({ type: 'default', title: act.title || `Automation: ${rule.name || 'rule'}`, message: act.message || '' })
+          }
+        } catch { /* ignore individual action failures */ }
       }
     }
     if (changed) await loadAll()
