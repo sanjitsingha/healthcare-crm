@@ -198,6 +198,7 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
 
   const renderCondition = (c, actions) => (
     <div
+      key={actions.key}
       draggable
       onDragStart={actions.onDragStart}
       className="group flex items-center gap-2 p-2 rounded-xl border border-(--color-border) cursor-grab active:cursor-grabbing transition-all hover:shadow-sm"
@@ -476,7 +477,7 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
                   <p className="text-[11px] py-3 text-center rounded-lg border border-dashed border-(--color-border)" style={{ color: "var(--color-text-muted)" }}>Drop a condition here, or click “Condition”.</p>
                 ) : (
                   <div className="space-y-2">
-                    {(rule.conditions || []).map((c, i) => renderCondition(c, { set: (patchValue) => setCond(i, patchValue), remove: () => removeCond(i), onDragStart: (e) => e.dataTransfer.setData("application/json", JSON.stringify({ source: "loose", index: i })) }))}
+                    {(rule.conditions || []).map((c, i) => renderCondition(c, { key: `loose-${i}`, set: (patchValue) => setCond(i, patchValue), remove: () => removeCond(i), onDragStart: (e) => e.dataTransfer.setData("application/json", JSON.stringify({ source: "loose", index: i })) }))}
                   </div>
                 )}
               </div>
@@ -502,7 +503,7 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
                       <p className="text-[11px] py-4 text-center rounded-xl border border-dashed" style={{ color: "var(--color-text-muted)", background: "rgba(255,255,255,0.55)", borderColor: isOr ? "#f59e0b55" : "#16a34a55" }}>Magnetic drop zone — drag condition blocks here.</p>
                     ) : (
                       <div className="space-y-2">
-                        {(group.conditions || []).map((c, i) => renderCondition(c, { set: (patchValue) => setGroupCond(group.id, i, patchValue), remove: () => removeGroupCond(group.id, i), onDragStart: (e) => e.dataTransfer.setData("application/json", JSON.stringify({ source: "group", groupId: group.id, index: i })) }))}
+                        {(group.conditions || []).map((c, i) => renderCondition(c, { key: `g-${group.id}-${i}`, set: (patchValue) => setGroupCond(group.id, i, patchValue), remove: () => removeGroupCond(group.id, i), onDragStart: (e) => e.dataTransfer.setData("application/json", JSON.stringify({ source: "group", groupId: group.id, index: i })) }))}
                       </div>
                     )}
                   </div>
