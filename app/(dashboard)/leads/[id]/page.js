@@ -565,11 +565,18 @@ export default function LeadDetailPage({ params }) {
   const handleEdit = async (e) => {
     e.preventDefault()
     try {
+      const before = lead
       const updated = await updateLead(id, editForm)
       setLead(prev => ({ ...prev, ...updated }))
       await logActivity('note', `Lead details updated`)
       await refreshActivities()
       setEditOpen(false)
+      // Fire field-specific + generic events so rules can react (use fresh entity).
+      const fresh = { ...before, ...updated }
+      await applyRules('lead_updated', fresh)
+      if (updated.source !== before?.source) await applyRules('source_changed', fresh)
+      if (updated.priority !== before?.priority) await applyRules('priority_changed', fresh)
+      if (updated.stage !== before?.stage) await applyRules('stage_changed', fresh)
     } catch (e) { alert(e.message) }
   }
 
@@ -589,6 +596,7 @@ export default function LeadDetailPage({ params }) {
         ? `Lead assigned to ${member?.name || 'team member'}`
         : 'Lead unassigned')
       await refreshActivities()
+      await applyRules(memberId ? 'lead_assigned' : 'lead_unassigned', { ...lead, assigned_to: updated.assigned_to })
     } catch (err) { alert(err.message) }
     setAssigningLead(false)
   }
@@ -601,14 +609,15 @@ export default function LeadDetailPage({ params }) {
       await logActivity('status_change', `Stage changed to ${stage}`)
       await refreshActivities()
       setChangingStage(false)
-      await applyRules('stage_changed')
+      await applyRules('stage_changed', { ...lead, stage: updated.stage })
     } catch (err) { alert(err.message) }
   }
 
   // Apply configured automation rules (Settings → Rules) for a lead event.
-  const applyRules = async (eventKey) => {
-    if (!lead) return
-    const rules = matchingRules(org?.settings?.rules || [], { target: 'lead', event: eventKey, entity: lead })
+  const applyRules = async (eventKey, entityOverride) => {
+    const entity = entityOverride || lead
+    if (!entity) return
+    const rules = matchingRules(org?.settings?.rules || [], { target: 'lead', event: eventKey, entity })
     const orgStages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s => typeof s === 'string' ? s : s.name)
     const staff = org?.settings?.staff_members || []
     let changed = false
@@ -669,6 +678,18 @@ export default function LeadDetailPage({ params }) {
     if (changed) await refreshActivities()
   }
 
+  // Fire "Lead created" rules once for a freshly-created lead (manual create
+  // navigates straight here). Webhook-created leads aren't open, so they won't.
+  const firedCreatedRef = useRef(false)
+  useEffect(() => {
+    if (!lead || firedCreatedRef.current) return
+    const ageMs = Date.now() - new Date(lead.created_at).getTime()
+    if (ageMs >= 0 && ageMs < 20000) {
+      firedCreatedRef.current = true
+      applyRules('lead_created', lead)
+    }
+  }, [lead]) // eslint-disable-line
+
   const handleConvertToPatient = async () => {
     if (lead.patient_id) { router.push(`/patients/${lead.patient_id}`); return }
     if (!confirm('Create a Patient record from this lead?')) return
@@ -688,6 +709,7 @@ export default function LeadDetailPage({ params }) {
       await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}` })
       await refreshActivities(pat.id)
       toast({ type: 'patient_created', title: 'Converted to Patient', message: `${displayName} is now a patient.` })
+      await applyRules('converted_to_patient', { ...lead, patient_id: pat.id, stage: 'Converted' })
     } catch (err) { alert(err.message) }
   }
 
@@ -774,6 +796,7 @@ export default function LeadDetailPage({ params }) {
       await logActivity('note', `Next follow-up scheduled: ${next.type} on ${format(new Date(next.scheduled_at), 'MMM d, h:mm a')}`)
     }
     await refreshActivities()
+    await applyRules('followup_completed')
   }
 
   const handleMissFollowup = async (fuId) => {
@@ -782,6 +805,7 @@ export default function LeadDetailPage({ params }) {
     const fu = followups.find(f => f.id === fuId)
     await logActivity('note', `Missed: ${fu?.type || 'Follow-up'} on ${fu?.scheduled_at ? format(new Date(fu.scheduled_at), 'MMM d') : ''}`)
     await refreshActivities()
+    await applyRules('followup_missed')
   }
 
   const handleRescheduleFollowup = async (fuId, newDate, newType) => {
@@ -789,6 +813,7 @@ export default function LeadDetailPage({ params }) {
     setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
     await logActivity('note', `Follow-up rescheduled to ${format(new Date(newDate), 'MMM d, h:mm a')}`)
     await refreshActivities()
+    await applyRules('followup_rescheduled')
   }
 
   // Inline cell edit from the spreadsheet/table view.
@@ -839,6 +864,7 @@ export default function LeadDetailPage({ params }) {
       await logActivity('note', 'Notes updated')
       await refreshActivities()
       setNotesEditing(false)
+      await applyRules('note_updated', { ...lead, description: updated.description })
     } catch (err) { alert(err.message) }
     finally { setNotesSaving(false) }
   }
