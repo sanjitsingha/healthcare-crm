@@ -22,6 +22,7 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { toast } from '@/lib/toast'
+import { logAudit, AUDIT } from '@/lib/audit'
 import { matchingRules, ruleActions } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, addDays } from 'date-fns'
 import clsx from 'clsx'
@@ -243,6 +244,11 @@ export default function PatientDetailPage({ params }) {
   }
 
   useEffect(() => { loadAll() }, [id])
+
+  // Audit: record that this patient record was viewed (once per patient).
+  useEffect(() => {
+    if (id && orgId) logAudit({ action: AUDIT.PATIENT_VIEW, entityType: 'patient', entityId: id, description: 'Viewed patient record' })
+  }, [id, orgId])
 
   const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
   const handleEdit = async (e) => { e.preventDefault(); try { const updated = await updatePatient(id, editForm); setPatient(prev => ({ ...prev, ...updated })); setEditOpen(false) } catch (err) { alert(err.message) } }
@@ -532,8 +538,14 @@ export default function PatientDetailPage({ params }) {
         <div className="grid grid-cols-3 gap-5 items-start">
           <div className="space-y-4">
             <Card className="p-5 border-(--color-border)">
-              <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
-              <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p><div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
+                <button type="button" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}
+                  className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit patient" style={{ color: 'var(--color-text-muted)' }}>
+                  <Edit2 size={13} />
+                </button>
+              </div>
+              <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p>{patient.patient_code && <p className="text-[11px] font-600 font-mono mt-0.5" style={{ color: 'var(--color-brand)' }}>{patient.patient_code}</p>}<div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
               <div className="mb-4">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
@@ -613,7 +625,7 @@ export default function PatientDetailPage({ params }) {
               <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
                 {[{ id: 'tasks', label: 'Tasks', icon: CheckSquare, count: pendingTasks }, { id: 'timeline', label: 'Timeline', icon: Clock }].map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2', activeTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')} style={activeTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}><tab.icon size={14} />{tab.label}{tab.count > 0 && <span className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{tab.count}</span>}</button>)}
               </div>
-              <div className="p-5">
+              <div className="p-3">
                 {activeTab === 'tasks' && <div className="space-y-3">{!taskOpen ? <div className="flex justify-end"><Button size="sm" onClick={() => setTaskOpen(true)}><Plus size={14} /> New Task</Button></div> : <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Task *" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required /><div className="grid grid-cols-2 gap-3"><Select label="Priority" value={newTask.priority} onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))} options={['Low', 'Medium', 'High', 'Urgent'].map(s => ({ value: s, label: s }))} /><Input label="Due Date" type="datetime-local" value={newTask.due_date} onChange={e => setNewTask(f => ({ ...f, due_date: e.target.value }))} /></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setTaskOpen(false)}>Cancel</Button><Button size="sm" type="submit">Create Task</Button></div></form>}{tasks.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><CheckSquare size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No tasks yet.</p></div> : tasks.map(task => <div key={task.id} className={clsx('flex items-start gap-3 p-4 rounded-xl border border-(--color-border)', task.status === 'Completed' && 'opacity-50')} style={{ background: 'var(--color-surface-2)' }}><input type="checkbox" checked={task.status === 'Completed'} className="mt-0.5 w-4 h-4" onChange={() => handleTaskToggle(task)} /><div className="flex-1"><p className={clsx('text-sm font-500', task.status === 'Completed' && 'line-through')}>{task.title}</p>{task.due_date && <p className="text-xs mt-0.5"><Calendar size={10} className="inline mr-1" />{format(new Date(task.due_date), 'MMM d, h:mm a')}</p>}</div></div>)}</div>}
                 {activeTab === 'timeline' && <Timeline activities={activities} maxHeight="28rem" />}
               </div>
@@ -635,9 +647,9 @@ export default function PatientDetailPage({ params }) {
         <Card className="border-(--color-border) overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
             <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Calendar size={13} /> Appointments</p>
-            {!addingAppt && <Button size="sm" onClick={() => setAddingAppt(true)}><Plus size={14} /> Book</Button>}
+            {!addingAppt && <Button size="sm" onClick={() => setAddingAppt(true)}><Plus size={14} /> Book Appointment</Button>}
           </div>
-          <div className="p-5 space-y-3">
+          <div className="p-3 space-y-3">
             {addingAppt && (
               <form onSubmit={handleBookAppt} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                 <div className="grid grid-cols-2 gap-3">
@@ -664,9 +676,9 @@ export default function PatientDetailPage({ params }) {
               </form>
             )}
             {appointments.length === 0 && !addingAppt ? (
-              <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><Calendar size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No appointments yet.</p></div>
+              <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><Calendar size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No appointments yet.</p></div>
             ) : (
-              <div className="space-y-2">
+              <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
                 {[...appointments].sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)).map(appt => {
                   const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
                   const st = ST[appt.status] || ST.booked
@@ -766,7 +778,7 @@ export default function PatientDetailPage({ params }) {
               </div>
             ) : (<>
             {!showFuForm ? <div className="flex justify-end"><Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button></div> : <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="space-y-1.5"><label className="block text-xs font-500">Type</label><div className="flex flex-wrap gap-1.5">{FOLLOWUP_TYPES.map(t => <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))} className="px-3 py-1.5 rounded-full text-[11px] font-600 border" style={newFu.type === t ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{t}</button>)}</div></div><Select label="Status *" value={newFu.status_detail} onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))} options={[{ value: '', label: 'Select status' }, ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s }))]} /><CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} /><Textarea label="Response" value={newFu.response} onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setShowFuForm(false)}>Cancel</Button><Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>Save</Button></div></form>}
-            {followups.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="space-y-3 max-h-150 overflow-y-auto pr-1">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
+            {followups.length === 0 ? <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 max-h-150 overflow-y-auto border-t border-(--color-border)">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
             </>)}
           </div>
         </Card>

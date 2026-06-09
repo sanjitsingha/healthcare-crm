@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Heart, ChevronRight, CheckCircle, Building2, Phone, MapPin } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { logAudit, AUDIT } from '@/lib/audit'
 
 const ORG_TYPES = [
   'Clinic', 'Hospital', 'Pharmacy', 'Lab', 'Dental Clinic',
@@ -120,6 +121,14 @@ export default function SetupPage() {
         })
 
       if (profileErr) throw profileErr
+
+      // Audit: account + organization created during onboarding.
+      await logAudit({
+        action: AUDIT.USER_CREATE,
+        description: `Account created and joined organization "${org.name}"`,
+        metadata: { organization_id: org.id, organization_name: org.name },
+        actor: { userId: user.id, email: user.email, name: user.user_metadata?.full_name || user.email, orgId: org.id },
+      })
 
       setStep(3)
       setTimeout(() => {

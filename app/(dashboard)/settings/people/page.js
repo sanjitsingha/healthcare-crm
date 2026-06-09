@@ -4,6 +4,7 @@ import { Users, Plus, Trash2, X, Stethoscope } from 'lucide-react'
 import { Button, Card, Input, Avatar } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
+import { logAudit, AUDIT } from '@/lib/audit'
 
 // ── Team Members ───────────────────────────────────────────────
 function TeamMembersSection({ org, orgId }) {
@@ -22,6 +23,7 @@ function TeamMembersSection({ org, orgId }) {
     const updated   = [...staff, newMember]
     try {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), staff_members: updated } })
+      logAudit({ action: AUDIT.USER_CREATE, description: `Team member added: ${newMember.name}`, metadata: { name: newMember.name, designation: newMember.designation } })
       setStaff(updated); resetForm()
     } catch (err) { alert(err.message) }
     finally { setSaving(false) }
@@ -29,9 +31,11 @@ function TeamMembersSection({ org, orgId }) {
 
   const handleDelete = async (id) => {
     if (!confirm('Remove this team member?')) return
+    const member  = staff.find(m => m.id === id)
     const updated = staff.filter(m => m.id !== id)
     try {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), staff_members: updated } })
+      logAudit({ action: AUDIT.PERMISSION_CHANGE, description: `Team member removed: ${member?.name || 'member'}`, metadata: { name: member?.name } })
       setStaff(updated)
     } catch (err) { alert(err.message) }
   }

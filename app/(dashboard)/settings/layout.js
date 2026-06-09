@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow } from 'lucide-react'
+import { Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText } from 'lucide-react'
 import clsx from 'clsx'
 
 const NAV_ITEMS = [
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/settings/modules',       label: 'Modules',       icon: LayoutGrid },
   { href: '/settings/rules',         label: 'Rules',         icon: Workflow },
   { href: '/settings/configuration', label: 'Configuration', icon: Plug },
+  { href: '/settings/logs',          label: 'Logs',          icon: ScrollText },
 ]
 
 export default function SettingsLayout({ children }) {

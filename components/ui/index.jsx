@@ -219,6 +219,43 @@ export function Spinner({ size = 20 }) {
   )
 }
 
+// ── Switch (solid toggle) ─────────────────────────────────────
+export function Switch({ checked = false, onChange, size = 'md', title, disabled = false }) {
+  const dims = size === 'sm'
+    ? { w: 30, h: 18, knob: 14 }
+    : { w: 38, h: 22, knob: 18 }
+  const pad = 2
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      title={title}
+      disabled={disabled}
+      onClick={onChange}
+      className="relative inline-flex items-center shrink-0 rounded-full transition-colors duration-200 outline-none disabled:opacity-50"
+      style={{
+        width: dims.w,
+        height: dims.h,
+        background: checked ? 'var(--color-brand)' : '#cbd2e0',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+    >
+      <span
+        className="absolute rounded-full bg-white transition-transform duration-200"
+        style={{
+          width: dims.knob,
+          height: dims.knob,
+          top: pad,
+          left: pad,
+          transform: checked ? `translateX(${dims.w - dims.knob - pad * 2}px)` : 'translateX(0)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
+        }}
+      />
+    </button>
+  )
+}
+
 // ── Stat Card ─────────────────────────────────────────────────
 export function StatCard({ label, value, icon: Icon, color = 'brand', trend }) {
   const colorMap = {

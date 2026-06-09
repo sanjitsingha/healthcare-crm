@@ -1,10 +1,9 @@
 'use client'
 import { useState } from 'react'
 import {
-  LayoutGrid, Plus, Trash2, X, Save,
-  GripVertical, ToggleLeft, ToggleRight,
+  LayoutGrid, Plus, Trash2, X, Save, GripVertical,
 } from 'lucide-react'
-import { Button, Card, Input, Select } from '@/components/ui'
+import { Button, Card, Input, Select, Switch } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
 
@@ -178,13 +177,7 @@ export default function ModulesPage() {
                       )}
                       <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
                         <label className="text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Required</label>
-                        <button
-                          type="button"
-                          onClick={() => setField(field.id, 'required', !field.required)}
-                          style={{ color: field.required ? 'var(--color-brand)' : 'var(--color-text-muted)' }}
-                        >
-                          {field.required ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                        </button>
+                        <Switch size="sm" checked={field.required} onChange={() => setField(field.id, 'required', !field.required)} />
                       </div>
                       <button type="button" onClick={() => removeField(field.id)} className="mb-1.5 shrink-0 p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all">
                         <X size={14} />
@@ -225,16 +218,12 @@ export default function ModulesPage() {
                     <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{m.fields.length} field{m.fields.length !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleToggle(m.id)}
-                      className="flex items-center gap-1.5 text-xs font-600 px-2.5 py-1 rounded-full border transition-all"
-                      style={m.active
-                        ? { background: '#dcfce7', color: '#16a34a', borderColor: '#bbf7d0' }
-                        : { background: 'var(--color-surface)', color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}
-                    >
-                      {m.active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-                      {m.active ? 'Active' : 'Inactive'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <Switch size="sm" checked={m.active} onChange={() => handleToggle(m.id)} title={m.active ? 'Active' : 'Inactive'} />
+                      <span className="text-xs font-600" style={{ color: m.active ? '#16a34a' : 'var(--color-text-muted)' }}>
+                        {m.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
                     <button onClick={() => startEdit(m)} className="p-1.5 rounded-lg hover:bg-(--color-brand-50) transition-colors" style={{ color: 'var(--color-text-muted)' }}>
                       <Save size={13} />
                     </button>

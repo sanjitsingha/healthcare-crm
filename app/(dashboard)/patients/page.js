@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, Download, ToggleLeft, ToggleRight, RefreshCw, ChevronDown, Tag, Check } from 'lucide-react'
 import { Card, Spinner } from '@/components/ui'
 import { getPatients, deletePatient, updatePatient, getTags } from '@/lib/supabase/queries'
+import { logAudit, AUDIT } from '@/lib/audit'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -359,6 +360,7 @@ export default function PatientsPage() {
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `patients-${format(new Date(), 'yyyy-MM-dd')}.csv`
     a.click()
+    logAudit({ action: AUDIT.DATA_EXPORT, entityType: 'patient', description: `Exported ${rows.length} patient record(s) to CSV`, metadata: { count: rows.length, format: 'csv' } })
     clearSel()
   }
 
@@ -529,6 +531,7 @@ export default function PatientsPage() {
                       style={{ accentColor: 'var(--color-brand)' }}
                     />
                   </th>
+                  <th className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>Tag</th>
                   {visibleCols.map(col => (
                     <th key={col.id} className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>{col.label}</th>
                   ))}
@@ -537,7 +540,7 @@ export default function PatientsPage() {
               <tbody className="divide-y divide-(--color-border)">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleCols.length + 1} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={visibleCols.length + 2} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       {hasFilters || search ? 'No patients match your filters.' : 'No patients yet. Add your first patient.'}
                     </td>
                   </tr>
@@ -546,6 +549,26 @@ export default function PatientsPage() {
                     <td className="w-10 px-4 py-3" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
                         className="w-4 h-4 cursor-pointer rounded" style={{ accentColor: 'var(--color-brand)' }} />
+                    </td>
+                    <td className="px-4 py-3 align-top cursor-pointer" onClick={() => router.push(`/patients/${p.id}`)}>
+                      {(() => {
+                        const pTags = (p.tags || []).map(t => t.tags).filter(Boolean)
+                        if (pTags.length === 0) return <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
+                        return (
+                          <div className="flex flex-wrap items-center gap-1 max-w-60">
+                            {pTags.map(tag => {
+                              const tc = tag.color || '#6366f1'
+                              return (
+                                <span key={tag.id} className="relative inline-flex items-center pl-2.5 pr-2 py-0.5 text-[10px] font-600 whitespace-nowrap"
+                                  style={{ background: tc, color: 'white', clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>
+                                  <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                                  {tag.name}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
                     </td>
                     {visibleCols.map(col => (
                       <td key={col.id} className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => router.push(`/patients/${p.id}`)}>

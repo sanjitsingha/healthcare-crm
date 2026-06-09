@@ -7,12 +7,10 @@ import {
   ChevronDown,
   Filter,
   Zap,
-  ToggleLeft,
-  ToggleRight,
   TrendingUp,
   UserRound,
 } from "lucide-react";
-import { Button, Card, Input, Select, Spinner } from "@/components/ui";
+import { Button, Card, Input, Select, Spinner, Switch } from "@/components/ui";
 import { useOrg } from "@/lib/context/OrgContext";
 import { updateOrganization, getTags } from "@/lib/supabase/queries";
 import {
@@ -345,18 +343,11 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
         className="flex items-center gap-3 px-4 py-3"
         style={{ background: "var(--color-surface-2)" }}
       >
-        <button
-          type="button"
-          onClick={() => patch({ enabled: !rule.enabled })}
+        <Switch
+          checked={rule.enabled}
+          onChange={() => patch({ enabled: !rule.enabled })}
           title={rule.enabled ? "Enabled" : "Disabled"}
-          style={{
-            color: rule.enabled
-              ? "var(--color-brand)"
-              : "var(--color-text-muted)",
-          }}
-        >
-          {rule.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
-        </button>
+        />
         <div className="flex-1 min-w-0">
           <p
             className="text-sm font-600 truncate"

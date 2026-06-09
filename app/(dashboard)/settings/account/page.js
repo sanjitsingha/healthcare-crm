@@ -4,11 +4,13 @@ import { useRouter } from 'next/navigation'
 import {
   UserRound, LogOut, Shield, Clock, Monitor,
   Mail, CheckCircle, XCircle, Key, Activity, Palette, Check,
+  MapPin, Wifi, Crosshair,
 } from 'lucide-react'
 import { Card, Avatar } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { createClient } from '@/lib/supabase/client'
 import { updateOrganization } from '@/lib/supabase/queries'
+import { logAudit, AUDIT } from '@/lib/audit'
 import { THEMES, applyTheme, DEFAULT_THEME } from '@/lib/theme'
 import TwoFactorSettings from '@/components/crm/TwoFactorSettings'
 import { format, formatDistanceToNow, subDays, isToday, isYesterday } from 'date-fns'
@@ -55,6 +57,8 @@ export default function AccountPage() {
   const [sessionLog,  setSessionLog]  = useState([])
   const [signingOut,  setSigningOut]  = useState(false)
   const [theme,       setTheme]       = useState(DEFAULT_THEME)
+  const [net,         setNet]         = useState(null) // { ip, location } once resolved
+  const [geoStatus,   setGeoStatus]   = useState('idle') // idle | requesting | granted | denied
 
   useEffect(() => {
     let stored = null
@@ -96,9 +100,24 @@ export default function AccountPage() {
     setDeviceInfo(`${browser} on ${os}`)
   }, [])
 
-  // ── Build session log in localStorage ───────────────────────
+  // ── Resolve IP + approximate location (no permission needed) ──
   useEffect(() => {
-    if (!user || !deviceInfo) return
+    let active = true
+    fetch('https://ipwho.is/')
+      .then(r => r.json())
+      .then(d => {
+        if (!active) return
+        if (d && d.success !== false) {
+          setNet({ ip: d.ip || null, location: [d.city, d.region, d.country].filter(Boolean).join(', ') || null })
+        } else setNet({})
+      })
+      .catch(() => active && setNet({}))
+    return () => { active = false }
+  }, [])
+
+  // ── Build session log in localStorage (records IP + location) ──
+  useEffect(() => {
+    if (!user || !deviceInfo || net === null) return // wait until IP lookup resolves
 
     const key      = `session_log_${user.id}`
     const stored   = JSON.parse(localStorage.getItem(key) || '[]')
@@ -111,7 +130,7 @@ export default function AccountPage() {
 
     let log = stored
     if (shouldRecord) {
-      const entry = { at: now.toISOString(), device: deviceInfo, provider }
+      const entry = { at: now.toISOString(), device: deviceInfo, provider, ip: net.ip || null, location: net.location || null, precise: null }
       log = [entry, ...stored].slice(0, 60) // keep max 60 entries
       localStorage.setItem(key, JSON.stringify(log))
     }
@@ -119,11 +138,46 @@ export default function AccountPage() {
     // Only show last 30 days
     const cutoff = subDays(now, 30)
     setSessionLog(log.filter(e => new Date(e.at) >= cutoff))
-  }, [user, deviceInfo])
+  }, [user, deviceInfo, net])
+
+  // Patch the most-recent (current) login entry — used for precise location.
+  const patchLatestEntry = (patch) => {
+    if (!user) return
+    const key = `session_log_${user.id}`
+    const stored = JSON.parse(localStorage.getItem(key) || '[]')
+    if (!stored.length) return
+    stored[0] = { ...stored[0], ...patch }
+    localStorage.setItem(key, JSON.stringify(stored))
+    setSessionLog(prev => prev.map((e, i) => (i === 0 ? { ...e, ...patch } : e)))
+  }
+
+  // Ask the browser for precise location (permission prompt), then reverse-geocode.
+  const requestPreciseLocation = () => {
+    if (!navigator.geolocation) { setGeoStatus('denied'); return }
+    setGeoStatus('requesting')
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords
+        let place = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+        try {
+          const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`)
+          const d = await r.json()
+          const p = [d.city || d.locality, d.principalSubdivision, d.countryName].filter(Boolean).join(', ')
+          if (p) place = p
+        } catch { /* keep coords */ }
+        patchLatestEntry({ precise: place, lat: latitude, lon: longitude })
+        setGeoStatus('granted')
+      },
+      () => setGeoStatus('denied'),
+      { enableHighAccuracy: true, timeout: 10000 },
+    )
+  }
 
   const handleSignOut = async () => {
     setSigningOut(true)
     const supabase = createClient()
+    // Log before signing out — the session is still valid here.
+    await logAudit({ action: AUDIT.LOGOUT, description: 'Signed out' })
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
@@ -241,11 +295,24 @@ export default function AccountPage() {
 
       {/* ── 30-Day Session Timeline ── */}
       <Card className="p-5">
-        <SectionHead
-          icon={Activity}
-          title="Login History"
-          description="Sign-in events recorded on this device — last 30 days"
-        />
+        <div className="flex items-start justify-between gap-3 mb-4 pb-4 border-b border-(--color-border)">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
+              <Activity size={16} style={{ color: 'var(--color-brand)' }} />
+            </div>
+            <div>
+              <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Login History</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Sign-in events with IP &amp; location — last 30 days</p>
+            </div>
+          </div>
+          {geoStatus !== 'granted' && (
+            <button type="button" onClick={requestPreciseLocation} disabled={geoStatus === 'requesting'}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-600 transition-colors hover:bg-(--color-brand-50) shrink-0 disabled:opacity-50"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-brand)' }}>
+              <Crosshair size={13} /> {geoStatus === 'requesting' ? 'Locating…' : geoStatus === 'denied' ? 'Location blocked' : 'Use precise location'}
+            </button>
+          )}
+        </div>
 
         {sessionLog.length === 0 ? (
           <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
@@ -310,6 +377,19 @@ export default function AccountPage() {
                           <Monitor size={10} />
                           {entry.device}
                         </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
+                        {entry.ip && (
+                          <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                            <Wifi size={10} /> {entry.ip}
+                          </span>
+                        )}
+                        {(entry.precise || entry.location) && (
+                          <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                            <MapPin size={10} /> {entry.precise || entry.location}
+                            {entry.precise && <span className="text-[9px] font-700 px-1 rounded" style={{ background: '#dcfce7', color: '#15803d' }}>precise</span>}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

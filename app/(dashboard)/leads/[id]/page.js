@@ -1120,7 +1120,13 @@ export default function LeadDetailPage({ params }) {
 
             {/* Lead Profile */}
             <Card className="p-5 border-(--color-border)">
-              <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Lead Profile</p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Lead Profile</p>
+                <button type="button" onClick={() => { setEditForm({ stage: lead.stage, priority: lead.priority, source: lead.source, description: lead.description || '' }); setEditOpen(true) }}
+                  className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit lead" style={{ color: 'var(--color-text-muted)' }}>
+                  <Edit2 size={13} />
+                </button>
+              </div>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-base font-800 shrink-0" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
                   {(displayName[0] || '?').toUpperCase()}{displayName.split(' ')[1]?.[0]?.toUpperCase() || ''}
@@ -1228,7 +1234,13 @@ export default function LeadDetailPage({ params }) {
 
             {/* Lead Info */}
             <Card className="p-5 border-(--color-border)">
-              <p className="text-[10px] font-700 uppercase tracking-widest mb-4" style={{ color: 'var(--color-text-muted)' }}>Lead Info</p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Lead Info</p>
+                <button type="button" onClick={() => { setEditForm({ stage: lead.stage, priority: lead.priority, source: lead.source, description: lead.description || '' }); setEditOpen(true) }}
+                  className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit lead" style={{ color: 'var(--color-text-muted)' }}>
+                  <Edit2 size={13} />
+                </button>
+              </div>
               <div className="space-y-3">
                 {[
                   { label: 'Priority', value: lead.priority,  icon: Tag },
@@ -1284,11 +1296,11 @@ export default function LeadDetailPage({ params }) {
                 )}
               </div>
 
-              <div className="p-5 max-h-140 overflow-y-auto">
+              <div className="p-3 max-h-140 overflow-y-auto">
 
                 {/* ── Tasks ── */}
                 {activeTab === 'tasks' && (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {taskOpen && (
                       <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                         <Input label="Task *" placeholder="e.g. Send treatment plan, Follow up on insurance" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required />
@@ -1357,7 +1369,7 @@ export default function LeadDetailPage({ params }) {
                 )}
               </div>
 
-              <div className={clsx('p-5 space-y-3', !showBookForm && !reschedulingId && 'max-h-140 overflow-y-auto')}>
+              <div className={clsx('p-3 space-y-3', !showBookForm && !reschedulingId && 'max-h-140 overflow-y-auto')}>
                 {showBookForm && (
                   <form onSubmit={handleBookAppointment} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
                     <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>New Appointment</p>
@@ -1434,12 +1446,12 @@ export default function LeadDetailPage({ params }) {
                 )}
 
                 {appointments.length === 0 && !showBookForm ? (
-                  <div className="py-12 text-center border border-dashed rounded-xl border-(--color-border)">
+                  <div className="-mx-3 -mb-3 py-12 text-center border-t border-(--color-border)">
                     <Calendar size={28} className="mx-auto mb-2 opacity-30" />
                     <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No appointments booked yet.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
                     {appointments.map(appt => {
                       const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
                       const s = ST[appt.status] || ST.booked
@@ -1638,13 +1650,13 @@ export default function LeadDetailPage({ params }) {
                 />
               </div>
             ) : followups.length === 0 ? (
-              <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)">
+              <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)">
                 <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups scheduled yet.</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email log to keep this lead moving.</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-150 overflow-y-auto pr-1">
+              <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 max-h-150 overflow-y-auto border-t border-(--color-border)">
                 {[...followups].sort((a, b) => {
                   const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
                   return (order[a.status] ?? 9) - (order[b.status] ?? 9)

@@ -53,11 +53,11 @@ export function ChipCell({ value, options, onChange, placeholder = '—', styleF
   return (
     <>
       <button ref={btnRef} type="button" onClick={() => open ? setOpen(false) : openMenu()}
-        className="w-full h-full min-h-10 flex items-center justify-between gap-1 px-2.5 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors outline-none"
+        className="w-full h-full min-h-11 flex items-center justify-between gap-1 px-2.5 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors outline-none"
         style={{ boxShadow: open ? 'inset 0 0 0 2px var(--color-brand)' : 'none' }}>
         {value
-          ? <span className="text-[13px] font-600 px-2 py-1 rounded-md truncate leading-snug"
-              style={s ? { background: s.bg, color: s.color } : { background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{value}</span>
+          ? <span className="text-[13px] font-600 px-2 py-0.5 rounded-md whitespace-nowrap overflow-hidden text-ellipsis"
+              style={{ lineHeight: '22px', ...(s ? { background: s.bg, color: s.color } : { background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }) }}>{value}</span>
           : <span className="text-[13px]" style={{ color: 'var(--color-text-muted)' }}>{placeholder}</span>}
         <ChevronDown size={13} className="shrink-0 opacity-40" />
       </button>
@@ -96,7 +96,7 @@ export function TextCell({ value, onCommit, placeholder = '—', type = 'text' }
       onChange={e => setV(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-      className="w-full h-full min-h-10 px-2.5 py-2 text-[13px] bg-transparent outline-none focus:shadow-[inset_0_0_0_2px_var(--color-brand)]"
+      className="w-full h-full min-h-11 px-2.5 py-2 text-[13px] bg-transparent outline-none focus:shadow-[inset_0_0_0_2px_var(--color-brand)]"
       style={{ color: 'var(--color-text-primary)' }}
     />
   )
@@ -104,7 +104,7 @@ export function TextCell({ value, onCommit, placeholder = '—', type = 'text' }
 
 const FU_COLS = '140px 200px minmax(210px,1fr) 170px minmax(220px,1.4fr) 150px'
 const GRID = 'var(--color-border)'
-const cellBase = 'min-h-10 flex items-stretch'
+const cellBase = 'min-h-11 flex items-stretch'
 
 export default function FollowupTable({
   followups, staff, onField, onCreate, statusStyle, typeStyle, types, outcomeOptions, sort = 'added',

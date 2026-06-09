@@ -235,7 +235,11 @@ export default function ConsultationDetailPage({ params }) {
                     {email && <span className="flex items-center gap-1"><Mail size={12} />{email}</span>}
                   </div>
                 </div>
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  <Link href={isPatient ? `/patients/${id}` : `/leads/${id}`} title="Edit profile"
+                    className="p-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" style={{ color: 'var(--color-text-muted)' }}>
+                    <Edit2 size={13} />
+                  </Link>
                   <Link href={isPatient ? `/patients/${id}` : `/leads/${id}`} className="text-xs font-600" style={{ color: 'var(--color-brand)' }}>View full profile →</Link>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Heart, Mail, Lock, Eye, EyeOff, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { logAudit, AUDIT } from '@/lib/audit'
 
 export default function LoginPage() {
   return (
@@ -88,6 +89,7 @@ function LoginContent() {
             return
           }
         } catch { /* fall through to dashboard */ }
+        await logAudit({ action: AUDIT.LOGIN, description: 'Signed in', metadata: { method: 'password' } })
         router.push('/dashboard')
         router.refresh()
       }
@@ -104,6 +106,7 @@ function LoginContent() {
       if (cErr) throw cErr
       const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: ch.id, code: mfaCode.replace(/\s/g, '') })
       if (vErr) throw vErr
+      await logAudit({ action: AUDIT.LOGIN, description: 'Signed in', metadata: { method: 'password+2fa' } })
       router.push('/dashboard')
       router.refresh()
     } catch {

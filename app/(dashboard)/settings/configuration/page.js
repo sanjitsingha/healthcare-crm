@@ -2,9 +2,9 @@
 import { useState } from 'react'
 import {
   Plug, Globe, Webhook, MessageCircle, BookOpen,
-  Check, X, Copy, Trash2, ToggleLeft, ToggleRight, Link2, RefreshCw, ChevronDown,
+  Check, X, Copy, Trash2, Link2, RefreshCw, ChevronDown,
 } from 'lucide-react'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Card, Input, Switch } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization, getOrganization } from '@/lib/supabase/queries'
@@ -246,10 +246,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{provider.description}</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button type="button" onClick={() => onToggle(integration.id)} title={integration.enabled ? 'Pause' : 'Activate'}
-            style={{ color: integration.enabled ? 'var(--color-brand)' : 'var(--color-text-muted)' }}>
-            {integration.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
-          </button>
+          <Switch checked={integration.enabled} onChange={() => onToggle(integration.id)} title={integration.enabled ? 'Pause' : 'Activate'} />
           <button type="button" onClick={() => onRemove(integration.id)}
             className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
             <Trash2 size={14} />
