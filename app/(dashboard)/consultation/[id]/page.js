@@ -296,19 +296,23 @@ export default function ConsultationDetailPage({ params }) {
           <div className="space-y-5">
             {/* Tasks / Timeline */}
             <Card className="border-(--color-border) overflow-hidden">
-              <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                {[{ id: 'tasks', label: 'Tasks', icon: CheckSquare }, { id: 'timeline', label: 'Timeline', icon: Clock }].map(tab => (
-                  <button key={tab.id} type="button" onClick={() => setRightTab(tab.id)}
-                    className={clsx('flex items-center gap-2 px-4 py-3 text-xs font-600 border-b-2', rightTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')}
-                    style={rightTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}>
-                    <tab.icon size={14} />{tab.label}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex">
+                  {[{ id: 'tasks', label: 'Tasks', icon: CheckSquare }, { id: 'timeline', label: 'Timeline', icon: Clock }].map(tab => (
+                    <button key={tab.id} type="button" onClick={() => setRightTab(tab.id)}
+                      className={clsx('flex items-center gap-2 px-4 py-3 text-xs font-600 border-b-2', rightTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')}
+                      style={rightTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}>
+                      <tab.icon size={14} />{tab.label}
+                    </button>
+                  ))}
+                </div>
+                {rightTab === 'tasks' && !addingTask && (
+                  <Button size="sm" className="mr-3 shrink-0" type="button" onClick={() => setAddingTask(true)}><Plus size={14} /> New Task</Button>
+                )}
               </div>
               <div className="p-4">
                 {rightTab === 'tasks' ? (
                   <div className="space-y-3">
-                    <div className="flex justify-end">{!addingTask && <Button size="sm" type="button" onClick={() => setAddingTask(true)}><Plus size={14} /> New Task</Button>}</div>
                     {addingTask && (
                       <form onSubmit={handleAddTask} className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
                         <Input label="Task *" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))} required />
@@ -347,11 +351,14 @@ export default function ConsultationDetailPage({ params }) {
 
             {/* Appointments */}
             <Card className="border-(--color-border) overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Calendar size={13} /> Appointments</p>
-                {!addingAppt && <Button size="sm" type="button" onClick={() => setAddingAppt(true)}><Plus size={13} /> Book</Button>}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} style={{ color: 'var(--color-brand)' }} />
+                  <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Appointments</p>
+                </div>
+                {!addingAppt && <Button size="sm" type="button" onClick={() => setAddingAppt(true)}><Plus size={14} /> Book Appointment</Button>}
               </div>
-              <div className="p-4 space-y-3">
+              <div className="p-3 space-y-3">
                 {addingAppt && (
                   <form onSubmit={handleBookAppt} className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
                     <div className="grid grid-cols-2 gap-2">
@@ -378,28 +385,36 @@ export default function ConsultationDetailPage({ params }) {
                   </form>
                 )}
                 {appointments.length === 0 && !addingAppt ? (
-                  <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)"><Calendar size={24} className="mx-auto mb-2 opacity-30" /><p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No appointments yet.</p></div>
+                  <div className="-mx-3 -mb-3 py-12 text-center border-t border-(--color-border)">
+                    <Calendar size={28} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No appointments booked yet.</p>
+                  </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-2 -mx-3 -mb-3 px-2 py-3 border-t border-(--color-border)">
                     {[...appointments].sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)).map(appt => {
                       const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
                       const st = ST[appt.status] || ST.booked
                       const doc = appt.doctor_id ? doctors.find(x => x.id === appt.doctor_id) : null
                       const canAct = appt.status === 'booked' || appt.status === 'confirmed'
                       return (
-                        <div key={appt.id} className="p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(appt.scheduled_at), 'MMM d, yyyy · h:mm a')}</span>
-                            <span className="text-[9px] font-600 px-1.5 py-0.5 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{appt.status}</span>
+                        <div key={appt.id} className="flex items-start gap-3 p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
+                            <Calendar size={15} style={{ color: 'var(--color-brand)' }} />
                           </div>
-                          {doc && <p className="text-[10px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{doc.name}</p>}
-                          {appt.notes && <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
-                          {canAct && (
-                            <div className="flex items-center gap-1.5 mt-2">
-                              <button type="button" onClick={() => handleApptStatus(appt.id, 'completed')} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}><Check size={10} /> Complete</button>
-                              <button type="button" onClick={() => handleApptStatus(appt.id, 'cancelled')} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={10} /> Cancel</button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(appt.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}</span>
+                              <span className="text-[10px] font-600 px-2 py-0.5 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{appt.status}</span>
                             </div>
-                          )}
+                            {doc && <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}><User size={11} />{doc.name}{doc.department ? ` · ${doc.department}` : ''}</p>}
+                            {appt.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
+                            {canAct && (
+                              <div className="flex items-center gap-1.5 mt-2">
+                                <button type="button" onClick={() => handleApptStatus(appt.id, 'completed')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}><Check size={11} /> Complete</button>
+                                <button type="button" onClick={() => handleApptStatus(appt.id, 'cancelled')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={11} /> Cancel</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )
                     })}

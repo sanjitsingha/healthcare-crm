@@ -4,6 +4,7 @@ import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, Download, Togg
 import { Card, Spinner } from '@/components/ui'
 import { getPatients, deletePatient, updatePatient, getTags } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { getPref, setPref } from '@/lib/prefs'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -259,9 +260,11 @@ export default function PatientsPage() {
     return [...BASE_COLUMNS, ...moduleFields]
   }, [org])
 
-  const [visible, setVisible] = useState(() =>
-    Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
-  )
+  const [visible, setVisible] = useState(() => {
+    const saved = getPref('pref_patient_cols')
+    const defaults = Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
+    return saved ? { ...defaults, ...saved } : defaults
+  })
   useEffect(() => {
     setVisible(prev => {
       const next = { ...prev }; let changed = false
@@ -269,6 +272,7 @@ export default function PatientsPage() {
       return changed ? next : prev
     })
   }, [allColumns])
+  useEffect(() => { setPref('pref_patient_cols', visible) }, [visible])
 
   // ── Fetch ──
   const loadPatients = useCallback(() => {

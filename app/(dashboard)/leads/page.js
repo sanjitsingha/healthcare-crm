@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
 import { getLeads, deleteLead, updateLead, getTags } from '@/lib/supabase/queries'
+import { getPref, setPref } from '@/lib/prefs'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -320,10 +321,12 @@ export default function LeadsPage() {
     return [...BASE_COLUMNS, ...moduleFields]
   }, [org])
 
-  // Column visibility — initialise from defaults; add new columns as they appear
-  const [visible, setVisible] = useState(() =>
-    Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
-  )
+  // Column visibility — initialise from saved prefs, then merge new columns as they appear
+  const [visible, setVisible] = useState(() => {
+    const saved = getPref('pref_lead_cols')
+    const defaults = Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
+    return saved ? { ...defaults, ...saved } : defaults
+  })
   useEffect(() => {
     setVisible(prev => {
       const next = { ...prev }
@@ -334,6 +337,7 @@ export default function LeadsPage() {
       return changed ? next : prev
     })
   }, [allColumns])
+  useEffect(() => { setPref('pref_lead_cols', visible) }, [visible])
 
   // ── Selection ──
   const [selected, setSelected] = useState(new Set())

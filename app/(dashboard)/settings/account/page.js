@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
 import { THEMES, applyTheme, DEFAULT_THEME } from '@/lib/theme'
+import { getPref, setPref } from '@/lib/prefs'
 import TwoFactorSettings from '@/components/crm/TwoFactorSettings'
 import { format, formatDistanceToNow, subDays, isToday, isYesterday } from 'date-fns'
 
@@ -61,15 +62,14 @@ export default function AccountPage() {
   const [geoStatus,   setGeoStatus]   = useState('idle') // idle | requesting | granted | denied
 
   useEffect(() => {
-    let stored = null
-    try { stored = localStorage.getItem('app_theme') } catch {}
+    const stored = getPref('app_theme')
     setTheme(stored || org?.settings?.theme || DEFAULT_THEME)
   }, [org])
 
   const chooseTheme = async (key) => {
     setTheme(key)
     applyTheme(key)
-    try { localStorage.setItem('app_theme', key) } catch {}
+    setPref('app_theme', key)
     if (orgId) {
       try { await updateOrganization(orgId, { settings: { ...(org?.settings || {}), theme: key } }) } catch {}
     }
