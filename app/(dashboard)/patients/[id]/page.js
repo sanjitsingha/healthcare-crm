@@ -751,7 +751,7 @@ export default function PatientDetailPage({ params }) {
           </div>
           <div className="p-3 space-y-3">
             {fuView === 'table' ? (
-              <div className="max-h-150 overflow-y-auto">
+              <div className="-mx-3 -mb-3 max-h-150 overflow-y-auto">
                 <FollowupTable
                   followups={followups}
                   staff={org?.settings?.staff_members || []}

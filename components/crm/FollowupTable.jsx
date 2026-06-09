@@ -53,9 +53,10 @@ export function ChipCell({ value, options, onChange, placeholder = '—', styleF
   return (
     <>
       <button ref={btnRef} type="button" onClick={() => open ? setOpen(false) : openMenu()}
-        className="w-full h-full flex items-center justify-between gap-1 px-2.5 py-2 text-left hover:bg-(--color-surface-2) transition-colors">
+        className="w-full h-full min-h-10 flex items-center justify-between gap-1 px-2.5 py-1.5 text-left hover:bg-(--color-surface-2) transition-colors outline-none"
+        style={{ boxShadow: open ? 'inset 0 0 0 2px var(--color-brand)' : 'none' }}>
         {value
-          ? <span className="text-[13px] font-600 px-2 py-0.5 rounded-md truncate"
+          ? <span className="text-[13px] font-600 px-2 py-1 rounded-md truncate leading-snug"
               style={s ? { background: s.bg, color: s.color } : { background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>{value}</span>
           : <span className="text-[13px]" style={{ color: 'var(--color-text-muted)' }}>{placeholder}</span>}
         <ChevronDown size={13} className="shrink-0 opacity-40" />
@@ -95,7 +96,7 @@ export function TextCell({ value, onCommit, placeholder = '—', type = 'text' }
       onChange={e => setV(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-      className="w-full h-full px-2.5 py-2 text-[13px] bg-transparent outline-none focus:bg-(--color-brand-50)"
+      className="w-full h-full min-h-10 px-2.5 py-2 text-[13px] bg-transparent outline-none focus:shadow-[inset_0_0_0_2px_var(--color-brand)]"
       style={{ color: 'var(--color-text-primary)' }}
     />
   )
@@ -127,7 +128,7 @@ export default function FollowupTable({
   )
 
   return (
-    <div className="overflow-x-auto rounded-lg" style={{ border: `1px solid ${GRID}` }}>
+    <div className="overflow-x-auto" style={{ borderTop: `1px solid ${GRID}` }}>
       <div style={{ minWidth: '1030px' }}>
         {/* Header */}
         <div className="grid" style={{ gridTemplateColumns: FU_COLS, background: 'var(--color-surface-2)' }}>
