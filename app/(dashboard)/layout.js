@@ -9,6 +9,7 @@ import ToastHost from '@/components/crm/Toast'
 import CookieBanner from '@/components/crm/CookieBanner'
 import InactivityGuard from '@/components/crm/InactivityGuard'
 import PageViewLogger from '@/components/crm/PageViewLogger'
+import GeoPermissionBanner from '@/components/crm/GeoPermissionBanner'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -36,6 +37,7 @@ export default async function DashboardLayout({ children }) {
         <CookieBanner />
         <InactivityGuard />
         <PageViewLogger />
+        <GeoPermissionBanner />
       </SidebarStateProvider>
     </OrgProvider>
   )
