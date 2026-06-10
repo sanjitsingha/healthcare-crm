@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import {
   UserRound, LogOut, Shield, Clock, Monitor,
   Mail, CheckCircle, XCircle, Key, Activity, Palette, Check,
-  MapPin, Wifi, Crosshair,
+  MapPin, Wifi, Crosshair, Timer,
 } from 'lucide-react'
 import { Card, Avatar } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -15,6 +15,37 @@ import { THEMES, applyTheme, DEFAULT_THEME } from '@/lib/theme'
 import { getPref, setPref } from '@/lib/prefs'
 import TwoFactorSettings from '@/components/crm/TwoFactorSettings'
 import { format, formatDistanceToNow, subDays, isToday, isYesterday } from 'date-fns'
+
+const TIMEOUT_OPTIONS = [
+  { label: '5 min',  value: 5 },
+  { label: '15 min', value: 15 },
+  { label: '30 min', value: 30 },
+  { label: '1 hr',   value: 60 },
+  { label: '2 hr',   value: 120 },
+  { label: '4 hr',   value: 240 },
+  { label: '8 hr',   value: 480 },
+]
+
+function Toggle({ on, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className="relative flex-shrink-0 rounded-full transition-colors duration-200"
+      style={{
+        width: 40, height: 22,
+        background: on ? 'var(--color-brand)' : 'var(--color-border)',
+      }}
+    >
+      <span
+        className="absolute top-[3px] w-4 h-4 bg-white rounded-full shadow transition-all duration-200"
+        style={{ left: on ? 20 : 3 }}
+      />
+    </button>
+  )
+}
 
 function SectionHead({ icon: Icon, title, description }) {
   return (
@@ -54,22 +85,44 @@ function getDayLabel(date) {
 export default function AccountPage() {
   const { user, org, orgId } = useOrg()
   const router    = useRouter()
-  const [deviceInfo,  setDeviceInfo]  = useState('')
-  const [sessionLog,  setSessionLog]  = useState([])
-  const [signingOut,  setSigningOut]  = useState(false)
-  const [theme,       setTheme]       = useState(DEFAULT_THEME)
-  const [net,         setNet]         = useState(null) // { ip, location } once resolved
-  const [geoStatus,   setGeoStatus]   = useState('idle') // idle | requesting | granted | denied
+  const [deviceInfo,      setDeviceInfo]      = useState('')
+  const [sessionLog,      setSessionLog]      = useState([])
+  const [signingOut,      setSigningOut]      = useState(false)
+  const [theme,           setTheme]           = useState(DEFAULT_THEME)
+  const [net,             setNet]             = useState(null)
+  const [geoStatus,       setGeoStatus]       = useState('idle')
+  const [inactivityOn,    setInactivityOn]    = useState(false)
+  const [inactivityMins,  setInactivityMins]  = useState(30)
 
   useEffect(() => {
     const stored = getPref('app_theme')
     setTheme(stored || org?.settings?.theme || DEFAULT_THEME)
   }, [org])
 
+  // Load inactivity prefs on mount
+  useEffect(() => {
+    const enabled = getPref('pref_inactivity_enabled', false)
+    const mins    = getPref('pref_inactivity_duration', 30)
+    if (enabled !== null) setInactivityOn(!!enabled)
+    if (mins    !== null) setInactivityMins(Number(mins) || 30)
+  }, [])
+
+  const setInactivity = (enabled, mins) => {
+    setInactivityOn(enabled)
+    setInactivityMins(mins)
+    setPref('pref_inactivity_enabled', enabled)
+    setPref('pref_inactivity_duration', mins)
+    const desc = enabled
+      ? `Session timeout enabled — auto-logout after ${TIMEOUT_OPTIONS.find(o => o.value === mins)?.label || `${mins} min`}`
+      : 'Session timeout disabled'
+    logAudit({ action: AUDIT.SETTINGS_CHANGE, description: desc, metadata: { setting: 'session_timeout', enabled, duration_mins: mins } })
+  }
+
   const chooseTheme = async (key) => {
     setTheme(key)
     applyTheme(key)
     setPref('app_theme', key)
+    logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `Changed app theme to "${key}"`, metadata: { setting: 'theme', value: key } })
     if (orgId) {
       try { await updateOrganization(orgId, { settings: { ...(org?.settings || {}), theme: key } }) } catch {}
     }
@@ -259,6 +312,66 @@ export default function AccountPage() {
           />
           <InfoRow icon={Monitor} label="Current session" value={deviceInfo || 'Detecting…'} />
         </div>
+      </Card>
+
+      {/* ── Session Timeout ── */}
+      <Card className="p-5">
+        <SectionHead
+          icon={Timer}
+          title="Session Timeout"
+          description="Automatically sign out after a period of inactivity on this device"
+        />
+
+        {/* Toggle row */}
+        <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: inactivityOn ? 'var(--color-brand-50)' : 'var(--color-surface)' }}>
+              <Clock size={15} style={{ color: inactivityOn ? 'var(--color-brand)' : 'var(--color-text-muted)' }} />
+            </div>
+            <div>
+              <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>
+                Auto-logout on inactivity
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                {inactivityOn
+                  ? `This device will sign out after ${TIMEOUT_OPTIONS.find(o => o.value === inactivityMins)?.label ?? `${inactivityMins} min`} of no activity`
+                  : 'Your session will stay open until you manually sign out'}
+              </p>
+            </div>
+          </div>
+          <Toggle on={inactivityOn} onChange={v => setInactivity(v, inactivityMins)} />
+        </div>
+
+        {/* Duration picker — only shown when enabled */}
+        {inactivityOn && (
+          <div className="mt-4">
+            <p className="text-xs font-600 mb-2.5" style={{ color: 'var(--color-text-secondary)' }}>
+              Sign out after
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TIMEOUT_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setInactivity(true, opt.value)}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-600 border transition-all"
+                  style={inactivityMins === opt.value
+                    ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
+                    : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)', background: 'transparent' }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-start gap-2 p-3 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+              <Monitor size={13} className="shrink-0 mt-0.5" style={{ color: 'var(--color-text-muted)' }} />
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                This setting is stored on <strong>this device only</strong>. Each device or browser manages its own session timeout independently — enabling it here won't affect colleagues or other logged-in devices.
+              </p>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* ── Appearance / Theme ── */}

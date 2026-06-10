@@ -7,6 +7,8 @@ import MainContent from '@/components/crm/MainContent'
 import ThemeApplier from '@/components/crm/ThemeApplier'
 import ToastHost from '@/components/crm/Toast'
 import CookieBanner from '@/components/crm/CookieBanner'
+import InactivityGuard from '@/components/crm/InactivityGuard'
+import PageViewLogger from '@/components/crm/PageViewLogger'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -32,6 +34,8 @@ export default async function DashboardLayout({ children }) {
         </div>
         <ToastHost />
         <CookieBanner />
+        <InactivityGuard />
+        <PageViewLogger />
       </SidebarStateProvider>
     </OrgProvider>
   )

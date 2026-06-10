@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { ArrowLeft, Save } from 'lucide-react'
 import { Button, Card, Input, Select, Textarea } from '@/components/ui'
+import { ModuleFields } from '@/components/crm/CustomModule'
 import { createLead } from '@/lib/supabase/queries'
 import { toast } from '@/lib/toast'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -61,47 +62,6 @@ function SectionLabel({ children }) {
   )
 }
 
-function CustomFieldInput({ field, value, onChange }) {
-  if (field.type === 'textarea')
-    return <Textarea label={field.label} value={value || ''} onChange={e => onChange(e.target.value)} rows={2} />
-  if (field.type === 'select') {
-    const opts = (field.options || '').split(',').map(s => s.trim()).filter(Boolean)
-    return (
-      <Select
-        label={field.label}
-        value={value || ''}
-        onChange={e => onChange(e.target.value)}
-        options={[{ value: '', label: 'Select...' }, ...opts.map(o => ({ value: o, label: o }))]}
-      />
-    )
-  }
-  if (field.type === 'boolean') return (
-    <div className="space-y-1.5">
-      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>
-        {field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      <div className="flex gap-2">
-        {['Yes', 'No'].map(opt => (
-          <button key={opt} type="button" onClick={() => onChange(opt)}
-            className="flex-1 py-2 rounded-lg text-xs font-500 border transition-all"
-            style={value === opt
-              ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
-              : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}
-          >{opt}</button>
-        ))}
-      </div>
-    </div>
-  )
-  const typeMap = { phone: 'tel', email: 'email', number: 'number', date: 'date', text: 'text' }
-  return (
-    <Input
-      label={`${field.label}${field.required ? ' *' : ''}`}
-      type={typeMap[field.type] || 'text'}
-      value={value || ''}
-      onChange={e => onChange(e.target.value)}
-    />
-  )
-}
 
 export default function NewLeadPage() {
   const { orgId, org } = useOrg()
@@ -296,17 +256,11 @@ export default function NewLeadPage() {
         {leadModules.map(m => (
           <Card key={m.id} className="p-6">
             <SectionLabel>{m.name}</SectionLabel>
-            <div className="grid grid-cols-2 gap-4">
-              {m.fields.map(field => (
-                <div key={field.id} className={field.type === 'textarea' || field.type === 'boolean' ? 'col-span-2' : ''}>
-                  <CustomFieldInput
-                    field={field}
-                    value={customData[m.id]?.[field.id]}
-                    onChange={v => setCustomField(m.id, field.id, v)}
-                  />
-                </div>
-              ))}
-            </div>
+            <ModuleFields
+              module={m}
+              values={customData[m.id] || {}}
+              onChangeField={(fieldId, v) => setCustomField(m.id, fieldId, v)}
+            />
           </Card>
         ))}
 

@@ -48,7 +48,6 @@ const navGroups = [
       { type: "leads" },
       { href: "/contacts", icon: Users, label: "Contacts" },
       { href: "/organizations", icon: Building2, label: "Organizations" },
-      { href: "/followups", icon: Bell, label: "Follow-ups" },
     ],
   },
   {

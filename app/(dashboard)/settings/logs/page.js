@@ -1,156 +1,113 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { Search, RefreshCw, Wifi, Monitor, MapPin } from 'lucide-react'
-import { Card, Spinner } from '@/components/ui'
+import { Search, RefreshCw } from 'lucide-react'
+import { Spinner } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { getAuditLogs } from '@/lib/supabase/queries'
-import { AUDIT } from '@/lib/audit'
 import { format } from 'date-fns'
-
-// Label + colors per action.
-const META = {
-  [AUDIT.LOGIN]:             { tag: 'Login',          color: '#15803d', bg: '#dcfce7' },
-  [AUDIT.LOGOUT]:            { tag: 'Logout',         color: '#b45309', bg: '#fef3c7' },
-  [AUDIT.PATIENT_VIEW]:      { tag: 'Viewed',         color: '#1d4ed8', bg: '#dbeafe' },
-  [AUDIT.PATIENT_EDIT]:      { tag: 'Edited',         color: '#7c3aed', bg: '#f3e8ff' },
-  [AUDIT.RECORD_DELETE]:     { tag: 'Deleted',        color: '#b91c1c', bg: '#fee2e2' },
-  [AUDIT.USER_CREATE]:       { tag: 'User',           color: '#0e7490', bg: '#cffafe' },
-  [AUDIT.PERMISSION_CHANGE]: { tag: 'Permission',     color: '#be185d', bg: '#fce7f3' },
-  [AUDIT.DATA_EXPORT]:       { tag: 'Export',         color: '#374151', bg: '#f3f4f6' },
-}
-const FALLBACK = { tag: 'Event', color: '#374151', bg: '#f3f4f6' }
 
 export default function LogsPage() {
   const { orgId } = useOrg()
-  const [logs, setLogs]       = useState([])
+  const [logs,    setLogs]    = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch]   = useState('')
+  const [search,  setSearch]  = useState('')
 
   const load = useCallback(async () => {
     if (!orgId) { setLogs([]); setLoading(false); return }
     setLoading(true)
-    try {
-      const rows = await getAuditLogs({ orgId, search })
-      setLogs(rows)
-    } catch (err) {
-      console.error(err)
-      setLogs([])
-    }
+    try { setLogs(await getAuditLogs({ orgId, search })) }
+    catch { setLogs([]) }
     setLoading(false)
   }, [orgId, search])
 
   useEffect(() => {
-    const t = setTimeout(load, search ? 250 : 0)
+    const t = setTimeout(load, search ? 300 : 0)
     return () => clearTimeout(t)
   }, [load, search])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+
       {/* Header */}
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-base font-700 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Audit Logs</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            Critical activity — logins, record access, edits, deletions, user changes &amp; exports.
+            {loading ? 'Loading…' : `${logs.length} events`}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-muted)' }} />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search user, IP, or text…"
-              className="w-56 pl-9 pr-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
+              placeholder="Search…"
+              className="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand) transition-colors"
               style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
             />
           </div>
-          <button
-            type="button"
-            onClick={load}
-            title="Refresh"
-            className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
-            <RefreshCw size={15} />
+          <button type="button" onClick={load} title="Refresh"
+            className="p-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
+            style={{ color: 'var(--color-text-secondary)' }}>
+            <RefreshCw size={13} />
           </button>
         </div>
       </div>
 
-      {/* List */}
+      {/* Log list */}
       {loading ? (
-        <div className="flex items-center justify-center py-24"><Spinner size={28} /></div>
+        <div className="flex items-center justify-center py-24"><Spinner size={24} /></div>
       ) : logs.length === 0 ? (
-        <Card className="p-12 text-center">
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No activity logged yet.</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            Events appear here as users sign in, view/edit records, and export data.
-          </p>
-        </Card>
+        <p className="py-16 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+          No events yet.
+        </p>
       ) : (
-        <Card className="overflow-hidden">
+        <div className="rounded-xl border border-(--color-border) overflow-hidden"
+          style={{ background: 'var(--color-surface)', fontFamily: 'ui-monospace, monospace' }}>
           {logs.map((log, i) => {
-            const meta = META[log.action] || FALLBACK
-            const m = log.metadata || {}
-            const failed = log.status === 'failed'
+            const m    = log.metadata || {}
             const when = new Date(log.created_at)
+            const ts   = format(when, 'MMM dd HH:mm:ss')
+            const who  = log.actor_email || log.actor_name || '—'
+            const what = log.description || log.action
+            const where = [m.location, m.device, m.ip].filter(Boolean).join('  ·  ')
+
             return (
               <div
                 key={log.id}
-                className="flex items-center gap-3 px-4 py-3 flex-wrap"
-                style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}
+                className="flex items-baseline gap-4 px-4 py-2 text-xs hover:bg-(--color-surface-2) transition-colors"
+                style={{
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  color: log.status === 'failed' ? '#b91c1c' : 'var(--color-text-secondary)',
+                }}
               >
-                {/* Action tag */}
-                <span
-                  className="text-[11px] font-700 px-2 py-0.5 rounded-full shrink-0"
-                  style={{ background: meta.bg, color: meta.color, minWidth: 78, textAlign: 'center' }}
-                >
-                  {meta.tag}
+                {/* Timestamp */}
+                <span className="shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)', minWidth: 108 }}>
+                  {ts}
                 </span>
 
-                {/* Actor */}
-                <div className="min-w-40">
-                  <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>
-                    {log.actor_name || 'Unknown user'}
+                {/* Who */}
+                <span className="shrink-0 truncate" style={{ minWidth: 180, color: 'var(--color-text-primary)' }}>
+                  {who}
+                </span>
+
+                {/* What */}
+                <span className="flex-1 truncate">
+                  {what}
+                </span>
+
+                {/* Where (location · device · ip) */}
+                {where && (
+                  <span className="shrink-0 truncate hidden lg:block" style={{ color: 'var(--color-text-muted)', maxWidth: 320 }}>
+                    {where}
                   </span>
-                  {log.actor_email && (
-                    <span className="text-xs ml-1.5" style={{ color: 'var(--color-text-muted)' }}>{log.actor_email}</span>
-                  )}
-                </div>
-
-                {/* IP */}
-                <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)', minWidth: 110 }}>
-                  <Wifi size={12} /> {m.ip || '—'}
-                </span>
-
-                {/* Device */}
-                <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)', minWidth: 130 }}>
-                  <Monitor size={12} /> {m.device || '—'}
-                </span>
-
-                {/* Location */}
-                <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)', minWidth: 140 }}>
-                  <MapPin size={12} /> {m.location || '—'}
-                </span>
-
-                {/* Detail */}
-                <span className="text-xs flex-1 min-w-32 truncate" style={{ color: failed ? '#b91c1c' : 'var(--color-text-secondary)' }}>
-                  {failed ? '✗ ' : ''}{log.description || (log.entity_type ? `${log.action} · ${log.entity_type}` : log.action)}
-                </span>
-
-                {/* Time */}
-                <span className="text-xs ml-auto shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-                  {format(when, 'MMM d, yyyy · h:mm a')}
-                </span>
+                )}
               </div>
             )
           })}
-        </Card>
+        </div>
       )}
-
-      <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-        Showing up to 500 most recent events.
-      </p>
     </div>
   )
 }

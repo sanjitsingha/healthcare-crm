@@ -4,18 +4,19 @@ import { Button, Card, Input, Select, Textarea } from '@/components/ui'
 
 // Renders one custom-module field input based on its configured type.
 export function CustomFieldInput({ field, value, onChange }) {
+  const label = `${field.label}${field.required ? ' *' : ''}`
   if (field.type === 'textarea')
-    return <Textarea label={field.label} value={value || ''} onChange={e => onChange(e.target.value)} rows={2} />
+    return <Textarea label={label} value={value || ''} onChange={e => onChange(e.target.value)} rows={2} />
   if (field.type === 'select') {
     const opts = (field.options || '').split(',').map(s => s.trim()).filter(Boolean)
     return (
-      <Select label={field.label} value={value || ''} onChange={e => onChange(e.target.value)}
+      <Select label={label} value={value || ''} onChange={e => onChange(e.target.value)}
         options={[{ value: '', label: 'Select...' }, ...opts.map(o => ({ value: o, label: o }))]} />
     )
   }
   if (field.type === 'boolean') return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{field.label}</label>
+      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{label}</label>
       <div className="flex gap-2">
         {['Yes', 'No'].map(opt => (
           <button key={opt} type="button" onClick={() => onChange(opt)}
@@ -29,7 +30,60 @@ export function CustomFieldInput({ field, value, onChange }) {
     </div>
   )
   const typeMap = { phone: 'tel', email: 'email', number: 'number', date: 'date', text: 'text' }
-  return <Input label={field.label} type={typeMap[field.type] || 'text'} value={value || ''} onChange={e => onChange(e.target.value)} />
+  return <Input label={label} type={typeMap[field.type] || 'text'} value={value || ''} onChange={e => onChange(e.target.value)} />
+}
+
+// Renders all fields of a module respecting the saved layout.
+// layout rows → flex row; field slot → flex-1; group slot → flex-1 stacked container.
+// Falls back to a 2-column grid for modules without a layout (older data).
+export function ModuleFields({ module, values, onChangeField }) {
+  const fieldMap = Object.fromEntries(module.fields.map(f => [f.id, f]))
+
+  if (!module.layout?.length) {
+    return (
+      <div className="grid grid-cols-2 gap-4">
+        {module.fields.map(f => (
+          <div key={f.id} className={f.type === 'textarea' || f.type === 'boolean' ? 'col-span-2' : ''}>
+            <CustomFieldInput field={f} value={values[f.id]} onChange={v => onChangeField(f.id, v)} />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {module.layout.map((rowDef, ri) => (
+        <div key={ri} className="flex gap-4 items-start">
+          {rowDef.map((slotDef, ci) => {
+            // Field slot
+            if (!slotDef.kind || slotDef.kind === 'field') {
+              const f = fieldMap[typeof slotDef === 'string' ? slotDef : slotDef.id]
+              if (!f) return null
+              return (
+                <div key={ci} className="flex-1 min-w-0">
+                  <CustomFieldInput field={f} value={values[f.id]} onChange={v => onChangeField(f.id, v)} />
+                </div>
+              )
+            }
+            // Group (stacked container)
+            if (slotDef.kind === 'group') {
+              const kids = (slotDef.children || []).map(id => fieldMap[id]).filter(Boolean)
+              return (
+                <div key={ci} className="flex-1 min-w-0 space-y-3 rounded-xl border border-(--color-border) p-3"
+                  style={{ background: 'var(--color-surface-2)' }}>
+                  {kids.map(f => (
+                    <CustomFieldInput key={f.id} field={f} value={values[f.id]} onChange={v => onChangeField(f.id, v)} />
+                  ))}
+                </div>
+              )
+            }
+            return null
+          })}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // A custom-module card: fields are always editable; a Save bar appears only
@@ -63,11 +117,7 @@ export function CustomModuleCard({ module, data, onSave }) {
         {dirty && <span className="text-[10px] font-600" style={{ color: 'var(--color-brand)' }}>Unsaved</span>}
       </div>
 
-      <div className="space-y-3">
-        {module.fields.map(f => (
-          <CustomFieldInput key={f.id} field={f} value={values[f.id]} onChange={v => setValues(p => ({ ...p, [f.id]: v }))} />
-        ))}
-      </div>
+      <ModuleFields module={module} values={values} onChangeField={(id, v) => setValues(p => ({ ...p, [id]: v }))} />
 
       {dirty && (
         <div className="flex gap-2 justify-end pt-3 mt-3 border-t border-(--color-border)">
