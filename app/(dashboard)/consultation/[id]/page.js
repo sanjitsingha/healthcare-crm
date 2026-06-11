@@ -6,6 +6,7 @@ import {
   ArrowLeft, Stethoscope, Plus, Calendar, Clock, CheckSquare, History,
   Phone, Mail, User, UserRound, TrendingUp, ChevronDown, Check, X,
   MessageSquare, Edit2, Tag, Bell, FileText,
+  List, Table2, ArrowUpDown, RotateCcw, PhoneCall,
 } from 'lucide-react'
 import { Button, Card, Spinner, Avatar, Input, Select, Textarea, Modal } from '@/components/ui'
 import {
@@ -13,11 +14,12 @@ import {
   getAppointments, createAppointment, updateAppointment,
   getTasks, createTask, updateTask,
   getActivities, createActivity,
-  getFollowups, createFollowup,
+  getFollowups, createFollowup, updateFollowup,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import Timeline from '@/components/crm/Timeline'
-import { format, isFuture, isToday } from 'date-fns'
+import FollowupTable from '@/components/crm/FollowupTable'
+import { format, isFuture, isToday, isPast } from 'date-fns'
 import clsx from 'clsx'
 
 const CONSULTATION_TYPES = ['Initial', 'Follow-up', 'Urgent', 'Routine', 'Teleconsultation', 'Walk-in']
@@ -54,6 +56,26 @@ const CHANNEL_COLOR = {
   Other:    { color: '#374151', bg: '#f3f4f6' },
 }
 const CHANNEL_ICON = { Call: Phone, WhatsApp: MessageSquare, Email: Mail, Meeting: Calendar, Other: Bell }
+
+const FOLLOWUP_TYPES = ['Call', 'WhatsApp', 'Email']
+const FOLLOWUP_STATUS_OPTIONS = {
+  Call:     ['Not Connected','Switched Off','Busy','Not Reachable','Connected - Interested','Connected - Not Interested','Connected - Callback Requested','Wrong Number'],
+  WhatsApp: ['Sent - No Reply','Delivered - No Reply','Seen - No Reply','Replied - Interested','Replied - Not Interested','Replied - Callback Requested','Number Not on WhatsApp'],
+  Email:    ['Sent - No Reply','Opened - No Reply','Replied - Interested','Replied - Not Interested','Bounced','Unsubscribed'],
+}
+const FU_TYPE_COLOR = {
+  Call:     { bg: '#dbeafe', color: '#1d4ed8' },
+  WhatsApp: { bg: '#dcfce7', color: '#15803d' },
+  Email:    { bg: '#fef9c3', color: '#a16207' },
+  Other:    { bg: '#f3f4f6', color: '#374151' },
+}
+const FU_TYPE_ICON = { Call: Phone, WhatsApp: MessageSquare, Email: Mail, Other: Bell }
+const FU_STATUS_STYLE = {
+  Scheduled:   { bg: '#fef3c7', color: '#b45309' },
+  Completed:   { bg: '#dcfce7', color: '#15803d' },
+  Missed:      { bg: '#fee2e2', color: '#b91c1c' },
+  Rescheduled: { bg: '#f3f4f6', color: '#6b7280' },
+}
 
 // ── Visit details — Excel-style table ─────────────────────────
 function VisitDetailsTable({ rows }) {
@@ -141,40 +163,6 @@ function ConsultationRecord({ c, doctors }) {
           )}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Interaction row (follow-ups tab) ──────────────────────────
-function InteractionRow({ item }) {
-  const Icon = CHANNEL_ICON[item.type] || Bell
-  const cc   = CHANNEL_COLOR[item.type] || CHANNEL_COLOR.Other
-  const when = new Date(item.scheduled_at)
-  const done = item.status !== 'Scheduled'
-
-  return (
-    <div className="flex items-start gap-3 py-2.5 px-3 border-b border-(--color-border) last:border-0 hover:bg-(--color-surface-2) transition-colors">
-      <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: cc.bg }}>
-        <Icon size={11} style={{ color: cc.color }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-500" style={{ color: cc.color }}>{item.type}</span>
-          {item.outcome && <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{item.outcome}</span>}
-          <span className={clsx(
-            'ml-auto text-[10px] font-700 px-2 py-0.5 rounded-full shrink-0',
-            done ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50'
-          )}>
-            {done ? 'Done' : 'Scheduled'}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[11px] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-            {isToday(when) ? `Today ${format(when, 'h:mm a')}` : format(when, 'd MMM yyyy · h:mm a')}
-          </span>
-        </div>
-        {item.notes && <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>{item.notes}</p>}
-      </div>
     </div>
   )
 }
@@ -318,102 +306,163 @@ function LogConsultationModal({ open, onClose, entity, orgId, doctors, onCreated
 }
 
 // ── Follow-ups tab panel ──────────────────────────────────────
-function FollowupsPanel({ entity, orgId, followups, setFollowups }) {
-  const [logging, setLogging] = useState(false)
-  const [form, setForm] = useState({ type: 'Call', scheduled_at: new Date().toISOString(), outcome: '', notes: '' })
-  const [saving, setSaving] = useState(false)
-  const set = k => v => setForm(f => ({ ...f, [k]: v }))
+function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
+  const [completing,   setCompleting]   = useState(false)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [outcome,      setOutcome]      = useState('')
+  const [nextType,     setNextType]     = useState('Call')
+  const [nextDate,     setNextDate]     = useState('')
+  const [scheduleNext, setScheduleNext] = useState(false)
+  const [saving,       setSaving]       = useState(false)
 
-  const submit = async e => {
-    e.preventDefault()
+  const Icon  = FU_TYPE_ICON[f.type]  || Bell
+  const typeC = FU_TYPE_COLOR[f.type] || FU_TYPE_COLOR.Other
+  const statC = FU_STATUS_STYLE[f.status] || FU_STATUS_STYLE.Scheduled
+  const overdue = f.status === 'Scheduled' && isPast(new Date(f.scheduled_at))
+
+  const handleComplete = async () => {
     setSaving(true)
     try {
-      const when = new Date(form.scheduled_at)
-      const row = await createFollowup({
-        organization_id: orgId,
-        lead_id:    entity.type === 'lead'    ? entity.id : null,
-        patient_id: entity.type === 'patient' ? entity.id : null,
-        type: form.type,
-        scheduled_at: form.scheduled_at,
-        outcome: form.outcome || null,
-        notes:   form.notes   || null,
-        status: isFuture(when) && !form.outcome ? 'Scheduled' : 'Completed',
-      })
-      setFollowups(prev => [row, ...prev])
-      setForm({ type: 'Call', scheduled_at: new Date().toISOString(), outcome: '', notes: '' })
-      setLogging(false)
+      await onComplete(f.id, outcome, scheduleNext ? { type: nextType, scheduled_at: nextDate } : null)
+      setCompleting(false)
+    } catch (err) { alert(err.message) }
+    finally { setSaving(false) }
+  }
+
+  const handleReschedule = async () => {
+    if (!nextDate) return
+    setSaving(true)
+    try {
+      await onReschedule(f.id, nextDate, nextType)
+      setRescheduling(false)
     } catch (err) { alert(err.message) }
     finally { setSaving(false) }
   }
 
   return (
-    <div className="space-y-3">
-      {/* Log button */}
-      {!logging && (
-        <div className="flex justify-end">
-          <Button size="sm" type="button" onClick={() => setLogging(true)}><Plus size={14} /> Log Interaction</Button>
+    <div className="rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+      <div className="flex items-start gap-3 p-4">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: typeC.bg }}>
+          <Icon size={16} style={{ color: typeC.color }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{f.type}</span>
+            <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statC.bg, color: statC.color }}>{f.status}</span>
+            {overdue && f.status === 'Scheduled' && (
+              <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c' }}>Overdue</span>
+            )}
+          </div>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {format(new Date(f.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}
+          </p>
+          {f.caller_name && (
+            <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+              <User size={11} /> {f.caller_name}
+            </p>
+          )}
+          {f.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{f.notes}</p>}
+          {f.outcome && (
+            <div className="mt-2 p-2.5 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+              <p className="text-[10px] font-600 uppercase mb-1" style={{ color: 'var(--color-text-muted)' }}>Response / Outcome</p>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{f.outcome}</p>
+            </div>
+          )}
+        </div>
+        {!completing && !rescheduling && (
+          <div className="flex gap-1.5 shrink-0">
+            {f.status === 'Scheduled' && (
+              <>
+                <button onClick={() => setCompleting(true)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
+                  style={{ background: '#dcfce7', color: '#15803d' }}>
+                  <Check size={12} /> Done
+                </button>
+                <button onClick={() => { setRescheduling(true); setNextType(f.type); setNextDate('') }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                  style={{ color: 'var(--color-text-muted)' }}>
+                  <RotateCcw size={11} /> Reschedule
+                </button>
+                <button onClick={() => onMiss(f.id)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-red-50"
+                  style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
+                  <X size={11} /> Missed
+                </button>
+              </>
+            )}
+            {f.status === 'Missed' && (
+              <button onClick={() => { setRescheduling(true); setNextType(f.type); setNextDate('') }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-muted)' }}>
+                <RotateCcw size={11} /> Reschedule
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {completing && (
+        <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+          <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>What happened?</p>
+          <textarea rows={3} className="w-full px-3 py-2.5 text-sm rounded-lg border border-(--color-border) outline-none resize-none"
+            style={{ background: 'var(--color-surface)' }}
+            placeholder="Patient's response, what was discussed, next steps..."
+            value={outcome} onChange={e => setOutcome(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setScheduleNext(s => !s)}
+              className="flex items-center gap-2 text-xs font-500 px-3 py-1.5 rounded-lg border transition-all"
+              style={scheduleNext
+                ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
+                : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}>
+              <Plus size={12} /> Schedule next follow-up
+            </button>
+          </div>
+          {scheduleNext && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Type</label>
+                <select className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)' }}
+                  value={nextType} onChange={e => setNextType(e.target.value)}>
+                  {FOLLOWUP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <Input label="Date & Time" type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} />
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" size="sm" type="button" onClick={() => setCompleting(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleComplete} disabled={saving}>
+              {saving ? 'Saving...' : <><Check size={13} /> Mark Complete</>}
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Inline log form */}
-      {logging && (
-        <form onSubmit={submit} className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
-          <Select label="Channel" value={form.type}
-            onChange={e => setForm(f => ({ ...f, type: e.target.value, outcome: '' }))}
-            options={CHANNELS.map(c => ({ value: c, label: c }))} />
-
-          {/* Date + Time inline */}
-          <div className="grid grid-cols-2 gap-2">
+      {rescheduling && (
+        <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+          <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Reschedule to</p>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-500" style={{ color: 'var(--color-text-secondary)' }}>Date</label>
-              <input type="date" value={form.scheduled_at ? format(new Date(form.scheduled_at), 'yyyy-MM-dd') : ''}
-                onChange={e => {
-                  const d = new Date(form.scheduled_at || new Date())
-                  const [y, mo, day] = e.target.value.split('-')
-                  d.setFullYear(Number(y), Number(mo) - 1, Number(day))
-                  set('scheduled_at')(d.toISOString())
-                }}
-                className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none"
-                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Type</label>
+              <select className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)' }}
+                value={nextType} onChange={e => setNextType(e.target.value)}>
+                {FOLLOWUP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-500" style={{ color: 'var(--color-text-secondary)' }}>Time</label>
-              <input type="time" value={form.scheduled_at ? format(new Date(form.scheduled_at), 'HH:mm') : ''}
-                onChange={e => {
-                  const d = new Date(form.scheduled_at || new Date())
-                  const [h, m] = e.target.value.split(':')
-                  d.setHours(Number(h), Number(m), 0, 0)
-                  set('scheduled_at')(d.toISOString())
-                }}
-                className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none"
-                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-            </div>
+            <Input label="New Date & Time *" type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} />
           </div>
-
-          <Select label="Outcome" value={form.outcome} onChange={e => set('outcome')(e.target.value)}
-            options={[{ value: '', label: 'Select outcome (optional)' }, ...(CHANNEL_OUTCOMES[form.type] || []).map(o => ({ value: o, label: o }))]} />
-          <Textarea label="Notes" placeholder="What happened?" rows={2} value={form.notes} onChange={e => set('notes')(e.target.value)} />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" type="button" onClick={() => setLogging(false)}>Cancel</Button>
-            <Button size="sm" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" size="sm" type="button" onClick={() => setRescheduling(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleReschedule} disabled={saving || !nextDate}>
+              {saving ? 'Saving...' : <><RotateCcw size={13} /> Reschedule</>}
+            </Button>
           </div>
-        </form>
-      )}
-
-      {/* List */}
-      {followups.length === 0 && !logging ? (
-        <div className="py-12 text-center border border-dashed rounded-xl border-(--color-border)">
-          <Bell size={24} className="mx-auto mb-2 opacity-30" />
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No interactions logged yet.</p>
-        </div>
-      ) : followups.length > 0 && (
-        <div className="rounded-xl border border-(--color-border) overflow-hidden max-h-96 overflow-y-auto" style={{ background: 'var(--color-surface)' }}>
-          {followups.map(f => <InteractionRow key={f.id} item={f} />)}
         </div>
       )}
     </div>
   )
 }
+
 
 // ── Timeline with inline note ─────────────────────────────────
 function TimelinePanel({ activities, setActivities, entity, orgId }) {
@@ -486,6 +535,12 @@ export default function ConsultationDetailPage({ params }) {
   const [addingAppt, setAddingAppt] = useState(false)
   const [apptForm, setApptForm]     = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
   const [savingAppt, setSavingAppt] = useState(false)
+
+  const [fuView,     setFuView]     = useState('regular')
+  const [fuSort,     setFuSort]     = useState('added')
+  const [fuSortOpen, setFuSortOpen] = useState(false)
+  const [showFuForm, setShowFuForm] = useState(false)
+  const [newFu,      setNewFu]      = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
 
   useEffect(() => {
     if (!orgId || !id) return
@@ -571,6 +626,90 @@ export default function ConsultationDetailPage({ params }) {
     try {
       const u = await updateAppointment(aid, { status })
       setAppointments(prev => prev.map(a => a.id === aid ? { ...a, status: u.status } : a))
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleScheduleFollowup = async (e) => {
+    e.preventDefault()
+    if (!newFu.scheduled_at || !newFu.status_detail || !orgId) return
+    try {
+      const isFut = new Date(newFu.scheduled_at).getTime() > Date.now()
+      const f = await createFollowup({
+        type: newFu.type,
+        scheduled_at: new Date(newFu.scheduled_at).toISOString(),
+        notes: newFu.response || null,
+        outcome: newFu.status_detail,
+        caller_name: newFu.caller || null,
+        status: isFut ? 'Scheduled' : 'Completed',
+        organization_id: orgId,
+        lead_id:    entity.type === 'lead'    ? id : null,
+        patient_id: entity.type === 'patient' ? id : null,
+      })
+      setFollowups(prev => [f, ...prev])
+      setShowFuForm(false)
+      setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleCompleteFollowup = async (fuId, outcome, next) => {
+    try {
+      const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null })
+      setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
+      if (next?.scheduled_at) {
+        const nf = await createFollowup({
+          type: next.type, scheduled_at: next.scheduled_at, organization_id: orgId,
+          status: 'Scheduled',
+          lead_id:    entity.type === 'lead'    ? id : null,
+          patient_id: entity.type === 'patient' ? id : null,
+        })
+        setFollowups(prev => [nf, ...prev])
+      }
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleMissFollowup = async (fuId) => {
+    try {
+      const updated = await updateFollowup(fuId, { status: 'Missed' })
+      setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleRescheduleFollowup = async (fuId, newDate, newType) => {
+    try {
+      const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType })
+      setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleFollowupField = async (fuId, patch) => {
+    const prev = followups.find(f => f.id === fuId)
+    setFollowups(list => list.map(f => f.id === fuId ? { ...f, ...patch } : f))
+    try {
+      const updated = await updateFollowup(fuId, patch)
+      setFollowups(list => list.map(f => f.id === fuId ? updated : f))
+    } catch (err) {
+      setFollowups(list => list.map(f => f.id === fuId ? prev : f))
+      alert(err.message)
+    }
+  }
+
+  const handleCreateFollowupInline = async (patch) => {
+    if (!orgId) return
+    try {
+      const scheduled_at = patch.scheduled_at || new Date().toISOString()
+      const isFut = new Date(scheduled_at).getTime() > Date.now()
+      const f = await createFollowup({
+        type: patch.type || 'Call',
+        scheduled_at,
+        notes: patch.notes ?? null,
+        outcome: patch.outcome ?? null,
+        caller_name: patch.caller_name ?? null,
+        status: patch.status || (isFut ? 'Scheduled' : 'Completed'),
+        organization_id: orgId,
+        lead_id:    entity.type === 'lead'    ? id : null,
+        patient_id: entity.type === 'patient' ? id : null,
+      })
+      setFollowups(prev => [f, ...prev])
     } catch (err) { alert(err.message) }
   }
 
@@ -662,15 +801,149 @@ export default function ConsultationDetailPage({ params }) {
             {/* Follow-ups */}
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                <div className="flex items-center gap-1.5">
-                  <Bell size={13} style={{ color: 'var(--color-brand)' }} />
-                  <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
-                    Follow-ups <span style={{ color: 'var(--color-text-primary)' }}>({followups.length})</span>
-                  </p>
+                <div className="flex items-center gap-2.5">
+                  <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
+                  <div className="flex items-center gap-0.5">
+                    {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id: vId, Icon, title }) => (
+                      <button key={vId} type="button" title={title} onClick={() => setFuView(vId)}
+                        className="p-1.5 rounded-md transition-all"
+                        style={fuView === vId
+                          ? { background: 'var(--color-brand)', color: 'white' }
+                          : { color: 'var(--color-text-muted)' }}>
+                        <Icon size={14} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {fuView === 'table' && (
+                    <div className="relative">
+                      <button type="button" title="Sort" onClick={() => setFuSortOpen(o => !o)}
+                        className="p-1.5 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-surface)"
+                        style={{ color: 'var(--color-text-muted)' }}>
+                        <ArrowUpDown size={14} />
+                      </button>
+                      {fuSortOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setFuSortOpen(false)} />
+                          <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-(--color-border) py-1"
+                            style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                            {[
+                              { id: 'added',         label: 'Date added' },
+                              { id: 'modified_desc', label: 'Last modified — newest first' },
+                              { id: 'modified_asc',  label: 'Last modified — oldest first' },
+                            ].map(o => (
+                              <button key={o.id} type="button" onClick={() => { setFuSort(o.id); setFuSortOpen(false) }}
+                                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left transition-colors hover:bg-(--color-surface-2)"
+                                style={{ color: 'var(--color-text-primary)' }}>
+                                {o.label}
+                                {fuSort === o.id && <Check size={13} style={{ color: 'var(--color-brand)' }} />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {!showFuForm && fuView === 'regular' && (
+                    <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add Follow-up</Button>
+                  )}
                 </div>
               </div>
-              <div className="p-4">
-                <FollowupsPanel entity={entity} orgId={orgId} followups={followups} setFollowups={setFollowups} />
+              <div className="p-3 space-y-3">
+                {showFuForm && fuView === 'regular' && (
+                  <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                    <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Add Follow-up</p>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Type</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {FOLLOWUP_TYPES.map(t => (
+                          <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))}
+                            className="px-3 py-1.5 rounded-full text-[11px] font-600 border transition-all"
+                            style={newFu.type === t
+                              ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
+                              : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}>
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <Select
+                      label="Status *"
+                      value={newFu.status_detail}
+                      onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))}
+                      options={[
+                        { value: '', label: 'Select status' },
+                        ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s })),
+                      ]}
+                    />
+                    <div className="grid grid-cols-2 gap-3 items-start">
+                      <Input label="Date & Time *" type="datetime-local" value={newFu.scheduled_at}
+                        onChange={e => setNewFu(f => ({ ...f, scheduled_at: e.target.value }))} />
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>
+                          Called By <span className="font-400" style={{ color: 'var(--color-text-muted)' }}>(optional)</span>
+                        </label>
+                        <select
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
+                          style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                          value={newFu.caller} onChange={e => setNewFu(f => ({ ...f, caller: e.target.value }))}>
+                          <option value="">— Select —</option>
+                          {(org?.settings?.staff_members || []).map(m => (
+                            <option key={m.id} value={m.name}>{m.name}{m.designation ? ` (${m.designation})` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <Textarea label="Response" placeholder="Patient/customer response..." value={newFu.response}
+                      onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} />
+                    <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
+                      <Button variant="secondary" size="sm" type="button"
+                        onClick={() => { setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' }) }}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>
+                        <Bell size={13} /> Save
+                      </Button>
+                    </div>
+                  </form>
+                )}
+                {fuView === 'table' ? (
+                  <div className="-mx-3 -mb-3 max-h-150 overflow-y-auto">
+                    <FollowupTable
+                      followups={followups}
+                      staff={org?.settings?.staff_members || []}
+                      onField={handleFollowupField}
+                      onCreate={handleCreateFollowupInline}
+                      statusStyle={FU_STATUS_STYLE}
+                      typeStyle={FU_TYPE_COLOR}
+                      types={FOLLOWUP_TYPES}
+                      outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
+                      sort={fuSort}
+                    />
+                  </div>
+                ) : followups.length === 0 ? (
+                  <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)">
+                    <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups scheduled yet.</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email to keep this moving.</p>
+                  </div>
+                ) : (
+                  <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 max-h-150 overflow-y-auto border-t border-(--color-border)">
+                    {[...followups].sort((a, b) => {
+                      const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
+                      return (order[a.status] ?? 9) - (order[b.status] ?? 9)
+                    }).map(f => (
+                      <FollowupCard
+                        key={f.id}
+                        f={f}
+                        onComplete={handleCompleteFollowup}
+                        onMiss={handleMissFollowup}
+                        onReschedule={handleRescheduleFollowup}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </Card>
 
