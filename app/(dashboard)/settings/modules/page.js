@@ -1,6 +1,6 @@
 'use client'
 import { useRef, useState } from 'react'
-import { LayoutGrid, Plus, Trash2, X, Save, GripVertical, Layers } from 'lucide-react'
+import { LayoutGrid, Plus, Trash2, X, Save, GripVertical, Layers, List, Table2 } from 'lucide-react'
 import { Button, Card, Input, Select, Switch } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
@@ -230,6 +230,7 @@ export default function ModulesPage() {
   const [formName,  setFormName]  = useState('')
   const [formPage,  setFormPage]  = useState('leads')
   const [rows,      setRows]      = useState([])
+  const [formView,  setFormView]  = useState('regular')
   const [saving,    setSaving]    = useState(false)
 
   // DnD refs + state
@@ -260,8 +261,8 @@ export default function ModulesPage() {
   }
 
   // ── Form open/close ────────────────────────────────────────────
-  const startCreate = () => { setEditingId(null); setFormName(''); setFormPage('leads'); setRows([]); setShowForm(true) }
-  const startEdit   = m  => { setEditingId(m.id); setFormName(m.name); setFormPage(m.page); setRows(toRows(m.fields, m.layout)); setShowForm(true) }
+  const startCreate = () => { setEditingId(null); setFormName(''); setFormPage('leads'); setFormView('regular'); setRows([]); setShowForm(true) }
+  const startEdit   = m  => { setEditingId(m.id); setFormName(m.name); setFormPage(m.page); setFormView(m.view || 'regular'); setRows(toRows(m.fields, m.layout)); setShowForm(true) }
   const cancelForm  = () => { setShowForm(false); setEditingId(null); setRows([]) }
 
   // ── Row/slot helpers ───────────────────────────────────────────
@@ -524,6 +525,7 @@ export default function ModulesPage() {
         id:     editingId || crypto.randomUUID(),
         name:   formName.trim(),
         page:   formPage,
+        view:   formView,
         active: editingId ? (modules.find(m => m.id === editingId)?.active ?? true) : true,
         fields,
         layout,
@@ -571,6 +573,32 @@ export default function ModulesPage() {
               </div>
               <div className="w-44 shrink-0">
                 <Select label="For Page" value={formPage} onChange={e => setFormPage(e.target.value)} options={PAGE_OPTS} />
+              </div>
+            </div>
+
+            {/* Default view picker */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Default View</label>
+              <div className="flex gap-2">
+                {[
+                  { value: 'regular', Icon: List,   label: 'Regular',      desc: 'Cards / list layout' },
+                  { value: 'table',   Icon: Table2, label: 'Table (Excel)', desc: 'Spreadsheet rows'    },
+                ].map(({ value, Icon, label, desc }) => {
+                  const active = formView === value
+                  return (
+                    <button key={value} type="button" onClick={() => setFormView(value)}
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border transition-all text-left"
+                      style={active
+                        ? { borderColor: 'var(--color-brand)', background: 'var(--color-brand-50)', color: 'var(--color-brand)' }
+                        : { borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-muted)' }}>
+                      <Icon size={15} />
+                      <div>
+                        <p className="text-xs font-600 leading-none mb-0.5">{label}</p>
+                        <p className="text-[10px] font-400 opacity-70">{desc}</p>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -702,6 +730,11 @@ export default function ModulesPage() {
                     <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{m.name}</span>
                     <span className="text-[10px] font-600 px-2 py-0.5 rounded-full uppercase tracking-wide"
                       style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{m.page}</span>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-600 px-2 py-0.5 rounded-full"
+                      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+                      {m.view === 'table' ? <Table2 size={9} /> : <List size={9} />}
+                      {m.view === 'table' ? 'Table' : 'Regular'}
+                    </span>
                     <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
                       {m.fields.length} field{m.fields.length !== 1 ? 's' : ''}
                       {m.layout && ` · ${m.layout.length} row${m.layout.length !== 1 ? 's' : ''}`}
