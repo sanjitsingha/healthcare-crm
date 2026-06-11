@@ -236,8 +236,10 @@ create table activities (
   organization_id uuid references organizations(id) on delete cascade not null,
   entity_type text check (entity_type in ('lead','contact','organization','patient')) not null,
   entity_id uuid not null,
-  type text check (type in ('comment','email','call','meeting','note','status_change','stage_change','whatsapp')) default 'comment',
+  type text check (type in ('comment','email','call','meeting','note','status_change','stage_change','whatsapp','tag')) default 'comment',
   content text not null,
+  -- Which page the action was performed on (powers the page-tagged timeline).
+  source_page text check (source_page is null or source_page in ('lead','patient','consultation','contact','organization')),
   created_by uuid,
   created_at timestamptz default now()
 );

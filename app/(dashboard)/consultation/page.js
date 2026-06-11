@@ -11,6 +11,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay } from 'date-fns'
+import { logAudit, AUDIT } from '@/lib/audit'
 import clsx from 'clsx'
 
 const TYPE_OPTIONS = ['Patient', 'Lead']
@@ -356,6 +357,7 @@ export default function ConsultationPage() {
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `consultations-${format(new Date(), 'yyyy-MM-dd')}.csv`
     a.click()
+    logAudit({ action: AUDIT.DATA_EXPORT, entityType: 'consultation', description: `Exported ${data.length} consultation record(s) to CSV`, metadata: { count: data.length, format: 'csv', columns: visibleCols.map(c => c.label) } })
     clearSelection()
   }
 

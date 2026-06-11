@@ -9,7 +9,7 @@ import {
 import { Button, Card, Modal, Input, Select, Textarea, Spinner } from '@/components/ui'
 import {
   getLead, updateLead, deleteLead,
-  getActivities, createActivity,
+  createActivity, getPersonTimeline,
   getTasks, createTask, updateTask,
   getFollowups, createFollowup, updateFollowup,
   createPatient, createAppointment, getAppointments, updateAppointment,
@@ -22,6 +22,7 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { toast } from '@/lib/toast'
+import { logAudit, AUDIT } from '@/lib/audit'
 import { matchingRules, ruleActions } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays, addDays } from 'date-fns'
 import clsx from 'clsx'
@@ -478,18 +479,15 @@ export default function LeadDetailPage({ params }) {
   const [tagMenuPos, setTagMenuPos] = useState({ top: 0, left: 0 })
 
   const logActivity = (type, content) =>
-    orgId && createActivity({ organization_id: orgId, entity_type: 'lead', entity_id: id, type, content })
+    orgId && createActivity({ organization_id: orgId, entity_type: 'lead', entity_id: id, type, content, source_page: 'lead' })
 
-  // Lead timeline shows the lead's own activities + the linked patient's
-  // (after conversion), so the history stays continuous. pidOverride lets the
-  // conversion handler merge immediately, before `lead` state updates.
+  // Lead timeline is the unified person timeline (this lead + linked patient),
+  // shared with the Patient and Consultation pages so it stays in sync.
+  // pidOverride lets the conversion handler merge immediately, before `lead`
+  // state updates.
   const refreshActivities = async (pidOverride) => {
     const pid = pidOverride ?? lead?.patient_id ?? null
-    const [a, pa] = await Promise.all([
-      getActivities('lead', id, orgId),
-      pid ? getActivities('patient', pid, orgId) : Promise.resolve([]),
-    ])
-    setActivities([...(a || []), ...(pa || [])].sort((x, y) => new Date(y.created_at) - new Date(x.created_at)))
+    setActivities(await getPersonTimeline({ patientId: pid, leadIds: [id], orgId }))
   }
 
   const loadAll = async () => {
@@ -499,17 +497,15 @@ export default function LeadDetailPage({ params }) {
       const pid = l?.patient_id || null   // linked patient (after conversion)
       const allIds = new Set([id, pid].filter(Boolean))
 
-      const [a, t, f, appts, pa, pt, pf] = await Promise.all([
-        getActivities('lead', id, orgId),
+      const [mergedActs, t, f, appts, pt, pf] = await Promise.all([
+        getPersonTimeline({ patientId: pid, leadIds: [id], orgId }),
         getTasks({ entityType: 'lead', entityId: id, orgId }),
         getFollowups({ leadId: id, orgId }),
         getAppointments({ orgId }),
-        pid ? getActivities('patient', pid, orgId)            : Promise.resolve([]),
         pid ? getTasks({ entityType: 'patient', entityId: pid, orgId }) : Promise.resolve([]),
         pid ? getFollowups({ patientId: pid, orgId })         : Promise.resolve([]),
       ])
 
-      const mergedActs = [...(a || []), ...(pa || [])].sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
       const mergedTasks = [...(t || []), ...(pt || [])].reduce((acc, x) => acc.some(y => y.id === x.id) ? acc : [...acc, x], [])
       const mergedFus  = [...(f || []), ...(pf || [])].reduce((acc, x) => acc.some(y => y.id === x.id) ? acc : [...acc, x], [])
 
@@ -525,6 +521,10 @@ export default function LeadDetailPage({ params }) {
 
   useEffect(() => { loadAll() }, [id])
 
+  useEffect(() => {
+    if (id && orgId) logAudit({ action: AUDIT.LEAD_VIEW, entityType: 'lead', entityId: id, description: 'Viewed lead record' })
+  }, [id, orgId]) // eslint-disable-line
+
   // ── Tag handlers ──
   const linkedTagIds = (lead?.tags || []).map(t => t.tags?.id).filter(Boolean)
   const unlinkedTags = availableTags.filter(t => !linkedTagIds.includes(t.id))
@@ -534,6 +534,10 @@ export default function LeadDetailPage({ params }) {
       await assignTagToLead(id, tagId)
       const updated = await getLead(id)
       setLead(prev => ({ ...prev, tags: updated.tags }))
+      const tag = availableTags.find(t => t.id === tagId)
+      await logActivity('tag', `Tag "${tag?.name || 'tag'}" added`)
+      await refreshActivities()
+      logAudit({ action: AUDIT.TAG_ADD, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Tag "${tag?.name || tagId}" added to lead` })
       await applyRules('tag_added')
     } catch (err) { alert(err.message) }
   }
@@ -543,6 +547,10 @@ export default function LeadDetailPage({ params }) {
       await removeTagFromLead(id, tagId)
       const updated = await getLead(id)
       setLead(prev => ({ ...prev, tags: updated.tags }))
+      const tag = availableTags.find(t => t.id === tagId)
+      await logActivity('tag', `Tag "${tag?.name || 'tag'}" removed`)
+      await refreshActivities()
+      logAudit({ action: AUDIT.TAG_REMOVE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Tag "${tag?.name || tagId}" removed from lead` })
     } catch (err) { alert(err.message) }
   }
 
@@ -571,6 +579,11 @@ export default function LeadDetailPage({ params }) {
       await logActivity('note', `Lead details updated`)
       await refreshActivities()
       setEditOpen(false)
+      // Capture which fields changed for the audit diff
+      const changed = Object.keys(editForm).filter(k => editForm[k] !== before[k])
+      const beforeSnap = Object.fromEntries(changed.map(k => [k, before[k]]))
+      const afterSnap  = Object.fromEntries(changed.map(k => [k, editForm[k]]))
+      logAudit({ action: AUDIT.LEAD_EDIT, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Lead details updated${changed.length ? ` (${changed.join(', ')})` : ''}`, before: beforeSnap, after: afterSnap })
       // Fire field-specific + generic events so rules can react (use fresh entity).
       const fresh = { ...before, ...updated }
       await applyRules('lead_updated', fresh)
@@ -588,14 +601,16 @@ export default function LeadDetailPage({ params }) {
   const handleAssignLead = async (memberId) => {
     if (memberId === lead.assigned_to) { setAssigningLead(false); return }
     try {
+      const staff = org?.settings?.staff_members || []
+      const prevMember = staff.find(m => m.id === lead.assigned_to)
       const updated = await updateLead(id, { assigned_to: memberId || null })
       setLead(prev => ({ ...prev, assigned_to: updated.assigned_to }))
-      const staff = org?.settings?.staff_members || []
       const member = staff.find(m => m.id === memberId)
       await logActivity('note', memberId
         ? `Lead assigned to ${member?.name || 'team member'}`
         : 'Lead unassigned')
       await refreshActivities()
+      logAudit({ action: AUDIT.LEAD_ASSIGN, entityType: 'lead', entityId: id, entityName: lead?.title, description: memberId ? `Assigned to ${member?.name || memberId}` : 'Lead unassigned', before: { assigned_to: prevMember?.name || lead.assigned_to }, after: { assigned_to: member?.name || memberId || null } })
       await applyRules(memberId ? 'lead_assigned' : 'lead_unassigned', { ...lead, assigned_to: updated.assigned_to })
     } catch (err) { alert(err.message) }
     setAssigningLead(false)
@@ -604,11 +619,13 @@ export default function LeadDetailPage({ params }) {
   const handleStageChange = async (stage) => {
     if (stage === lead.stage) { setChangingStage(false); return }
     try {
+      const prevStage = lead.stage
       const updated = await updateLead(id, { stage })
       setLead(prev => ({ ...prev, stage: updated.stage }))
       await logActivity('status_change', `Stage changed to ${stage}`)
       await refreshActivities()
       setChangingStage(false)
+      logAudit({ action: AUDIT.LEAD_STAGE_CHANGE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Stage changed: ${prevStage} → ${stage}`, before: { stage: prevStage }, after: { stage } })
       await applyRules('stage_changed', { ...lead, stage: updated.stage })
     } catch (err) { alert(err.message) }
   }
@@ -647,13 +664,13 @@ export default function LeadDetailPage({ params }) {
             if (!(lead.tags || []).some(t => t.tags?.id === value)) {
               await assignTagToLead(id, value); const u = await getLead(id); setLead(p => ({ ...p, tags: u.tags }))
               const tag = availableTags.find(t => t.id === value)
-              await logActivity('note', `Tag "${tag?.name || 'tag'}" added${by(rule)}`); changed = true
+              await logActivity('tag', `Tag "${tag?.name || 'tag'}" added${by(rule)}`); changed = true
             }
           } else if (type === 'remove_tag' && value) {
             if ((lead.tags || []).some(t => t.tags?.id === value)) {
               await removeTagFromLead(id, value); const u = await getLead(id); setLead(p => ({ ...p, tags: u.tags }))
               const tag = availableTags.find(t => t.id === value)
-              await logActivity('note', `Tag "${tag?.name || 'tag'}" removed${by(rule)}`); changed = true
+              await logActivity('tag', `Tag "${tag?.name || 'tag'}" removed${by(rule)}`); changed = true
             }
           } else if (type === 'assign_to' && value && lead.assigned_to !== value) {
             const u = await updateLead(id, { assigned_to: value }); setLead(p => ({ ...p, assigned_to: u.assigned_to }))
@@ -706,8 +723,9 @@ export default function LeadDetailPage({ params }) {
       // Boundary marker on the lead timeline…
       await logActivity('status_change', `Lead converted to patient`)
       // …and the first entry on the new patient's timeline.
-      await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}` })
+      await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}`, source_page: 'lead' })
       await refreshActivities(pat.id)
+      logAudit({ action: AUDIT.LEAD_CONVERT, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Lead converted to patient: ${displayName}`, after: { patient_id: pat.id, stage: 'Converted' } })
       toast({ type: 'patient_created', title: 'Converted to Patient', message: `${displayName} is now a patient.` })
       await applyRules('converted_to_patient', { ...lead, patient_id: pat.id, stage: 'Converted' })
     } catch (err) { alert(err.message) }
@@ -724,6 +742,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setTaskOpen(false)
       setNewTask({ title: '', priority: 'Medium', due_date: '' })
+      logAudit({ action: AUDIT.TASK_CREATE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Task created: "${t.title}"`, metadata: { task_id: t.id, priority: t.priority, due_date: t.due_date } })
       toast({ type: 'task', title: 'Task Added', message: `${displayName}: ${t.title}` })
       await applyRules('task_added')
     } catch (e) { alert(e.message) }
@@ -735,6 +754,7 @@ export default function LeadDetailPage({ params }) {
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t))
     await logActivity('note', `Task "${task.title}" marked ${newStatus}`)
     await refreshActivities()
+    logAudit({ action: AUDIT.TASK_UPDATE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Task "${task.title}" marked ${newStatus}`, before: { status: task.status }, after: { status: newStatus } })
     if (newStatus === 'Completed') await applyRules('task_completed')
   }
 
@@ -762,6 +782,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setShowFuForm(false)
       setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+      logAudit({ action: AUDIT.FOLLOWUP_CREATE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `${f.type} logged: ${f.outcome || f.status}`, metadata: { type: f.type, status: f.status, outcome: f.outcome, scheduled_at: f.scheduled_at } })
       toast({ type: 'followup', title: `${f.type} logged`, message: `${displayName}${f.outcome ? ` — ${f.outcome}` : ''}` })
       // Event-based automation (configured in Settings → Rules)
       await applyRules('followup_logged')
@@ -769,11 +790,12 @@ export default function LeadDetailPage({ params }) {
   }
 
   const handleCompleteFollowup = async (fuId, outcome, next) => {
+    const fu = followups.find(f => f.id === fuId)
     const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null })
     setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
-    const fu = followups.find(f => f.id === fuId)
     await logActivity(fu?.type?.toLowerCase() === 'call' ? 'call' : 'note',
       `${fu?.type || 'Follow-up'} completed${outcome ? `: ${outcome}` : ''}`)
+    logAudit({ action: AUDIT.FOLLOWUP_UPDATE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `${fu?.type || 'Follow-up'} completed${outcome ? `: ${outcome}` : ''}`, before: { status: 'Scheduled' }, after: { status: 'Completed', outcome } })
     if (next?.scheduled_at) {
       const nf = await createFollowup({
         type: next.type, scheduled_at: next.scheduled_at, organization_id: orgId,
@@ -864,6 +886,7 @@ export default function LeadDetailPage({ params }) {
       await logActivity('note', 'Notes updated')
       await refreshActivities()
       setNotesEditing(false)
+      logAudit({ action: AUDIT.NOTE_ADD, entityType: 'lead', entityId: id, entityName: lead?.title, description: 'Lead notes updated' })
       await applyRules('note_updated', { ...lead, description: updated.description })
     } catch (err) { alert(err.message) }
     finally { setNotesSaving(false) }
@@ -903,7 +926,7 @@ export default function LeadDetailPage({ params }) {
         await updateLead(id, { patient_id: pat.id })
         setLead(prev => ({ ...prev, patient_id: pat.id }))
         patientId = pat.id
-        await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}` })
+        await createActivity({ organization_id: orgId, entity_type: 'patient', entity_id: pat.id, type: 'status_change', content: `Converted from lead${lead.title ? `: ${lead.title}` : ''}`, source_page: 'lead' })
       }
       const appt = await createAppointment({
         organization_id: orgId,
@@ -961,19 +984,6 @@ export default function LeadDetailPage({ params }) {
   const doctors      = org?.settings?.doctors      || []
   const assignee = lead.assigned_to ? staffMembers.find(m => m.id === lead.assigned_to) : null
   const pendingTasks = tasks.filter(t => t.status === 'Pending').length
-  const leadCreatedEntry = {
-    type: 'note',
-    content: 'Lead Created',
-    created_at: lead.created_at,
-  }
-  const timelineActivities = [...activities]
-  const hasLeadCreated = timelineActivities.some(a => {
-    if (!a?.content) return false
-    const c = String(a.content).toLowerCase()
-    return c.includes('lead created')
-  })
-  if (!hasLeadCreated) timelineActivities.push(leadCreatedEntry)
-  timelineActivities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
   const TABS = [
     { id: 'tasks',     label: 'Tasks',      icon: CheckSquare, count: pendingTasks },
@@ -1346,7 +1356,7 @@ export default function LeadDetailPage({ params }) {
 
                 {/* ── Timeline (system-generated, read-only) ── */}
                 {activeTab === 'timeline' && (
-                  <Timeline activities={timelineActivities} emptyText="Activity will appear here automatically." />
+                  <Timeline activities={activities} emptyText="Activity will appear here automatically." />
                 )}
 
               </div>

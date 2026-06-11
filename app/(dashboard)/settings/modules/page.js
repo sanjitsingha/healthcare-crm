@@ -574,31 +574,9 @@ export default function ModulesPage() {
               <div className="w-44 shrink-0">
                 <Select label="For Page" value={formPage} onChange={e => setFormPage(e.target.value)} options={PAGE_OPTS} />
               </div>
-            </div>
-
-            {/* Default view picker */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Default View</label>
-              <div className="flex gap-2">
-                {[
-                  { value: 'regular', Icon: List,   label: 'Regular',      desc: 'Cards / list layout' },
-                  { value: 'table',   Icon: Table2, label: 'Table (Excel)', desc: 'Spreadsheet rows'    },
-                ].map(({ value, Icon, label, desc }) => {
-                  const active = formView === value
-                  return (
-                    <button key={value} type="button" onClick={() => setFormView(value)}
-                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border transition-all text-left"
-                      style={active
-                        ? { borderColor: 'var(--color-brand)', background: 'var(--color-brand-50)', color: 'var(--color-brand)' }
-                        : { borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-muted)' }}>
-                      <Icon size={15} />
-                      <div>
-                        <p className="text-xs font-600 leading-none mb-0.5">{label}</p>
-                        <p className="text-[10px] font-400 opacity-70">{desc}</p>
-                      </div>
-                    </button>
-                  )
-                })}
+              <div className="w-40 shrink-0">
+                <Select label="Default View" value={formView} onChange={e => setFormView(e.target.value)}
+                  options={[{ value: 'regular', label: 'Regular (Cards)' }, { value: 'table', label: 'Table (Excel)' }]} />
               </div>
             </div>
 

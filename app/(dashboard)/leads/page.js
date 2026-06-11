@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
 import { getLeads, deleteLead, updateLead, getTags } from '@/lib/supabase/queries'
 import { getPref, setPref } from '@/lib/prefs'
@@ -8,6 +8,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format, startOfDay, endOfDay } from 'date-fns'
+import { logAudit, AUDIT } from '@/lib/audit'
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -42,6 +43,7 @@ const BASE_COLUMNS = [
   { id: 'priority', label: 'Priority', defaultVisible: true  },
   { id: 'source',   label: 'Source',   defaultVisible: true  },
   { id: 'created',  label: 'Created',  defaultVisible: true  },
+  { id: 'modified', label: 'Modified', defaultVisible: false },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -273,6 +275,10 @@ export default function LeadsPage() {
   const [search,      setSearch]      = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState({ stages: [], priorities: [], sources: [], genders: [], tags: [], dateFrom: '', dateTo: '', custom: {} })
+
+  // column sort (created / modified)
+  const [sort,         setSort]        = useState({ field: null, dir: 'desc' })
+  const [sortMenuCol,  setSortMenuCol] = useState(null)   // which col's dropdown is open
   const [availableTags, setAvailableTags] = useState([])
   const [activeCustom, setActiveCustom] = useState([]) // colIds of custom fields shown as filters
 
@@ -350,7 +356,7 @@ export default function LeadsPage() {
 
   const toggleAll = () =>
     setSelected(prev =>
-      prev.size === filtered.length ? new Set() : new Set(filtered.map(l => l.id))
+      prev.size === sortedFiltered.length ? new Set() : new Set(sortedFiltered.map(l => l.id))
     )
 
   const clearSelection = () => setSelected(new Set())
@@ -389,6 +395,7 @@ export default function LeadsPage() {
           case 'priority': return lead.priority
           case 'source':   return lead.source
           case 'created':  return format(new Date(lead.created_at), 'MMM d, yyyy')
+          case 'modified': return lead.updated_at ? format(new Date(lead.updated_at), 'MMM d, yyyy') : ''
           default:         return ''
         }
       }))
@@ -400,6 +407,7 @@ export default function LeadsPage() {
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     a.download = `leads-${format(new Date(), 'yyyy-MM-dd')}.csv`
     a.click()
+    logAudit({ action: AUDIT.DATA_EXPORT, entityType: 'lead', description: `Exported ${rows.length} lead record(s) to CSV`, metadata: { count: rows.length, format: 'csv', columns: visibleCols.map(c => c.label) } })
     clearSelection()
   }
 
@@ -451,6 +459,16 @@ export default function LeadsPage() {
   const hasFilters = filterCount > 0
   const clearFilters = () => { setFilters({ stages: [], priorities: [], sources: [], genders: [], tags: [], dateFrom: '', dateTo: '', custom: {} }); setActiveCustom([]) }
 
+  const sortedFiltered = useMemo(() => {
+    if (!sort.field) return filtered
+    const key = sort.field === 'created' ? 'created_at' : 'updated_at'
+    return [...filtered].sort((a, b) => {
+      const ta = a[key] ? new Date(a[key]).getTime() : 0
+      const tb = b[key] ? new Date(b[key]).getTime() : 0
+      return sort.dir === 'asc' ? ta - tb : tb - ta
+    })
+  }, [filtered, sort])
+
   const visibleCols = allColumns.filter(c => visible[c.id])
 
   const renderCell = (col, lead) => {
@@ -479,6 +497,11 @@ export default function LeadsPage() {
       case 'created':  return (
         <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
           {format(new Date(lead.created_at), 'MMM d, yyyy')}
+        </span>
+      )
+      case 'modified': return (
+        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+          {lead.updated_at ? format(new Date(lead.updated_at), 'MMM d, yyyy') : '—'}
         </span>
       )
       default: return null
@@ -678,8 +701,8 @@ export default function LeadsPage() {
                   <th className="sticky left-0 z-20 w-12 px-3 py-3" style={{ background: 'var(--color-surface-2)' }}>
                     <input
                       type="checkbox"
-                      checked={filtered.length > 0 && selected.size === filtered.length}
-                      ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length }}
+                      checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length}
+                      ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < sortedFiltered.length }}
                       onChange={toggleAll}
                       className="w-4 h-4 cursor-pointer rounded"
                       style={{ accentColor: 'var(--color-brand)' }}
@@ -689,21 +712,76 @@ export default function LeadsPage() {
                   <th className="sticky left-12 z-20 text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap border-r border-(--color-border)" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
                     Tag
                   </th>
-                  {visibleCols.map(col => (
-                    <th key={col.id} className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
-                      {col.label}
-                    </th>
-                  ))}
+                  {visibleCols.map(col => {
+                    const isSortable = col.id === 'created' || col.id === 'modified'
+                    const isActive   = sort.field === col.id
+                    return (
+                      <th key={col.id} className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
+                        {isSortable ? (
+                          <div className="relative inline-flex items-center gap-1">
+                            {col.label}
+                            <button
+                              type="button"
+                              onClick={() => setSortMenuCol(sortMenuCol === col.id ? null : col.id)}
+                              className="p-0.5 rounded transition-colors hover:bg-(--color-surface)"
+                              style={{ color: isActive ? 'var(--color-brand)' : 'var(--color-text-muted)' }}
+                              title="Sort"
+                            >
+                              {isActive
+                                ? (sort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)
+                                : <ArrowUpDown size={11} />}
+                            </button>
+
+                            {sortMenuCol === col.id && (
+                              <>
+                                <div className="fixed inset-0 z-30" onClick={() => setSortMenuCol(null)} />
+                                <div
+                                  className="absolute top-full left-0 mt-1 w-36 rounded-xl border overflow-hidden z-40"
+                                  style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+                                >
+                                  {[{ dir: 'asc', label: 'Ascending' }, { dir: 'desc', label: 'Descending' }].map(opt => (
+                                    <button
+                                      key={opt.dir}
+                                      type="button"
+                                      onClick={() => { setSort({ field: col.id, dir: opt.dir }); setSortMenuCol(null) }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)"
+                                      style={{ color: 'var(--color-text-primary)' }}
+                                    >
+                                      {opt.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
+                                      {opt.label}
+                                      {isActive && sort.dir === opt.dir && (
+                                        <Check size={11} className="ml-auto" style={{ color: 'var(--color-brand)' }} />
+                                      )}
+                                    </button>
+                                  ))}
+                                  {isActive && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setSort({ field: null, dir: 'desc' }); setSortMenuCol(null) }}
+                                      className="w-full px-3 py-2 text-xs text-left border-t border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                                      style={{ color: 'var(--color-text-muted)' }}
+                                    >
+                                      Clear sort
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : col.label}
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-(--color-border)">
-                {filtered.length === 0 ? (
+                {sortedFiltered.length === 0 ? (
                   <tr>
                     <td colSpan={visibleCols.length + 2} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       {hasFilters || search ? 'No leads match your filters.' : 'No leads yet. Create your first lead.'}
                     </td>
                   </tr>
-                ) : filtered.map(lead => {
+                ) : sortedFiltered.map(lead => {
                   const rowBg = selected.has(lead.id) ? '#eef6f2' : 'var(--color-surface)'
                   const leadTags = (lead.tags || []).map(t => t.tags).filter(Boolean)
                   return (
@@ -760,12 +838,12 @@ export default function LeadsPage() {
           </div>
 
           {/* Footer count */}
-          {filtered.length > 0 && (
+          {sortedFiltered.length > 0 && (
             <div
               className="px-4 py-2.5 border-t border-(--color-border) text-xs"
               style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface-2)' }}
             >
-              Showing {filtered.length} of {leads.length} leads
+              Showing {sortedFiltered.length} of {leads.length} leads
             </div>
           )}
         </Card>

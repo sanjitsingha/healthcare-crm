@@ -9,7 +9,7 @@ import {
 import { Button, Card, Input, Textarea, Spinner, Modal, Select } from '@/components/ui'
 import {
   getPatient, updatePatient, deletePatient,
-  getActivities, createActivity,
+  getPersonTimeline, createActivity,
   getTasks, createTask, updateTask,
   getFollowups, createFollowup, updateFollowup,
   getTags, assignTagToPatient, removeTagFromPatient,
@@ -19,7 +19,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
-import { CustomModuleCard } from '@/components/crm/CustomModule'
+import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { toast } from '@/lib/toast'
 import { logAudit, AUDIT } from '@/lib/audit'
@@ -202,7 +202,7 @@ export default function PatientDetailPage({ params }) {
 
   const doctors = org?.settings?.doctors || []
 
-  const logActivity = (type, content, entityType = 'patient', entityId = id) => orgId && createActivity({ organization_id: orgId, entity_type: entityType, entity_id: entityId, type, content })
+  const logActivity = (type, content, entityType = 'patient', entityId = id) => orgId && createActivity({ organization_id: orgId, entity_type: entityType, entity_id: entityId, type, content, source_page: 'patient' })
 
   const loadAll = async () => {
     setLoading(true)
@@ -210,24 +210,17 @@ export default function PatientDetailPage({ params }) {
       const p = await getPatient(id)
       const leadIds = (p?.leads || []).map(l => l.id)
       const allIds = new Set([id, ...leadIds])
-      const [patientActs, patientTasks, patientFollowups, leadActsList, leadTasksList, leadFollowupsList, allAppts] = await Promise.all([
-        getActivities('patient', id, orgId),
+      const [mergedActs, patientTasks, patientFollowups, leadTasksList, leadFollowupsList, allAppts] = await Promise.all([
+        // Unified person timeline — the full journey from first enquiry, shared
+        // identically with the Lead and Consultation pages.
+        getPersonTimeline({ patientId: id, leadIds, orgId }),
         getTasks({ entityType: 'patient', entityId: id, orgId }),
         getFollowups({ patientId: id, orgId }),
-        Promise.all(leadIds.map(leadId => getActivities('lead', leadId, orgId))),
         Promise.all(leadIds.map(leadId => getTasks({ entityType: 'lead', entityId: leadId, orgId }))),
         Promise.all(leadIds.map(leadId => getFollowups({ leadId, orgId }))),
         getAppointments({ orgId }),
       ])
 
-      // Patient timeline starts at conversion: include only the linked lead's
-      // post-conversion activities (created at/after this patient was created),
-      // and drop the lead-side "converted to patient" line (the patient has its
-      // own "Converted from lead" entry).
-      const convAt = p?.created_at ? new Date(p.created_at).getTime() : 0
-      const leadActsPost = leadActsList.flat().filter(a =>
-        new Date(a.created_at).getTime() >= convAt && !/converted to patient/i.test(a.content || ''))
-      const mergedActs = [...(patientActs || []), ...leadActsPost].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       const mergedTasks = [...(patientTasks || []), ...leadTasksList.flat()].reduce((acc, t) => (acc.some(x => x.id === t.id) ? acc : [...acc, t]), [])
       const mergedFollowups = [...(patientFollowups || []), ...leadFollowupsList.flat()].reduce((acc, f) => (acc.some(x => x.id === f.id) ? acc : [...acc, f]), [])
       const mergedAppts = (allAppts || []).filter(a => allIds.has(a.patient_id) || allIds.has(a.lead_id))
@@ -253,7 +246,7 @@ export default function PatientDetailPage({ params }) {
   const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
   const handleEdit = async (e) => { e.preventDefault(); try { const updated = await updatePatient(id, editForm); setPatient(prev => ({ ...prev, ...updated })); setEditOpen(false) } catch (err) { alert(err.message) } }
   const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)); if (status === 'Completed') await applyRules('task_completed') }
-  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); toast({ type: 'task', title: 'Task Added', message: `${fullName}: ${t.title}` }); await applyRules('task_added') }
+  const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); logAudit({ action: AUDIT.TASK_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `Task created: "${t.title}"`, metadata: { task_id: t.id, priority: t.priority, due_date: t.due_date } }); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); toast({ type: 'task', title: 'Task Added', message: `${fullName}: ${t.title}` }); await applyRules('task_added') }
 
   const handleAddRecord = async (e) => {
     e.preventDefault()
@@ -275,6 +268,7 @@ export default function PatientDetailPage({ params }) {
     const f = await createFollowup({ type: newFu.type, scheduled_at: newFu.scheduled_at, notes: newFu.response || null, outcome: newFu.status_detail, status: isFuture ? 'Scheduled' : 'Completed', organization_id: orgId, patient_id: id, lead_id: null })
     setFollowups(prev => [f, ...prev])
     await logActivity('note', `${newFu.type} logged: ${newFu.status_detail}${newFu.response ? ` | Response: ${newFu.response}` : ''}`)
+    logAudit({ action: AUDIT.FOLLOWUP_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `${f.type} logged: ${f.outcome || f.status}`, metadata: { type: f.type, status: f.status, outcome: f.outcome, scheduled_at: f.scheduled_at } })
     setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
     toast({ type: 'followup', title: `${f.type} logged`, message: `${fullName}${f.outcome ? ` — ${f.outcome}` : ''}` })
   }
@@ -327,13 +321,13 @@ export default function PatientDetailPage({ params }) {
             if (!(patient.tags || []).some(t => t.tags?.id === value)) {
               await assignTagToPatient(id, value); const u = await getPatient(id); setPatient(u)
               const tag = availableTags.find(t => t.id === value)
-              await logActivity('note', `Tag "${tag?.name || 'tag'}" added${by(rule)}`); changed = true
+              await logActivity('tag', `Tag "${tag?.name || 'tag'}" added${by(rule)}`); changed = true
             }
           } else if (type === 'remove_tag' && value) {
             if ((patient.tags || []).some(t => t.tags?.id === value)) {
               await removeTagFromPatient(id, value); const u = await getPatient(id); setPatient(u)
               const tag = availableTags.find(t => t.id === value)
-              await logActivity('note', `Tag "${tag?.name || 'tag'}" removed${by(rule)}`); changed = true
+              await logActivity('tag', `Tag "${tag?.name || 'tag'}" removed${by(rule)}`); changed = true
             }
           } else if (type === 'assign_to' && value && patient.assigned_to !== value) {
             const u = await updatePatient(id, { assigned_to: value }); setPatient(p => ({ ...p, assigned_to: u.assigned_to }))
@@ -371,6 +365,7 @@ export default function PatientDetailPage({ params }) {
       setAppointments(prev => [appt, ...prev])
       await logActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
       const apptDoc = doctors.find(d => d.id === apptForm.doctor_id)
+      logAudit({ action: AUDIT.APPOINTMENT_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}${apptDoc ? ` with ${apptDoc.name}` : ''}`, metadata: { scheduled_at: appt.scheduled_at, doctor: apptDoc?.name || null } })
       toast({ type: 'appointment', title: 'Appointment Booked', message: `${fullName} on ${format(scheduledAt, 'MMM d, h:mm a')}${apptDoc ? ` with ${apptDoc.name}` : ''}` })
       setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
       await applyRules('appointment_booked')
@@ -390,6 +385,10 @@ export default function PatientDetailPage({ params }) {
       const updated = await getPatient(id)
       setPatient(updated)
       setAddingTag(false)
+      const tag = availableTags.find(t => t.id === tagId)
+      const row = await logActivity('tag', `Tag "${tag?.name || 'tag'}" added`)
+      if (row) setActivities(prev => [row, ...prev])
+      logAudit({ action: AUDIT.TAG_ADD, entityType: 'patient', entityId: id, entityName: fullName, description: `Tag "${tag?.name || tagId}" added to patient` })
       await applyRules('tag_added')
     } catch (err) { alert(err.message) }
   }
@@ -399,6 +398,10 @@ export default function PatientDetailPage({ params }) {
       await removeTagFromPatient(id, tagId)
       const updated = await getPatient(id)
       setPatient(updated)
+      const tag = availableTags.find(t => t.id === tagId)
+      const row = await logActivity('tag', `Tag "${tag?.name || 'tag'}" removed`)
+      if (row) setActivities(prev => [row, ...prev])
+      logAudit({ action: AUDIT.TAG_REMOVE, entityType: 'patient', entityId: id, entityName: fullName, description: `Tag "${tag?.name || tagId}" removed from patient` })
     } catch (err) { alert(err.message) }
   }
 
@@ -715,17 +718,19 @@ export default function PatientDetailPage({ params }) {
           </div>
         </Card>
 
-        {(org?.settings?.modules || []).filter(m => m.page === 'patients' && m.active).map(m => (
-          <CustomModuleCard key={m.id} module={m} data={patient?.custom_data?.[m.id] || {}}
-            onSave={async (values) => {
-              const custom_data = { ...(patient.custom_data || {}), [m.id]: values }
-              const updated = await updatePatient(id, { custom_data })
-              setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
-              await logActivity('note', `${m.name} details updated`)
-              await loadAll()
-            }}
-          />
-        ))}
+        {(org?.settings?.modules || []).filter(m => m.page === 'patients' && m.active).map(m => {
+          const moduleData = patient?.custom_data?.[m.id] || {}
+          const handleModuleSave = async (values) => {
+            const custom_data = { ...(patient.custom_data || {}), [m.id]: values }
+            const updated = await updatePatient(id, { custom_data })
+            setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+            await logActivity('note', `${m.name} details updated`)
+            await loadAll()
+          }
+          return m.view === 'table'
+            ? <CustomModuleTable key={m.id} module={m} data={moduleData} onSave={handleModuleSave} />
+            : <CustomModuleCard  key={m.id} module={m} data={moduleData} onSave={handleModuleSave} />
+        })}
 
         <Card className="border-(--color-border) overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>

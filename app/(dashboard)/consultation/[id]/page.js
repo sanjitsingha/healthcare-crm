@@ -10,15 +10,17 @@ import {
 } from 'lucide-react'
 import { Button, Card, Spinner, Avatar, Input, Select, Textarea, Modal } from '@/components/ui'
 import {
-  getPatient, getLead, getConsultations, createConsultation,
+  getPatient, getLead, updatePatient, updateLead, getConsultations, createConsultation,
   getAppointments, createAppointment, updateAppointment,
   getTasks, createTask, updateTask,
-  getActivities, createActivity,
+  getPersonTimeline, createActivity,
   getFollowups, createFollowup, updateFollowup,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
+import { logAudit, AUDIT } from '@/lib/audit'
 import Timeline from '@/components/crm/Timeline'
 import FollowupTable from '@/components/crm/FollowupTable'
+import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
 import { format, isFuture, isToday, isPast } from 'date-fns'
 import clsx from 'clsx'
 
@@ -480,7 +482,8 @@ function TimelinePanel({ activities, setActivities, entity, orgId }) {
         entity_type: entity.type,
         entity_id:   entity.id,
         type: 'note',
-        body: note.trim(),
+        content: note.trim(),
+        source_page: 'consultation',
       })
       setActivities(prev => [row, ...prev])
       setNote('')
@@ -561,14 +564,14 @@ export default function ConsultationDetailPage({ params }) {
 
         const leadIds = ent.type === 'patient' ? (ent.data.leads || []).map(l => l.id) : []
         const allIds  = new Set([id, ...leadIds])
-        const [ownCons, appts, ownActs, ownTasks, ownFups, leadConsList, leadActsList, leadTasksList, leadFupsList] = await Promise.all([
+        const [ownCons, appts, mergedActs, ownTasks, ownFups, leadConsList, leadTasksList, leadFupsList] = await Promise.all([
           getConsultations(ent.type === 'patient' ? { orgId, patientId: id } : { orgId, leadId: id }),
           getAppointments({ orgId }),
-          getActivities(ent.type, id, orgId),
+          // Unified person timeline — shared identically with the Lead and Patient pages.
+          getPersonTimeline(ent.type === 'patient' ? { patientId: id, leadIds, orgId } : { leadIds: [id], orgId }),
           getTasks({ entityType: ent.type, entityId: id, orgId }),
           getFollowups(ent.type === 'patient' ? { orgId, patientId: id } : { orgId, leadId: id }),
           Promise.all(leadIds.map(lid => getConsultations({ orgId, leadId: lid }))),
-          Promise.all(leadIds.map(lid => getActivities('lead', lid, orgId))),
           Promise.all(leadIds.map(lid => getTasks({ entityType: 'lead', entityId: lid, orgId }))),
           Promise.all(leadIds.map(lid => getFollowups({ orgId, leadId: lid }))),
         ])
@@ -578,7 +581,7 @@ export default function ConsultationDetailPage({ params }) {
           .reduce((acc, c) => acc.some(x => x.id === c.id) ? acc : [...acc, c], [])
           .sort((a, b) => new Date(b.consulted_at) - new Date(a.consulted_at)))
         setAppointments((appts || []).filter(a => allIds.has(a.patient_id) || allIds.has(a.lead_id)))
-        setActivities([...(ownActs || []), ...leadActsList.flat()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)))
+        setActivities(mergedActs)
         setTasks([...(ownTasks || []), ...leadTasksList.flat()].reduce((acc, t) => acc.some(x => x.id === t.id) ? acc : [...acc, t], []))
         setFollowups([...(ownFups || []), ...leadFupsList.flat()]
           .reduce((acc, f) => acc.some(x => x.id === f.id) ? acc : [...acc, f], [])
@@ -589,6 +592,20 @@ export default function ConsultationDetailPage({ params }) {
     return () => { active = false }
   }, [orgId, id])
 
+  useEffect(() => {
+    if (id && orgId) logAudit({ action: AUDIT.CONSULTATION_VIEW, entityType: 'patient', entityId: id, description: 'Viewed consultation record' })
+  }, [id, orgId]) // eslint-disable-line
+
+  // Logs an activity for an action taken on this page and prepends it to the
+  // timeline so it shows immediately — tagged [Consultation Page].
+  const addActivity = async (type, content) => {
+    if (!orgId || !entity) return
+    try {
+      const row = await createActivity({ organization_id: orgId, entity_type: entity.type, entity_id: id, type, content, source_page: 'consultation' })
+      setActivities(prev => [row, ...prev])
+    } catch { /* non-blocking */ }
+  }
+
   const handleAddTask = async e => {
     e.preventDefault()
     if (!taskForm.title.trim() || !entity) return
@@ -596,6 +613,7 @@ export default function ConsultationDetailPage({ params }) {
     try {
       const t = await createTask({ ...taskForm, organization_id: orgId, entity_type: entity.type, entity_id: id, status: 'Pending' })
       setTasks(prev => [t, ...prev]); setTaskForm({ title: '', priority: 'Medium', due_date: '' }); setAddingTask(false)
+      await addActivity('note', `Task added: ${t.title}`)
     } catch (err) { alert(err.message) } finally { setSavingTask(false) }
   }
   const handleToggleTask = async task => {
@@ -620,6 +638,7 @@ export default function ConsultationDetailPage({ params }) {
         status: 'booked',
       })
       setAppointments(prev => [appt, ...prev]); setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
+      await addActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
     } catch (err) { alert(err.message) } finally { setSavingAppt(false) }
   }
   const handleApptStatus = async (aid, status) => {
@@ -648,6 +667,7 @@ export default function ConsultationDetailPage({ params }) {
       setFollowups(prev => [f, ...prev])
       setShowFuForm(false)
       setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+      await addActivity('note', `Follow-up ${isFut ? 'scheduled' : 'logged'}: ${f.type}${f.outcome ? ` — ${f.outcome}` : ''}`)
     } catch (err) { alert(err.message) }
   }
 
@@ -1066,6 +1086,24 @@ export default function ConsultationDetailPage({ params }) {
                 )}
               </div>
             </Card>
+
+            {/* Custom modules — consultations page */}
+            {(org?.settings?.modules || []).filter(m => m.page === 'consultations' && m.active).map(m => {
+              const moduleData = entity.data?.custom_data?.[m.id] || {}
+              const handleModuleSave = async (values) => {
+                const custom_data = { ...(entity.data?.custom_data || {}), [m.id]: values }
+                if (entity.type === 'patient') {
+                  const updated = await updatePatient(id, { custom_data })
+                  setEntity(prev => ({ ...prev, data: { ...prev.data, custom_data: updated.custom_data } }))
+                } else {
+                  const updated = await updateLead(id, { custom_data })
+                  setEntity(prev => ({ ...prev, data: { ...prev.data, custom_data: updated.custom_data } }))
+                }
+              }
+              return m.view === 'table'
+                ? <CustomModuleTable key={m.id} module={m} data={moduleData} onSave={handleModuleSave} />
+                : <CustomModuleCard  key={m.id} module={m} data={moduleData} onSave={handleModuleSave} />
+            })}
           </div>
 
           {/* ── RIGHT ── */}
@@ -1155,7 +1193,11 @@ export default function ConsultationDetailPage({ params }) {
         entity={entity}
         orgId={orgId}
         doctors={doctors}
-        onCreated={row => setConsultations(prev => [row, ...prev])}
+        onCreated={row => {
+          setConsultations(prev => [row, ...prev])
+          addActivity('note', `Consultation logged: ${row.consultation_type || 'Visit'}${row.diagnosis ? ` — ${row.diagnosis}` : ''}`)
+          logAudit({ action: AUDIT.CONSULTATION_CREATE, entityType: 'patient', entityId: id, description: `${row.consultation_type || 'Visit'} consultation logged${row.chief_complaint ? `: ${row.chief_complaint}` : ''}${row.diagnosis ? ` — ${row.diagnosis}` : ''}`, metadata: { consultation_id: row.id, type: row.consultation_type, status: row.status, doctor_id: row.doctor_id } })
+        }}
       />
     </div>
   )

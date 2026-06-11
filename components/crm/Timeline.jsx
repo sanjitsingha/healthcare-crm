@@ -10,7 +10,19 @@ const ACTIVITY_ICON = {
   meeting:       Calendar,
   note:          Edit2,
   status_change: Tag,
+  stage_change:  Tag,
+  tag:           Tag,
   whatsapp:      MessageSquare,
+}
+
+// Which page an activity was performed on → badge label. Falls back to the
+// entity it was attached to for older rows that predate source_page.
+const PAGE_LABEL = {
+  lead:          'Lead Page',
+  patient:       'Patient Page',
+  consultation:  'Consultation Page',
+  contact:       'Contact Page',
+  organization:  'Organization Page',
 }
 
 /**
@@ -36,6 +48,7 @@ export default function Timeline({ activities = [], maxHeight, emptyText = 'No a
       <div className="space-y-4">
         {activities.map((a, i) => {
           const Icon = ACTIVITY_ICON[a.type] || Bell
+          const pageLabel = PAGE_LABEL[a.source_page || a.entity_type]
           return (
             <div key={i} className="flex gap-4 relative">
               <div
@@ -45,7 +58,17 @@ export default function Timeline({ activities = [], maxHeight, emptyText = 'No a
                 <Icon size={13} style={{ color: 'var(--color-brand)' }} />
               </div>
               <div className="flex-1 min-w-0 pb-4">
-                <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{a.content}</p>
+                <div className="flex items-start gap-2 flex-wrap">
+                  <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{a.content}</p>
+                  {pageLabel && (
+                    <span
+                      className="text-[10px] font-600 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap"
+                      style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}
+                    >
+                      {pageLabel}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                   {format(new Date(a.created_at), 'MMM d, yyyy · h:mm a')} · {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
                 </p>

@@ -10,6 +10,7 @@ import { getLeads, getPatients, createLead, deleteLead, deletePatient, updateOrg
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { logAudit, AUDIT } from '@/lib/audit'
 
 // Base column definitions — `locked` columns can't be hidden
 const BASE_COLUMNS = [
@@ -277,6 +278,7 @@ export default function ContactsPage() {
     a.download = `contacts-${format(new Date(), 'yyyy-MM-dd')}.csv`
     a.click()
     URL.revokeObjectURL(url)
+    logAudit({ action: AUDIT.DATA_EXPORT, entityType: 'contact', description: `Exported ${data.length} contact record(s) to CSV${onlySelected ? ' (selected only)' : ''}`, metadata: { count: data.length, format: 'csv', scope: onlySelected ? 'selected' : 'all_filtered', columns: visibleCols.map(c => c.label) } })
   }
 
   const handleDeleteSelected = async () => {

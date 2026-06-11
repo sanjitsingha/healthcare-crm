@@ -1,6 +1,85 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Select, Textarea } from '@/components/ui'
+import { ChipCell, TextCell } from '@/components/crm/FollowupTable'
+
+const GRID = 'var(--color-border)'
+const colWidth = (f) => {
+  if (f.type === 'textarea') return 'minmax(220px, 1.5fr)'
+  if (f.type === 'select' || f.type === 'boolean') return '170px'
+  if (f.type === 'date') return '160px'
+  if (f.type === 'number') return '120px'
+  return 'minmax(160px, 1fr)'
+}
+
+// Table (Excel-style) view for a custom module — fields as columns, auto-saves per cell on blur.
+export function CustomModuleTable({ module, data, onSave }) {
+  const [local, setLocal] = useState({ ...(data || {}) })
+
+  const dataKey = JSON.stringify(data || {})
+  useEffect(() => { setLocal({ ...(data || {}) }) }, [dataKey])
+
+  const saveField = async (fieldId, value) => {
+    const next = { ...local, [fieldId]: value }
+    setLocal(next)
+    try { await onSave(next) }
+    catch (err) { alert(err.message) }
+  }
+
+  const gridCols = module.fields.map(f => colWidth(f)).join(' ')
+  const minW = module.fields.length * 140
+
+  return (
+    <Card className="border-(--color-border) overflow-hidden p-0">
+      <div className="px-4 py-2.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+        <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>{module.name}</p>
+      </div>
+      <div className="overflow-x-auto" style={{ borderTop: `1px solid ${GRID}` }}>
+        <div style={{ minWidth: minW }}>
+          {/* Header */}
+          <div className="grid" style={{ gridTemplateColumns: gridCols, background: 'var(--color-surface-2)' }}>
+            {module.fields.map(f => (
+              <div key={f.id} className="px-2.5 py-2.5 text-[11px] font-800 uppercase tracking-wider whitespace-nowrap"
+                style={{ color: 'var(--color-text-secondary)', borderRight: `1px solid ${GRID}`, borderBottom: `2px solid ${GRID}` }}>
+                {f.label}{f.required ? ' *' : ''}
+              </div>
+            ))}
+          </div>
+          {/* Single data row */}
+          <div className="grid items-stretch" style={{ gridTemplateColumns: gridCols }}>
+            {module.fields.map(f => {
+              const cellStyle = { borderRight: `1px solid ${GRID}`, borderBottom: `1px solid ${GRID}` }
+              if (f.type === 'select') {
+                const opts = (f.options || '').split(',').map(s => s.trim()).filter(Boolean)
+                return (
+                  <div key={f.id} className="min-h-11 flex items-stretch" style={cellStyle}>
+                    <ChipCell value={local[f.id] || ''} options={opts} placeholder="—" onChange={v => saveField(f.id, v)} />
+                  </div>
+                )
+              }
+              if (f.type === 'boolean') {
+                return (
+                  <div key={f.id} className="min-h-11 flex items-stretch" style={cellStyle}>
+                    <ChipCell value={local[f.id] || ''} options={['Yes', 'No']} placeholder="—"
+                      styleFor={v => v === 'Yes' ? { bg: '#dcfce7', color: '#15803d' } : { bg: '#fee2e2', color: '#b91c1c' }}
+                      onChange={v => saveField(f.id, v)} />
+                  </div>
+                )
+              }
+              const typeMap = { phone: 'tel', email: 'email', number: 'number', date: 'date' }
+              return (
+                <div key={f.id} className="min-h-11 flex items-stretch" style={cellStyle}>
+                  <TextCell value={local[f.id] || ''} type={typeMap[f.type] || 'text'} placeholder="—"
+                    onCommit={v => saveField(f.id, v || '')} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
 
 // Renders one custom-module field input based on its configured type.
 export function CustomFieldInput({ field, value, onChange }) {

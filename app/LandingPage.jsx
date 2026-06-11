@@ -630,17 +630,28 @@ export default function LandingPage() {
             {[
               { heading: 'Product',  links: ['Features', 'Integrations', 'Pricing', "What's new", 'Roadmap'] },
               { heading: 'Company',  links: ['About us', 'Blog', 'Careers', 'Press', 'Contact'] },
-              { heading: 'Legal',    links: ['Privacy Policy', 'Terms of Service', 'Security', 'HIPAA'] },
+              { heading: 'Legal', links: [
+                  { label: 'Privacy Policy',    href: '/privacy' },
+                  { label: 'Terms & Conditions', href: '/terms' },
+                  { label: 'Cookie Policy',     href: '/cookies' },
+                  { label: 'Security Policy',   href: '/security' },
+                  { label: 'Data Retention',    href: '/data-retention' },
+                  { label: 'Contact Us',        href: '/contact' },
+              ]},
             ].map(({ heading, links }) => (
               <div key={heading}>
                 <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.9px', textTransform: 'uppercase', color: 'rgba(255,255,255,.25)', marginBottom: 18 }}>{heading}</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-                  {links.map(l => (
-                    <a key={l} href="#" style={{ fontSize: 13.5, color: 'rgba(255,255,255,.42)', textDecoration: 'none', transition: 'color .14s' }}
-                      onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,.82)'}
-                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.42)'}
-                    >{l}</a>
-                  ))}
+                  {links.map(l => {
+                    const label = typeof l === 'string' ? l : l.label
+                    const href  = typeof l === 'string' ? '#' : l.href
+                    return (
+                      <Link key={label} href={href} style={{ fontSize: 13.5, color: 'rgba(255,255,255,.42)', textDecoration: 'none', transition: 'color .14s' }}
+                        onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,.82)'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.42)'}
+                      >{label}</Link>
+                    )
+                  })}
                 </div>
               </div>
             ))}
@@ -652,11 +663,17 @@ export default function LandingPage() {
               © 2026 HealthCRM Technologies Pvt. Ltd. All rights reserved. Built for healthcare professionals.
             </p>
             <div style={{ display: 'flex', gap: 22 }}>
-              {['Privacy', 'Terms', 'Cookies', 'Security'].map(l => (
-                <a key={l} href="#" style={{ fontSize: 12, color: 'rgba(255,255,255,.22)', textDecoration: 'none', transition: 'color .14s' }}
+              {[
+                { label: 'Privacy',   href: '/privacy' },
+                { label: 'Terms',     href: '/terms' },
+                { label: 'Cookies',   href: '/cookies' },
+                { label: 'Security',  href: '/security' },
+                { label: 'Contact',   href: '/contact' },
+              ].map(({ label, href }) => (
+                <Link key={label} href={href} style={{ fontSize: 12, color: 'rgba(255,255,255,.22)', textDecoration: 'none', transition: 'color .14s' }}
                   onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,.55)'}
                   onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.22)'}
-                >{l}</a>
+                >{label}</Link>
               ))}
             </div>
           </div>
