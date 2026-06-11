@@ -18,8 +18,9 @@ const FIELD_TYPES = [
 ]
 
 const PAGE_OPTS = [
-  { value: 'leads',    label: 'Leads' },
-  { value: 'patients', label: 'Patients' },
+  { value: 'leads',         label: 'Leads' },
+  { value: 'patients',      label: 'Patients' },
+  { value: 'consultations', label: 'Consultations' },
 ]
 
 const blankField   = () => ({ id: crypto.randomUUID(), label: '', type: 'text', required: false, options: '' })
@@ -552,7 +553,7 @@ export default function ModulesPage() {
             </div>
             <div>
               <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Custom Modules</p>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Add custom sections and fields to Leads or Patients pages</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Add custom sections and fields to Leads, Patients, or Consultations pages</p>
             </div>
           </div>
           {!showForm && <Button size="sm" onClick={startCreate}><Plus size={15} /> Create Module</Button>}
@@ -568,18 +569,8 @@ export default function ModulesPage() {
                 <Input label="Module Name *" placeholder="e.g. Insurance Details, Vitals"
                   value={formName} onChange={e => setFormName(e.target.value)} required />
               </div>
-              <div className="space-y-1.5 shrink-0">
-                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>For Page</label>
-                <div className="flex rounded-lg overflow-hidden border border-(--color-border)">
-                  {PAGE_OPTS.map(({ value, label }) => (
-                    <button key={value} type="button" onClick={() => setFormPage(value)}
-                      className="px-4 py-2 text-xs font-600 transition-all"
-                      style={formPage === value ? { background: 'var(--color-brand)', color: 'white' }
-                        : { color: 'var(--color-text-muted)', background: 'transparent' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
+              <div className="w-44 shrink-0">
+                <Select label="For Page" value={formPage} onChange={e => setFormPage(e.target.value)} options={PAGE_OPTS} />
               </div>
             </div>
 
@@ -742,14 +733,16 @@ export default function ModulesPage() {
                               const f = fieldMap[slotDef.id || slotDef]
                               if (!f) return null
                               return (
-                                <span key={ci} className="flex-1 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-(--color-border)"
-                                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}>
-                                  {f.label}
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
-                                    {FIELD_TYPES.find(t => t.value === f.type)?.label}
-                                  </span>
-                                  {f.required && <span className="text-red-400 text-[10px]">*</span>}
-                                </span>
+                                <div key={ci} className="flex-1 rounded-lg border border-(--color-border) overflow-hidden"
+                                  style={{ background: 'var(--color-surface)' }}>
+                                  <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+                                    <span className="flex-1 text-xs font-500 truncate" style={{ color: 'var(--color-text-secondary)' }}>{f.label}</span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded font-600 shrink-0" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                                      {FIELD_TYPES.find(t => t.value === f.type)?.label}
+                                    </span>
+                                    {f.required && <span className="text-red-400 text-[9px] font-700 shrink-0">*</span>}
+                                  </div>
+                                </div>
                               )
                             }
                             if (slotDef.kind === 'group') {
@@ -786,14 +779,16 @@ export default function ModulesPage() {
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {m.fields.map(f => (
-                        <span key={f.id} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-(--color-border)"
-                          style={{ background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}>
-                          {f.label}
-                          <span className="text-[9px] px-1.5 py-0.5 rounded font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
-                            {FIELD_TYPES.find(t => t.value === f.type)?.label}
-                          </span>
-                          {f.required && <span className="text-red-400 text-[10px]">*</span>}
-                        </span>
+                        <div key={f.id} className="rounded-lg border border-(--color-border) overflow-hidden"
+                          style={{ background: 'var(--color-surface)' }}>
+                          <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+                            <span className="text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{f.label}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                              {FIELD_TYPES.find(t => t.value === f.type)?.label}
+                            </span>
+                            {f.required && <span className="text-red-400 text-[9px] font-700">*</span>}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
