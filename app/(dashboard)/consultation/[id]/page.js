@@ -588,9 +588,8 @@ export default function ConsultationDetailPage({ params }) {
   const history = isPatient && Array.isArray(d.medical_history) ? d.medical_history : []
 
   const RIGHT_TABS = [
-    { id: 'tasks',     label: 'Tasks',      icon: CheckSquare, count: tasks.filter(t => t.status !== 'Completed').length },
-    { id: 'followups', label: 'Follow-ups', icon: Bell,        count: followups.length },
-    { id: 'timeline',  label: 'Timeline',   icon: Clock,       count: null },
+    { id: 'tasks',    label: 'Tasks',    icon: CheckSquare, count: tasks.filter(t => t.status !== 'Completed').length },
+    { id: 'timeline', label: 'Timeline', icon: Clock,       count: null },
   ]
 
   return (
@@ -658,6 +657,21 @@ export default function ConsultationDetailPage({ params }) {
                   {consultations.map(c => <ConsultationRecord key={c.id} c={c} doctors={doctors} />)}
                 </div>
               )}
+            </Card>
+
+            {/* Follow-ups */}
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex items-center gap-1.5">
+                  <Bell size={13} style={{ color: 'var(--color-brand)' }} />
+                  <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
+                    Follow-ups <span style={{ color: 'var(--color-text-primary)' }}>({followups.length})</span>
+                  </p>
+                </div>
+              </div>
+              <div className="p-4">
+                <FollowupsPanel entity={entity} orgId={orgId} followups={followups} setFollowups={setFollowups} />
+              </div>
             </Card>
 
             {/* Medical History — patients only */}
@@ -848,11 +862,6 @@ export default function ConsultationDetailPage({ params }) {
                       </div>
                     )}
                   </div>
-                )}
-
-                {/* Follow-ups */}
-                {rightTab === 'followups' && (
-                  <FollowupsPanel entity={entity} orgId={orgId} followups={followups} setFollowups={setFollowups} />
                 )}
 
                 {/* Timeline */}
