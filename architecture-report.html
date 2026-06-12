@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Healthcare CRM — System Architecture &amp; Infrastructure Report</title>
+<style>
+  :root {
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --ink-3: #64748b;
+    --ink-4: #94a3b8;
+    --rule: #e2e8f0;
+    --surface: #f8fafc;
+    --accent: #1e40af;
+    --accent-light: #eff6ff;
+    --green: #15803d;
+    --green-bg: #f0fdf4;
+    --amber: #92400e;
+    --amber-bg: #fffbeb;
+    --red: #991b1b;
+    --red-bg: #fef2f2;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color: var(--ink);
+    background: #fff;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  p { margin-bottom: 0; }
+
+  /* ── Page Layout ── */
+  .page { max-width: 980px; margin: 0 auto; padding: 60px 48px; }
+
+  /* ── Cover ── */
+  .cover {
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 36px;
+    margin-bottom: 48px;
+  }
+  .cover-kicker {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 16px;
+  }
+  .cover h1 {
+    font-size: 34px;
+    font-weight: 400;
+    line-height: 1.25;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+    margin-bottom: 12px;
+  }
+  .cover-sub {
+    font-size: 15px;
+    color: var(--ink-3);
+    max-width: 560px;
+    font-style: italic;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 40px;
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .cover-meta-item { display: flex; flex-direction: column; gap: 3px; }
+  .cover-meta-item .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-4); }
+  .cover-meta-item .value { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+  /* ── TOC ── */
+  .toc {
+    margin-bottom: 48px;
+    padding: 24px 28px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .toc-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-bottom: 14px; }
+  .toc ol { padding-left: 20px; }
+  .toc ol li { padding: 3px 0; font-size: 13px; color: var(--ink-2); }
+  .toc ol li a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid transparent; }
+  .toc ol li a:hover { border-bottom-color: var(--ink-3); }
+
+  /* ── Sections ── */
+  .section { margin-bottom: 52px; }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 10px;
+    margin-bottom: 24px;
+  }
+  .section-num {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-4);
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  .section-title { font-size: 20px; font-weight: 400; letter-spacing: -0.3px; }
+  .section-intro {
+    font-size: 13px;
+    color: var(--ink-3);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+
+  /* ── Tables ── */
+  .data-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; margin-bottom: 20px; }
+  .data-table th {
+    text-align: left;
+    padding: 9px 14px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    border-bottom: 2px solid var(--ink);
+    background: transparent;
+  }
+  .data-table td { padding: 11px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.5; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--surface); }
+  .data-table .row-highlight td { background: var(--accent-light); }
+  .data-table .row-highlight td:first-child { border-left: 3px solid var(--accent); }
+
+  /* ── Verdict badges ── */
+  .badge {
+    display: inline-block;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid;
+  }
+  .badge-green  { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+  .badge-amber  { color: var(--amber); border-color: #d97706; background: var(--amber-bg); }
+  .badge-red    { color: var(--red);   border-color: #dc2626; background: var(--red-bg); }
+  .badge-blue   { color: var(--accent); border-color: var(--accent); background: var(--accent-light); }
+  .badge-gray   { color: var(--ink-3); border-color: var(--rule); background: var(--surface); }
+
+  /* ── Callouts ── */
+  .callout {
+    border-left: 3px solid var(--ink);
+    padding: 14px 18px;
+    background: var(--surface);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    margin: 20px 0;
+  }
+  .callout.rec { border-left-color: var(--accent); background: var(--accent-light); }
+  .callout.warn { border-left-color: #d97706; background: var(--amber-bg); }
+  .callout.good { border-left-color: var(--green); background: var(--green-bg); }
+  .callout strong { font-weight: 700; }
+
+  /* ── Two-col layout ── */
+  .col-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .col-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  /* ── Stat row ── */
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--rule); margin-bottom: 20px; }
+  .stat-cell { padding: 18px 20px; border-right: 1px solid var(--rule); font-family: 'Segoe UI', Arial, sans-serif; }
+  .stat-cell:last-child { border-right: none; }
+  .stat-val { font-size: 26px; font-weight: 700; color: var(--ink); line-height: 1; margin-bottom: 4px; }
+  .stat-label { font-size: 11px; color: var(--ink-3); }
+
+  /* ── Flow ── */
+  .flow-row { display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 4px 0 16px; }
+  .flow-step {
+    flex: 1;
+    min-width: 120px;
+    border: 1px solid var(--rule);
+    padding: 14px 12px;
+    text-align: center;
+    background: #fff;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .flow-step.active { background: var(--ink); color: white; border-color: var(--ink); }
+  .flow-step .fs-label { font-size: 12px; font-weight: 600; }
+  .flow-step .fs-sub { font-size: 10px; opacity: 0.7; margin-top: 3px; }
+  .flow-arrow { flex-shrink: 0; font-size: 14px; color: var(--ink-4); padding: 0 6px; }
+
+  /* ── Checklist ── */
+  .checklist { list-style: none; font-family: 'Segoe UI', Arial, sans-serif; margin-bottom: 16px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li .ch-mark { flex-shrink: 0; font-size: 13px; width: 20px; }
+  .checklist li .ch-body strong { display: block; font-weight: 600; color: var(--ink); }
+  .checklist li .ch-body span { color: var(--ink-3); font-size: 12px; }
+
+  /* ── DB Map ── */
+  .db-legend { display: flex; gap: 20px; flex-wrap: wrap; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: var(--ink-3); margin-bottom: 16px; }
+  .db-legend-item { display: flex; align-items: center; gap: 5px; }
+  .db-legend-dot { width: 10px; height: 10px; flex-shrink: 0; }
+  .db-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .db-cell { background: #fff; padding: 0; }
+  .db-cell-head {
+    padding: 7px 10px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--rule);
+  }
+  .db-cell-head.core     { background: #f1f5f9; color: #1e293b; }
+  .db-cell-head.clinical { background: #f0f9ff; color: #0369a1; }
+  .db-cell-head.workflow { background: #fefce8; color: #713f12; }
+  .db-cell-head.finance  { background: #f0fdf4; color: #15803d; }
+  .db-cell-head.system   { background: #faf5ff; color: #6b21a8; }
+  .db-cell-rows { padding: 6px 0; }
+  .db-row { padding: 2px 10px; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: var(--ink-3); display: flex; gap: 4px; align-items: center; }
+  .db-row .col-name { color: var(--ink-2); }
+  .tag { font-size: 9px; font-weight: 700; padding: 0px 5px; border: 1px solid; }
+  .tag-pk { color: #92400e; border-color: #d97706; }
+  .tag-fk { color: #1d4ed8; border-color: #3b82f6; }
+  .tag-json { color: #6b21a8; border-color: #a855f7; }
+
+  /* ── Journey ── */
+  .journey-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; }
+  .journey-table td { padding: 13px 16px; border: 1px solid var(--rule); vertical-align: top; }
+  .journey-table .step-col { background: var(--surface); width: 150px; font-weight: 600; color: var(--ink); font-size: 12px; }
+  .journey-table .step-num-badge { display: inline-block; width: 20px; height: 20px; background: var(--ink); color: white; font-size: 10px; font-weight: 700; text-align: center; line-height: 20px; margin-right: 6px; }
+
+  /* ── Audit example ── */
+  .audit-row { display: grid; grid-template-columns: 150px 130px 1fr 110px; gap: 16px; padding: 9px 14px; border-bottom: 1px solid var(--rule); font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; }
+  .audit-row.head { background: var(--surface); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+
+  /* ── Migration ── */
+  .mig-grid { display: grid; grid-template-columns: 1fr 44px 1fr; align-items: start; gap: 0; }
+  .mig-box { border: 1px solid var(--rule); padding: 20px; }
+  .mig-box h4 { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-bottom: 12px; }
+  .mig-box ul { list-style: none; }
+  .mig-box ul li { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: var(--ink-2); padding: 4px 0; border-bottom: 1px dotted var(--rule); display: flex; gap: 8px; }
+  .mig-box ul li:last-child { border-bottom: none; }
+  .mig-box ul li::before { content: '→'; color: var(--ink-4); flex-shrink: 0; }
+  .mig-arrow { display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--ink-3); padding-top: 40px; }
+
+  /* ── Timeline ── */
+  .tl { position: relative; padding-left: 24px; font-family: 'Segoe UI', Arial, sans-serif; }
+  .tl::before { content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px; background: var(--rule); }
+  .tl-item { position: relative; margin-bottom: 18px; }
+  .tl-dot { position: absolute; left: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); }
+  .tl-dot.done { background: var(--green); }
+  .tl-item h4 { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .tl-item p { font-size: 12px; color: var(--ink-3); margin-top: 3px; line-height: 1.6; }
+
+  /* ── Scorecard ── */
+  .score-bar-wrap { display: flex; align-items: center; gap: 10px; }
+  .score-bar { flex: 1; height: 5px; background: var(--rule); }
+  .score-bar-fill { height: 100%; background: var(--ink); }
+  .score-bar-fill.warn { background: #d97706; }
+  .score-bar-fill.low { background: #dc2626; }
+  .score-num { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; font-weight: 700; color: var(--ink); width: 32px; text-align: right; }
+
+  /* ── KVM section specifics ── */
+  .kvm-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-bottom: 24px; }
+  .kvm-card { background: #fff; }
+  .kvm-card-head { padding: 12px 16px; border-bottom: 1px solid var(--rule); font-family: 'Segoe UI', Arial, sans-serif; }
+  .kvm-card-head .plan-name { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .kvm-card-head .plan-price { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+  .kvm-card-head .plan-rec { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+  .kvm-card.recommended .kvm-card-head { background: var(--ink); }
+  .kvm-card.recommended .kvm-card-head .plan-name { color: white; }
+  .kvm-card.recommended .kvm-card-head .plan-price { color: #94a3b8; }
+  .kvm-card.recommended .kvm-card-head .plan-rec { color: #60a5fa; }
+  .kvm-card-body { padding: 16px; font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; }
+  .kvm-spec { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dotted var(--rule); }
+  .kvm-spec:last-of-type { border-bottom: none; }
+  .kvm-spec .spec-label { color: var(--ink-3); }
+  .kvm-spec .spec-val { font-weight: 600; color: var(--ink); }
+  .kvm-capacity { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--rule); }
+  .kvm-capacity-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-bottom: 10px; }
+  .kvm-scenario { margin-bottom: 10px; padding: 10px; background: var(--surface); font-size: 12px; }
+  .kvm-scenario .sc-label { font-weight: 600; color: var(--ink); font-size: 11px; margin-bottom: 4px; }
+  .kvm-scenario .sc-count { font-size: 18px; font-weight: 700; color: var(--ink); line-height: 1; }
+  .kvm-scenario .sc-desc { color: var(--ink-3); font-size: 11px; margin-top: 2px; }
+  .kvm-verdict { margin-top: 12px; font-size: 12px; line-height: 1.55; }
+  .kvm-verdict.ok { color: var(--green); }
+  .kvm-verdict.warn { color: var(--amber); }
+
+  /* ── Divider ── */
+  hr { border: none; border-top: 1px solid var(--rule); margin: 40px 0; }
+
+  /* ── Footer ── */
+  .footer { border-top: 1px solid var(--ink); padding-top: 20px; margin-top: 48px; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: var(--ink-3); display: flex; justify-content: space-between; }
+
+  /* ── Print ── */
+  @media print {
+    body { font-size: 12px; }
+    .page { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Cover -->
+  <div class="cover">
+    <p class="cover-kicker">Nebkern Healthcare CRM &mdash; Internal Report &mdash; Confidential</p>
+    <h1>System Architecture,<br/>Infrastructure &amp; Growth Capacity</h1>
+    <p class="cover-sub">A plain-English overview of how the platform is built, how data is kept private, what infrastructure it needs, and how far it can grow &mdash; prepared for co-founder review.</p>
+    <div class="cover-meta">
+      <div class="cover-meta-item"><span class="label">Prepared for</span><span class="value">Founding Team</span></div>
+      <div class="cover-meta-item"><span class="label">Date</span><span class="value">June 2026</span></div>
+      <div class="cover-meta-item"><span class="label">Database tables</span><span class="value">25</span></div>
+      <div class="cover-meta-item"><span class="label">Architecture</span><span class="value">Multi-tenant SaaS</span></div>
+    </div>
+  </div>
+
+  <!-- TOC -->
+  <nav class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#s1">What Kind of System Is This?</a></li>
+      <li><a href="#s2">How Organisations Are Kept Separate</a></li>
+      <li><a href="#s3">Database Structure &mdash; All 25 Tables</a></li>
+      <li><a href="#s4">How a Lead Becomes a Patient</a></li>
+      <li><a href="#s5">Privacy, Security &amp; Audit Trail</a></li>
+      <li><a href="#s6">Infrastructure: Supabase Cloud vs. Self-Hosted</a></li>
+      <li><a href="#s7">Hostinger VPS Plans &mdash; Capacity Analysis</a></li>
+      <li><a href="#s8">Scalability Roadmap</a></li>
+      <li><a href="#s9">Pre-Launch Action Items</a></li>
+      <li><a href="#s10">Summary Scorecard</a></li>
+    </ol>
+  </nav>
+
+
+  <!-- §1 -->
+  <div class="section" id="s1">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2 class="section-title">What Kind of System Is This?</h2>
+    </div>
+
+    <p class="section-intro">
+      Before looking at numbers, it helps to understand the system's design philosophy. Every architectural decision flows from one central choice made at the very beginning.
+    </p>
+
+    <div class="col-2">
+      <div>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:13px; line-height:1.75; margin-bottom:16px;">
+          This is a <strong>multi-tenant SaaS platform</strong> built on top of PostgreSQL (via Supabase). The term "multi-tenant" means many independent healthcare organisations &mdash; clinics, hospitals, wellness centres &mdash; all run on the same software infrastructure, but with <strong>complete data isolation</strong> between them.
+        </p>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:13px; line-height:1.75; margin-bottom:16px;">
+          Think of it like a modern apartment building: every resident shares the plumbing and electricity, but no one can walk into another flat. The difference between a bad multi-tenant system and a good one is how deeply that isolation is enforced. Here it is enforced at the database layer itself, not just in application code.
+        </p>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:13px; line-height:1.75;">
+          This design means you can grow from 1 organisation to 500 without any architectural changes. The cost scales with usage, not with every new customer.
+        </p>
+      </div>
+      <div>
+        <table class="data-table">
+          <tr><th>Layer</th><th>Technology</th></tr>
+          <tr><td>Frontend &amp; API</td><td>Next.js 16 (App Router)</td></tr>
+          <tr><td>Database</td><td>PostgreSQL 15 (via Supabase)</td></tr>
+          <tr><td>Authentication</td><td>Supabase Auth (JWT-based)</td></tr>
+          <tr><td>Real-time</td><td>Supabase Realtime (WebSockets)</td></tr>
+          <tr><td>Access control</td><td>Row Level Security (RLS)</td></tr>
+          <tr><td>Custom data</td><td>JSONB columns (schema-flexible)</td></tr>
+        </table>
+        <div class="stat-row" style="margin-top:0;">
+          <div class="stat-cell"><div class="stat-val">25</div><div class="stat-label">Database tables</div></div>
+          <div class="stat-cell"><div class="stat-val">&#8734;</div><div class="stat-label">Orgs supported</div></div>
+          <div class="stat-cell"><div class="stat-val">0</div><div class="stat-label">Cross-org leaks by design</div></div>
+          <div class="stat-cell"><div class="stat-val">100%</div><div class="stat-label">Actions audit-logged</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §2 -->
+  <div class="section" id="s2">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2 class="section-title">How Organisations Are Kept Separate</h2>
+    </div>
+
+    <p class="section-intro">
+      The single most important question for a healthcare platform is: can one clinic ever see another's patient data? The answer here is no &mdash; and it is enforced at the database level, not just in code.
+    </p>
+
+    <div class="callout">
+      Every row in every table carries an <strong>organisation_id</strong> stamp. The database is configured so that when a user from Clinic A sends a query, the database itself filters out everything that does not carry Clinic A's ID. Even if there were a bug in the application code, the database would return nothing.
+    </div>
+
+    <table class="data-table">
+      <tr>
+        <th>Isolation Layer</th>
+        <th>How It Works</th>
+        <th>Status</th>
+      </tr>
+      <tr>
+        <td><strong>organisation_id on every table</strong></td>
+        <td>Every record &mdash; patient, lead, task, invoice &mdash; belongs to exactly one org. All 25 tables follow this pattern.</td>
+        <td><span class="badge badge-green">Active</span></td>
+      </tr>
+      <tr>
+        <td><strong>Row Level Security (RLS)</strong></td>
+        <td>A PostgreSQL feature that attaches filtering rules to the database itself. Queries can only return rows the logged-in user is allowed to see.</td>
+        <td><span class="badge badge-amber">Needs tightening before launch</span></td>
+      </tr>
+      <tr>
+        <td><strong>Organisation-scoped queries</strong></td>
+        <td>Every query function in the codebase explicitly filters by the current org's ID. Two layers of protection: application + database.</td>
+        <td><span class="badge badge-green">Active</span></td>
+      </tr>
+      <tr>
+        <td><strong>JWT authentication</strong></td>
+        <td>Every request carries a signed token that identifies the user and their org. Expired or tampered tokens are rejected before any query runs.</td>
+        <td><span class="badge badge-green">Active</span></td>
+      </tr>
+    </table>
+
+    <div class="callout warn">
+      <strong>Note on RLS:</strong> RLS is enabled on all 25 tables. However, the current policies are intentionally wide-open for development (&ldquo;allow all&rdquo;). Before going live with real patient data, these must be switched to strict org-scoped policies. This is a known, defined task &mdash; estimated 2&ndash;3 days of engineering work.
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §3 -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2 class="section-title">Database Structure &mdash; All 25 Tables</h2>
+    </div>
+
+    <p class="section-intro">
+      A full map of the system's data model. Tables are grouped by purpose. Every table has an <code>organization_id</code> column (FK = links to another table, JSON = flexible data field).
+    </p>
+
+    <div class="db-legend">
+      <div class="db-legend-item"><div class="db-legend-dot" style="background:#1e293b;"></div> Core CRM</div>
+      <div class="db-legend-item"><div class="db-legend-dot" style="background:#0369a1;"></div> Clinical</div>
+      <div class="db-legend-item"><div class="db-legend-dot" style="background:#713f12;"></div> Workflow</div>
+      <div class="db-legend-item"><div class="db-legend-dot" style="background:#15803d;"></div> Finance</div>
+      <div class="db-legend-item"><div class="db-legend-dot" style="background:#6b21a8;"></div> System</div>
+    </div>
+
+    <div class="db-grid">
+      <div class="db-cell"><div class="db-cell-head core">organisations</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-pk">PK</span><span class="col-name">id</span></div><div class="db-row"><span class="col-name">name, type, email</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">settings</span></div><div class="db-row"><span class="col-name">status</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head core">patients</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-pk">PK</span><span class="col-name">id</span></div><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">organization_id</span></div><div class="db-row"><span class="col-name">name, dob, phone</span></div><div class="db-row"><span class="col-name">patient_code</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">medical_history</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">custom_data</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head core">leads</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-pk">PK</span><span class="col-name">id</span></div><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">organization_id</span></div><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">patient_id (on convert)</span></div><div class="db-row"><span class="col-name">stage, priority, source</span></div><div class="db-row"><span class="col-name">value, currency</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">custom_data</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head core">contacts &amp; branches</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">organization_id</span></div><div class="db-row"><span class="col-name">name, email, phone</span></div><div class="db-row"><span class="col-name">designation, dept</span></div><div class="db-row" style="margin-top:4px; opacity:0.6; font-size:10px;">branches: clinic locations, assigned_to</div></div></div>
+      <div class="db-cell"><div class="db-cell-head clinical">consultations</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">patient_id / lead_id</span></div><div class="db-row"><span class="col-name">chief_complaint</span></div><div class="db-row"><span class="col-name">diagnosis, prescription</span></div><div class="db-row"><span class="col-name">clinical_notes</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">vitals, visit_details</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head clinical">appointments</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">patient_id / lead_id</span></div><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">doctor_id, branch_id</span></div><div class="db-row"><span class="col-name">scheduled_at</span></div><div class="db-row"><span class="col-name">duration, status</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head workflow">tasks</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">organization_id</span></div><div class="db-row"><span class="col-name">title, entity_type</span></div><div class="db-row"><span class="col-name">priority, status</span></div><div class="db-row"><span class="col-name">due_date, assigned_to</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head workflow">followups</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">lead_id / patient_id</span></div><div class="db-row"><span class="col-name">type (Call/WA/Email)</span></div><div class="db-row"><span class="col-name">scheduled_at, outcome</span></div><div class="db-row"><span class="col-name">notes, caller_name</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head workflow">activities &amp; tags</div><div class="db-cell-rows"><div class="db-row"><span class="col-name">activities: log of all actions</span></div><div class="db-row"><span class="col-name">entity_type, content</span></div><div class="db-row" style="margin-top:4px; opacity:0.6; font-size:10px;">tags + patient_tags + lead_tags</div></div></div>
+      <div class="db-cell"><div class="db-cell-head workflow">automation_rules</div><div class="db-cell-rows"><div class="db-row"><span class="col-name">name, trigger_event</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">conditions</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">actions</span></div><div class="db-row"><span class="col-name">is_active</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head finance">invoices</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">patient_id</span></div><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">appointment_id</span></div><div class="db-row"><span class="col-name">invoice_number</span></div><div class="db-row"><span class="col-name">amount, tax, total</span></div><div class="db-row"><span class="col-name">status, due_date</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head finance">payments</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">invoice_id</span></div><div class="db-row"><span class="col-name">amount, method</span></div><div class="db-row"><span class="col-name">payment_date, notes</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head system">audit_logs</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">organization_id</span></div><div class="db-row"><span class="col-name">actor_name, email</span></div><div class="db-row"><span class="col-name">action, entity_type</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">metadata (IP, device, geo)</span></div><div class="db-row"><span class="tag tag-json">JSON</span><span class="col-name">old_data / new_data</span></div></div></div>
+      <div class="db-cell"><div class="db-cell-head system">notifications</div><div class="db-cell-rows"><div class="db-row"><span class="tag tag-fk">FK</span><span class="col-name">organization_id</span></div><div class="db-row"><span class="col-name">type, title, message</span></div><div class="db-row"><span class="col-name">eid (dedup key)</span></div><div class="db-row"><span class="col-name">is_read, link</span></div><div class="db-row" style="color:#15803d; font-size:10px;">Real-time enabled</div></div></div>
+      <div class="db-cell"><div class="db-cell-head system">profiles, roles, permissions</div><div class="db-cell-rows"><div class="db-row"><span class="col-name">profiles: user + org link</span></div><div class="db-row"><span class="col-name">roles: named role per org</span></div><div class="db-row"><span class="col-name">permissions: action keys</span></div><div class="db-row"><span class="col-name">role_permissions, user_roles</span></div><div class="db-row"><span class="col-name">tickets: support requests</span></div></div></div>
+    </div>
+
+    <div class="callout" style="margin-top:20px;">
+      <strong>Why JSONB custom fields matter:</strong> The <code>custom_data</code> column on patients and leads stores all custom module fields as flexible JSON. When a clinic adds a new field in Settings, no database migration is needed &mdash; the data just flows into this column. This is a significant design advantage for a configurable healthcare CRM.
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §4 -->
+  <div class="section" id="s4">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2 class="section-title">How a Lead Becomes a Patient</h2>
+    </div>
+
+    <p class="section-intro">
+      One of the defining features of this platform is that a single person's journey from first enquiry to treated patient is tracked continuously, with no data loss between stages.
+    </p>
+
+    <div class="flow-row" style="margin-bottom:24px;">
+      <div class="flow-step"><div class="fs-label">Enquiry</div><div class="fs-sub">Phone, WhatsApp, form</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step active"><div class="fs-label">Lead</div><div class="fs-sub">Pipeline + follow-ups</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step"><div class="fs-label">Patient</div><div class="fs-sub">Medical profile + code</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step"><div class="fs-label">Appointment</div><div class="fs-sub">Doctor + branch</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step"><div class="fs-label">Consultation</div><div class="fs-sub">Clinical record</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step"><div class="fs-label">Invoice + Payment</div><div class="fs-sub">Financial record</div></div>
+    </div>
+
+    <table class="journey-table">
+      <tr>
+        <td class="step-col"><span class="step-num-badge">1</span>Lead Created</td>
+        <td>A lead carries personal details (name, phone, gender, source) plus pipeline metadata: stage, priority, assigned staff member, and custom fields. The enquiry source is always recorded so marketing attribution is available later.</td>
+      </tr>
+      <tr>
+        <td class="step-col"><span class="step-num-badge">2</span>Follow-ups &amp; Tasks</td>
+        <td>Every call, WhatsApp message, email, and meeting is logged as a follow-up. Tasks keep staff accountable. Automation rules can trigger follow-up reminders automatically without anyone having to remember.</td>
+      </tr>
+      <tr>
+        <td class="step-col"><span class="step-num-badge">3</span>Conversion</td>
+        <td>When the lead agrees to treatment, a Patient record is created with a unique auto-generated <strong>patient code</strong>. The original lead is linked to the new patient via a foreign key &mdash; so the full enquiry history is never lost. Both records continue to exist and can be queried together.</td>
+      </tr>
+      <tr>
+        <td class="step-col"><span class="step-num-badge">4</span>Consultation</td>
+        <td>Each clinical visit creates a Consultation record: chief complaint, diagnosis, prescription, treatment plan, and structured vitals (blood pressure, weight, temperature, etc. stored as JSON). This is entirely separate from CRM or financial data &mdash; clean separation of concerns.</td>
+      </tr>
+      <tr>
+        <td class="step-col"><span class="step-num-badge">5</span>Invoice &amp; Payment</td>
+        <td>Invoices link to both the patient and the specific appointment. Payments link to the invoice. This creates a clean financial chain: patient &rarr; appointment &rarr; invoice &rarr; payment. Every clinic's revenue is queryable independently, by branch or by doctor.</td>
+      </tr>
+    </table>
+  </div>
+
+  <hr />
+
+
+  <!-- §5 -->
+  <div class="section" id="s5">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2 class="section-title">Privacy, Security &amp; Audit Trail</h2>
+    </div>
+
+    <p class="section-intro">
+      Healthcare data is among the most sensitive personal data that exists. The platform is built to track every action on that data, with enough detail to answer any compliance or dispute question.
+    </p>
+
+    <div class="col-2">
+      <div>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-3); margin-bottom:10px;">What Every Audit Log Entry Records</p>
+        <div style="border:1px solid var(--rule);">
+          <div class="audit-row head"><span>Timestamp</span><span>Who</span><span>What happened</span><span>From where</span></div>
+          <div class="audit-row"><span style="color:var(--ink-3);">11 Jun 2026 &middot; 09:42</span><span>Dr. Sharma</span><span>Opened patient record &mdash; Raj Kumar</span><span>Mumbai, IN</span></div>
+          <div class="audit-row"><span style="color:var(--ink-3);">11 Jun 2026 &middot; 10:15</span><span>Admin</span><span>Lead stage changed &rarr; Won</span><span>Delhi, IN</span></div>
+          <div class="audit-row" style="border-bottom:none;"><span style="color:var(--ink-3);">11 Jun 2026 &middot; 11:30</span><span>Receptionist</span><span>Appointment deleted</span><span>Pune, IN</span></div>
+        </div>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:12px; color:var(--ink-3); margin-top:8px;">Each entry also stores: device type, IP address, city, country, latitude/longitude (with consent), and the before/after values of any field that changed.</p>
+      </div>
+      <div>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-3); margin-bottom:10px;">What Gets Logged</p>
+        <ul class="checklist">
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>Patient record views &amp; edits</strong><span>Every time a patient file is opened or changed</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>Lead changes</strong><span>Stage moves, field updates, assignments</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>Deletions</strong><span>Who deleted what, at what time</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>Login &amp; logout events</strong><span>With device and IP address</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>Settings &amp; configuration changes</strong><span>Module additions, role changes</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §6 -->
+  <div class="section" id="s6">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2 class="section-title">Infrastructure: Supabase Cloud vs. Self-Hosted</h2>
+    </div>
+
+    <p class="section-intro">
+      The platform currently runs on Supabase's managed cloud. At some point it makes sense to move to a self-hosted server. This section explains when that is and what it takes.
+    </p>
+
+    <div class="mig-grid">
+      <div class="mig-box">
+        <h4>Supabase Cloud &mdash; Where We Are Now</h4>
+        <ul>
+          <li>Hosted and managed by Supabase Inc. (AWS infrastructure)</li>
+          <li>Free tier: 500 MB database, suitable for development and early pilots</li>
+          <li>They handle backups, upgrades, and infrastructure</li>
+          <li>Data sits on Supabase's servers outside India</li>
+          <li>Scales to Pro ($25/mo) when the free tier is outgrown</li>
+          <li>Fast to get started &mdash; no server management required</li>
+        </ul>
+      </div>
+      <div class="mig-arrow">&rarr;</div>
+      <div class="mig-box">
+        <h4>Self-Hosted &mdash; Where We Go Later</h4>
+        <ul>
+          <li>Your own VPS (Hostinger, AWS, or any cloud provider)</li>
+          <li>Full control: data never leaves your server</li>
+          <li>Meets data residency requirements (India, HIPAA, DPDP)</li>
+          <li>Same API as cloud &mdash; only 2 environment variables change</li>
+          <li>Scales to any size; no per-row fees</li>
+          <li>Requires basic server management capability</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout good" style="margin-top:20px;">
+      <strong>Migration is not a rewrite.</strong> Supabase is fully open source. Moving from cloud to self-hosted means running a database export (<code>pg_dump</code>), importing it to the new server, and changing two environment variables in the app. The application code does not change at all. Existing user accounts, passwords, and all data transfer perfectly.
+    </div>
+
+    <table class="data-table" style="margin-top:20px;">
+      <tr>
+        <th>Question</th><th>Answer</th>
+      </tr>
+      <tr>
+        <td>Will organisations lose any data during migration?</td>
+        <td>No. <code>pg_dump</code> is a complete copy of every table, row, and relationship.</td>
+      </tr>
+      <tr>
+        <td>Will users need new passwords?</td>
+        <td>No. Password hashes migrate with the auth schema. Users log in with the same credentials.</td>
+      </tr>
+      <tr>
+        <td>Will there be downtime?</td>
+        <td>A short window (15&ndash;30 minutes) is required to do the export, import, and DNS switch. Best done off-hours.</td>
+      </tr>
+      <tr>
+        <td>Will the app behave differently after migration?</td>
+        <td>No. The Supabase API is identical on cloud and self-hosted.</td>
+      </tr>
+      <tr>
+        <td>When should we migrate?</td>
+        <td>When either: (a) the free tier storage runs out, (b) you need India data residency for compliance, or (c) you have enough organisations to justify the &#126;$9/mo VPS cost.</td>
+      </tr>
+    </table>
+  </div>
+
+  <hr />
+
+
+  <!-- §7 -->
+  <div class="section" id="s7">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2 class="section-title">Hostinger VPS Plans &mdash; Capacity Analysis</h2>
+    </div>
+
+    <p class="section-intro">
+      When self-hosting, Hostinger's KVM range offers a practical cost-to-capacity trade-off. Below is an honest assessment of how many organisations each plan can support, broken down by the type of clinic being onboarded.
+    </p>
+
+    <div class="callout" style="margin-bottom:24px;">
+      <strong>How to read this section:</strong> A self-hosted Supabase instance uses roughly 1.5&ndash;1.7 GB of RAM just to run its core services (database, auth, API gateway, real-time engine). What remains is available for the actual data. The estimates below are conservative &mdash; real-world capacity depends on how many staff are active simultaneously and how query-heavy the usage is.
+    </div>
+
+    <div class="kvm-cards">
+
+      <!-- KVM 1 -->
+      <div class="kvm-card">
+        <div class="kvm-card-head">
+          <div class="plan-name">KVM 1</div>
+          <div class="plan-price">$6.49 / month &nbsp;&middot;&nbsp; ~&#8377;540/mo</div>
+          <div class="plan-rec" style="color:var(--amber);">Entry-level &mdash; pilots only</div>
+        </div>
+        <div class="kvm-card-body">
+          <div class="kvm-spec"><span class="spec-label">CPU</span><span class="spec-val">1 vCore</span></div>
+          <div class="kvm-spec"><span class="spec-label">RAM</span><span class="spec-val">4 GB</span></div>
+          <div class="kvm-spec"><span class="spec-label">Storage</span><span class="spec-val">50 GB NVMe</span></div>
+          <div class="kvm-spec"><span class="spec-label">Bandwidth</span><span class="spec-val">4 TB / month</span></div>
+
+          <div class="kvm-capacity">
+            <div class="kvm-capacity-title">How many organisations can it hold?</div>
+
+            <div class="kvm-scenario">
+              <div class="sc-label">Small clinic (100&ndash;200 patients, 3&ndash;5 staff)</div>
+              <div class="sc-count">30&ndash;50 orgs</div>
+              <div class="sc-desc">Lightly used, few concurrent logins</div>
+            </div>
+
+            <div class="kvm-scenario">
+              <div class="sc-label">Medium clinic (300&ndash;600 patients, 10&ndash;20 staff)</div>
+              <div class="sc-count">15&ndash;25 orgs</div>
+              <div class="sc-desc">Moderate query load, 5&ndash;10 concurrent users per org</div>
+            </div>
+
+            <div class="kvm-verdict warn">
+              Not recommended for production. A single CPU core creates bottlenecks when two organisations run heavy operations simultaneously. Use this only for early pilots or a staging environment.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KVM 2 -->
+      <div class="kvm-card recommended">
+        <div class="kvm-card-head">
+          <div class="plan-name">KVM 2</div>
+          <div class="plan-price">$8.99 / month &nbsp;&middot;&nbsp; ~&#8377;750/mo</div>
+          <div class="plan-rec">Recommended starting point</div>
+        </div>
+        <div class="kvm-card-body">
+          <div class="kvm-spec"><span class="spec-label">CPU</span><span class="spec-val">2 vCores</span></div>
+          <div class="kvm-spec"><span class="spec-label">RAM</span><span class="spec-val">8 GB</span></div>
+          <div class="kvm-spec"><span class="spec-label">Storage</span><span class="spec-val">100 GB NVMe</span></div>
+          <div class="kvm-spec"><span class="spec-label">Bandwidth</span><span class="spec-val">8 TB / month</span></div>
+
+          <div class="kvm-capacity">
+            <div class="kvm-capacity-title">How many organisations can it hold?</div>
+
+            <div class="kvm-scenario">
+              <div class="sc-label">Small clinic (100&ndash;200 patients, 3&ndash;5 staff)</div>
+              <div class="sc-count">120&ndash;180 orgs</div>
+              <div class="sc-desc">Storage lasts 5+ years at this scale</div>
+            </div>
+
+            <div class="kvm-scenario">
+              <div class="sc-label">Medium clinic (300&ndash;600 patients, 10&ndash;20 staff)</div>
+              <div class="sc-count">50&ndash;80 orgs</div>
+              <div class="sc-desc">Comfortable headroom; 150&ndash;200 concurrent users</div>
+            </div>
+
+            <div class="kvm-verdict ok">
+              This is the right starting point for production. Doubles the resources of KVM 1 for only $2.50/mo more. Provides comfortable headroom to reach meaningful SaaS revenue before needing to upgrade.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KVM 4 -->
+      <div class="kvm-card">
+        <div class="kvm-card-head">
+          <div class="plan-name">KVM 4</div>
+          <div class="plan-price">$12.99 / month &nbsp;&middot;&nbsp; ~&#8377;1,080/mo</div>
+          <div class="plan-rec" style="color:#16a34a;">Growth phase &mdash; 80+ orgs</div>
+        </div>
+        <div class="kvm-card-body">
+          <div class="kvm-spec"><span class="spec-label">CPU</span><span class="spec-val">4 vCores</span></div>
+          <div class="kvm-spec"><span class="spec-label">RAM</span><span class="spec-val">16 GB</span></div>
+          <div class="kvm-spec"><span class="spec-label">Storage</span><span class="spec-val">200 GB NVMe</span></div>
+          <div class="kvm-spec"><span class="spec-label">Bandwidth</span><span class="spec-val">16 TB / month</span></div>
+
+          <div class="kvm-capacity">
+            <div class="kvm-capacity-title">How many organisations can it hold?</div>
+
+            <div class="kvm-scenario">
+              <div class="sc-label">Small clinic (100&ndash;200 patients, 3&ndash;5 staff)</div>
+              <div class="sc-count">300&ndash;400 orgs</div>
+              <div class="sc-desc">Very comfortable; years of storage runway</div>
+            </div>
+
+            <div class="kvm-scenario">
+              <div class="sc-label">Medium clinic (300&ndash;600 patients, 10&ndash;20 staff)</div>
+              <div class="sc-count">150&ndash;220 orgs</div>
+              <div class="sc-desc">400&ndash;500 concurrent users comfortably</div>
+            </div>
+
+            <div class="kvm-verdict ok">
+              Upgrade to this when KVM 2 approaches 70% capacity. At &#8377;1,080/mo serving 150+ paying clinics, the infrastructure cost is negligible relative to revenue.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <table class="data-table">
+      <tr>
+        <th>Growth Phase</th>
+        <th>Number of Orgs</th>
+        <th>Recommended Plan</th>
+        <th>Monthly Infra Cost</th>
+        <th>Our View</th>
+      </tr>
+      <tr>
+        <td>Today &mdash; Pilots</td>
+        <td>0&ndash;5 orgs</td>
+        <td>Supabase Cloud Free</td>
+        <td><strong>&#8377;0</strong></td>
+        <td><span class="badge badge-green">Stay here now</span></td>
+      </tr>
+      <tr>
+        <td>Early traction</td>
+        <td>5&ndash;25 orgs</td>
+        <td>Supabase Cloud Pro &mdash; or migrate to KVM 1 if data residency matters</td>
+        <td><strong>&#8377;2,000&ndash;2,500</strong></td>
+        <td><span class="badge badge-blue">Move when 5+ paying orgs</span></td>
+      </tr>
+      <tr class="row-highlight">
+        <td>Growth</td>
+        <td>25&ndash;80 orgs</td>
+        <td><strong>KVM 2 self-hosted</strong></td>
+        <td><strong>&#8377;750</strong></td>
+        <td><span class="badge badge-blue">Best value on this tier</span></td>
+      </tr>
+      <tr>
+        <td>Scale</td>
+        <td>80&ndash;220 orgs</td>
+        <td><strong>KVM 4 self-hosted</strong></td>
+        <td><strong>&#8377;1,080</strong></td>
+        <td><span class="badge badge-green">Upgrade smoothly</span></td>
+      </tr>
+      <tr>
+        <td>Enterprise</td>
+        <td>220+ orgs</td>
+        <td>KVM 8 or dedicated server + read replicas</td>
+        <td><strong>&#8377;2,500+</strong></td>
+        <td><span class="badge badge-gray">Plan when approaching 200</span></td>
+      </tr>
+    </table>
+
+    <div class="callout rec">
+      <strong>Our recommendation:</strong> Do not migrate to self-hosting today. Use the Supabase free tier to build, test, and onboard your first pilot clinics. Migrate to <strong>KVM 2</strong> at Hostinger when you have 5&ndash;10 paying organisations and need data residency compliance. At &#8377;750/mo, it will comfortably serve you until you reach 50&ndash;80 medium-sized clinics &mdash; which represents substantial recurring revenue.
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §8 -->
+  <div class="section" id="s8">
+    <div class="section-header">
+      <span class="section-num">08</span>
+      <h2 class="section-title">Scalability Roadmap</h2>
+    </div>
+
+    <p class="section-intro">
+      The platform is built on PostgreSQL, which has no meaningful upper limit. Instagram, Reddit, and Spotify all run on it. The bottlenecks that will appear with this system are known in advance and have defined solutions.
+    </p>
+
+    <div class="col-2">
+      <div>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-3); margin-bottom:10px;">What scales without any code change</p>
+        <ul class="checklist">
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>More organisations</strong><span>Just new rows in the organisations table</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>More patients and leads per org</strong><span>PostgreSQL handles billions of rows</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>New custom fields</strong><span>JSONB columns absorb new fields with no migration</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>More branches and doctors</strong><span>Already part of the schema</span></div></li>
+          <li><div class="ch-mark">&#10003;</div><div class="ch-body"><strong>Real-time notifications</strong><span>Supabase Realtime channels scale horizontally</span></div></li>
+        </ul>
+      </div>
+      <div>
+        <p style="font-family:'Segoe UI',sans-serif; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-3); margin-bottom:10px;">What to address before high volume</p>
+        <ul class="checklist">
+          <li><div class="ch-mark" style="color:var(--amber);">&#9888;</div><div class="ch-body"><strong>Tighten Row Level Security</strong><span>Current policies are open for development; must restrict before production</span></div></li>
+          <li><div class="ch-mark" style="color:var(--amber);">&#9888;</div><div class="ch-body"><strong>Add composite indexes</strong><span>Index (organisation_id + status) for faster filtered lists</span></div></li>
+          <li><div class="ch-mark" style="color:var(--amber);">&#9888;</div><div class="ch-body"><strong>GIN index on custom_data</strong><span>Required for fast JSON field searches at scale</span></div></li>
+          <li><div class="ch-mark" style="color:var(--amber);">&#9888;</div><div class="ch-body"><strong>Move automation rules server-side</strong><span>Currently run in the browser; must move to server functions for reliability</span></div></li>
+          <li><div class="ch-mark" style="color:var(--amber);">&#9888;</div><div class="ch-body"><strong>Pagination on large lists</strong><span>Load 50 records at a time, not the full table</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §9 -->
+  <div class="section" id="s9">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <h2 class="section-title">Pre-Launch Action Items</h2>
+    </div>
+
+    <p class="section-intro">
+      The platform is production-grade in its design and architecture. The items below are not architectural problems &mdash; they are defined engineering tasks that need to be completed before onboarding real patient data.
+    </p>
+
+    <div class="tl" style="margin-top:20px;">
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Tighten Row Level Security policies <span class="badge badge-amber" style="margin-left:8px; vertical-align:middle;">Priority 1</span></h4>
+        <p>Change all 25 tables from &ldquo;allow all&rdquo; to strict org-scoped policies that enforce <code>organization_id = current_user_org</code>. This is the single most important task before any real patient data is stored. Estimated: 2&ndash;3 days.</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Enforce role-based permissions in the UI <span class="badge badge-amber" style="margin-left:8px; vertical-align:middle;">Priority 2</span></h4>
+        <p>The roles and permissions tables are fully built. The UI needs to read those permissions and show/hide features accordingly. Estimated: 3&ndash;5 days.</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Move automation rules to server-side execution <span class="badge badge-amber" style="margin-left:8px; vertical-align:middle;">Priority 3</span></h4>
+        <p>Currently rules run in the browser, which means they won&rsquo;t fire for webhook-created leads or API integrations. Moving to Supabase Edge Functions ensures rules fire regardless of how a record is created.</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <h4>Set up automated backups</h4>
+        <p>On Supabase Cloud Pro, daily backups are included. On self-hosted, a daily <code>pg_dump</code> cron job needs to be configured and its output stored off-server (e.g. S3-compatible storage).</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot done"></div>
+        <h4>Full audit logging</h4>
+        <p>Already implemented. All major actions are logged with who, what, when, and from where &mdash; including IP address and geolocation.</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot done"></div>
+        <h4>Organisation data isolation</h4>
+        <p>Already implemented. Every table has <code>organization_id</code>; all queries are org-scoped at the application layer.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+
+  <!-- §10 -->
+  <div class="section" id="s10">
+    <div class="section-header">
+      <span class="section-num">10</span>
+      <h2 class="section-title">Summary Scorecard</h2>
+    </div>
+
+    <table class="data-table">
+      <tr>
+        <th style="width:200px;">Area</th>
+        <th style="width:160px;">Rating</th>
+        <th>Current State</th>
+        <th style="width:200px;">Next Step</th>
+      </tr>
+      <tr>
+        <td><strong>Data Isolation</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill" style="width:90%;"></div></div>
+            <div class="score-num">9/10</div>
+          </div>
+        </td>
+        <td>org_id on every table; all queries fully scoped</td>
+        <td>Tighten RLS policies</td>
+      </tr>
+      <tr>
+        <td><strong>Schema Completeness</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill" style="width:90%;"></div></div>
+            <div class="score-num">9/10</div>
+          </div>
+        </td>
+        <td>25 tables covering CRM, clinical, finance, and compliance</td>
+        <td>&mdash;</td>
+      </tr>
+      <tr>
+        <td><strong>Audit &amp; Compliance</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill" style="width:80%;"></div></div>
+            <div class="score-num">8/10</div>
+          </div>
+        </td>
+        <td>Full audit log with IP, device, and geolocation</td>
+        <td>Before/after diff on all field edits</td>
+      </tr>
+      <tr>
+        <td><strong>Scalability</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill" style="width:80%;"></div></div>
+            <div class="score-num">8/10</div>
+          </div>
+        </td>
+        <td>PostgreSQL, indexed, org-scoped</td>
+        <td>Composite + GIN indexes</td>
+      </tr>
+      <tr>
+        <td><strong>Infrastructure Flexibility</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill" style="width:100%;"></div></div>
+            <div class="score-num">10/10</div>
+          </div>
+        </td>
+        <td>Moves to self-hosted with 2 env-var changes</td>
+        <td>&mdash;</td>
+      </tr>
+      <tr>
+        <td><strong>Security</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill warn" style="width:60%;"></div></div>
+            <div class="score-num">6/10</div>
+          </div>
+        </td>
+        <td>RLS enabled but policies are open; auth is solid</td>
+        <td>Strict RLS &mdash; Priority 1 before launch</td>
+      </tr>
+      <tr>
+        <td><strong>Automation</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill warn" style="width:50%;"></div></div>
+            <div class="score-num">5/10</div>
+          </div>
+        </td>
+        <td>Rules run client-side; won&rsquo;t fire on API events</td>
+        <td>Move to server-side functions</td>
+      </tr>
+      <tr>
+        <td><strong>Role Enforcement</strong></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill warn" style="width:50%;"></div></div>
+            <div class="score-num">5/10</div>
+          </div>
+        </td>
+        <td>Tables fully built; UI enforcement incomplete</td>
+        <td>Build permission middleware</td>
+      </tr>
+    </table>
+
+    <div class="callout rec" style="margin-top:24px;">
+      <strong>Overall assessment:</strong> The foundation is architecturally sound and built for the long term. The schema is complete, data isolation is reliable, and the path to self-hosting is straightforward. The three items rated below 7 &mdash; security policies, automation, and role enforcement &mdash; are defined engineering tasks, not design problems. They represent roughly 2&ndash;3 weeks of focused development work. Once those are done, this platform is production-ready for real patient data at scale.
+    </div>
+  </div>
+
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>Nebkern Healthcare CRM &mdash; Architecture &amp; Infrastructure Report &mdash; June 2026</span>
+    <span>Confidential &mdash; Internal Use Only</span>
+  </div>
+
+</div>
+</body>
+</html>

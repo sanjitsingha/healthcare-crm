@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Plus, Search, ClipboardList, X } from 'lucide-react'
 import { Button } from '@/components/ui'
 
-export default function ServicesPage() {
+export default function ServicesSettingsPage() {
   const [search, setSearch] = useState('')
 
   // Data layer wired in a later step. For now this is the page scaffold:
@@ -18,18 +18,18 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-800 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
+          <h1 className="text-xl font-700 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
             Services &amp; Pricing
           </h1>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
             Manage the services and tests your clinic offers and their prices
           </p>
         </div>
-        <Button onClick={handleAdd}>
+        <Button onClick={handleAdd} className="shrink-0">
           <Plus size={16} /> Add Service
         </Button>
       </div>

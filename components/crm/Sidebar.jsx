@@ -27,7 +27,6 @@ import {
   Stethoscope,
   BarChart3,
   BellRing,
-  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 import clsx from "clsx";
@@ -63,7 +62,6 @@ const navGroups = [
     label: "Operations",
     items: [
       { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-      { href: "/services", icon: ClipboardList, label: "Services" },
       { href: "/billing", icon: CreditCard, label: "Billing & Finance" },
     ],
   },
