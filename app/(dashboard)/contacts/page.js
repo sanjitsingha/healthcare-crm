@@ -1,18 +1,19 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   Search, Users, Phone, Mail, UserRound, TrendingUp,
-  SlidersHorizontal, Columns3, Download, Upload,
-  Check, X, ArrowRight, Trash2,
+  Columns3, Download, Upload, Check, X, ArrowRight, Trash2,
+  ChevronDown, Calendar, Plus, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
-import { Spinner, Avatar, Button, Modal } from '@/components/ui'
+import { Spinner, Avatar, Button, Modal, Card } from '@/components/ui'
 import { getLeads, getPatients, createLead, deleteLead, deletePatient, updateOrganization } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { logAudit, AUDIT } from '@/lib/audit'
+import clsx from 'clsx'
 
-// Base column definitions — `locked` columns can't be hidden
+// ── Base column definitions ─────────────────────────────────────
 const BASE_COLUMNS = [
   { key: 'name',    label: 'Name',          locked: true },
   { key: 'type',    label: 'Type' },
@@ -23,10 +24,9 @@ const BASE_COLUMNS = [
   { key: 'gender',  label: 'Gender' },
   { key: 'created', label: 'Created' },
 ]
-
 const BASE_DEFAULT_VISIBLE = { name: true, type: true, phone: true, email: true, status: true, source: false, gender: false, created: true }
 
-// ── Cell value helpers ─────────────────────────────────────────
+// ── Cell value helpers ──────────────────────────────────────────
 function cellText(r, col) {
   if (col.custom) {
     const applies = (col.page === 'leads' && r.type === 'Lead') || (col.page === 'patients' && r.type === 'Patient')
@@ -67,23 +67,134 @@ function parseCSV(text) {
   })
 }
 
-// ── Dropdown wrapper with click-outside ────────────────────────
-function Dropdown({ open, onClose, width = 'w-64', children }) {
-  if (!open) return null
+// ── MultiSelect dropdown ────────────────────────────────────────
+function MultiSelect({ label, icon: Icon, options, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const toggle = (v) => onChange(selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v])
+  const count = selected.length
   return (
-    <>
-      <div className="fixed inset-0 z-10" onClick={onClose} />
-      <div
-        className={`absolute top-full mt-1.5 right-0 ${width} rounded-xl border border-(--color-border) overflow-hidden z-20`}
-        style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
-      >
-        {children}
-      </div>
-    </>
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors whitespace-nowrap"
+        style={count
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        {Icon && <Icon size={13} />}
+        <span>{label}</span>
+        {count > 0 && <span className="text-[10px] font-700 px-1.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{count}</span>}
+        <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 min-w-44 max-h-64 overflow-y-auto rounded-xl border border-(--color-border) p-1"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          {options.length === 0 && <p className="px-2.5 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No options</p>}
+          {options.map(o => {
+            const on = selected.includes(o.value)
+            return (
+              <button key={o.value} type="button" onClick={() => toggle(o.value)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                  style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                  {on && <Check size={10} className="text-white" />}
+                </span>
+                {o.color && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.color }} />}
+                <span className="flex-1 truncate">{o.label}</span>
+              </button>
+            )
+          })}
+          {count > 0 && (
+            <button type="button" onClick={() => onChange([])}
+              className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-(--color-border) text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
-// ── Import Modal ───────────────────────────────────────────────
+// ── DateRangeSelect ─────────────────────────────────────────────
+function DateRangeSelect({ from, to, onChange, label = 'Date range' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const active = !!(from || to)
+  const fmt = (d) => { try { return format(new Date(d), 'MMM d, yyyy') } catch { return d } }
+  const summary = from && to ? `${fmt(from)} – ${fmt(to)}` : from ? `From ${fmt(from)}` : to ? `Until ${fmt(to)}` : label
+  const iso = (d) => format(d, 'yyyy-MM-dd')
+  const applyPreset = (days) => {
+    const end = new Date(); const start = new Date()
+    start.setDate(start.getDate() - (days - 1))
+    onChange(iso(start), iso(end))
+  }
+  const applyThisMonth = () => {
+    const now = new Date()
+    onChange(iso(new Date(now.getFullYear(), now.getMonth(), 1)), iso(now))
+  }
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors whitespace-nowrap"
+        style={active
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        <Calendar size={13} />
+        <span className="max-w-36 truncate">{summary}</span>
+        {active && (
+          <span onClick={(e) => { e.stopPropagation(); onChange('', '') }} className="shrink-0 rounded hover:bg-(--color-surface-2) p-0.5" title="Clear">
+            <X size={12} />
+          </span>
+        )}
+        <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 w-64 rounded-xl border border-(--color-border) p-2.5"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          <div className="flex flex-wrap gap-1 mb-2.5">
+            {[
+              { label: 'Today',      run: () => applyPreset(1) },
+              { label: 'Last 7d',    run: () => applyPreset(7) },
+              { label: 'Last 30d',   run: () => applyPreset(30) },
+              { label: 'This month', run: applyThisMonth },
+            ].map(p => (
+              <button key={p.label} type="button" onClick={p.run}
+                className="px-2 py-1 text-[11px] font-600 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-brand-50) hover:border-(--color-brand)"
+                style={{ color: 'var(--color-text-secondary)' }}>{p.label}</button>
+            ))}
+          </div>
+          <label className="block text-[10px] font-700 uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-muted)' }}>Start date</label>
+          <input type="date" value={from || ''} max={to || undefined} onChange={e => onChange(e.target.value, to)}
+            className="w-full px-2 py-1.5 mb-2.5 text-xs rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+          <label className="block text-[10px] font-700 uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-muted)' }}>End date</label>
+          <input type="date" value={to || ''} min={from || undefined} onChange={e => onChange(from, e.target.value)}
+            className="w-full px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+          {active && (
+            <button type="button" onClick={() => onChange('', '')}
+              className="w-full text-center px-2.5 py-1.5 mt-2.5 border-t border-(--color-border) text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+              Clear dates
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Import Modal ────────────────────────────────────────────────
 function ImportModal({ open, onClose, orgId, onImported }) {
   const [rows, setRows]     = useState([])
   const [error, setError]   = useState('')
@@ -154,25 +265,48 @@ function ImportModal({ open, onClose, orgId, onImported }) {
   )
 }
 
-// ── Page ───────────────────────────────────────────────────────
+// ── Stat card ───────────────────────────────────────────────────
+function StatCard({ label, value, icon: Icon, color }) {
+  return (
+    <Card className="p-4 border-(--color-border)">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: color + '20' }}>
+          <Icon size={16} style={{ color }} />
+        </div>
+        <div>
+          <p className="text-xl font-800 leading-none" style={{ color: 'var(--color-text-primary)' }}>{value}</p>
+          <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// ── Page ────────────────────────────────────────────────────────
 export default function ContactsPage() {
   const { orgId, org } = useOrg()
   const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
 
-  const [filterOpen, setFilterOpen] = useState(false)
   const [colsOpen, setColsOpen]     = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const colsRef = useRef()
 
   const [visible, setVisible] = useState(() => ({ ...(org?.settings?.contacts_columns || {}) }))
-  const [filters, setFilters] = useState({ type: 'All', stage: '', status: '', source: '', hasPhone: false, hasEmail: false })
+  const [filters, setFilters] = useState({ types: [], stages: [], sources: [], dateFrom: '', dateTo: '' })
   const [selected, setSelected] = useState(new Set())
+  const [sort, setSort] = useState({ col: 'created', dir: 'desc' })
+
+  useEffect(() => {
+    const h = (e) => { if (colsRef.current && !colsRef.current.contains(e.target)) setColsOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
 
   const stages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#6366f1' } : s)
   const stageColor = (name) => stages.find(s => s.name === name)?.color || '#6366f1'
 
-  // Build custom columns from modules (DB-backed via org.settings)
   const customColumns = (org?.settings?.modules || [])
     .filter(m => m.active)
     .flatMap(m => (m.fields || []).map(f => ({
@@ -182,7 +316,6 @@ export default function ContactsPage() {
     })))
 
   const ALL_COLUMNS = [...BASE_COLUMNS, ...customColumns]
-
   const isVisible = (col) => {
     if (col.locked) return true
     if (col.key in visible) return visible[col.key]
@@ -229,44 +362,65 @@ export default function ContactsPage() {
     persistColumns({ ...visible, [col.key]: !isVisible(col) })
   }
 
-  // filtering
-  const filtered = rows.filter(r => {
-    if (filters.type === 'Patients' && r.type !== 'Patient') return false
-    if (filters.type === 'Leads'    && r.type !== 'Lead')    return false
-    if (filters.stage  && !(r.type === 'Lead'    && r.detail === filters.stage))  return false
-    if (filters.status && !(r.type === 'Patient' && r.detail === filters.status)) return false
-    if (filters.source && (r.source || '') !== filters.source) return false
-    if (filters.hasPhone && !r.phone) return false
-    if (filters.hasEmail && !r.email) return false
-    if (search) {
-      const q = search.toLowerCase()
-      return r.name.toLowerCase().includes(q) || (r.phone || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q)
-    }
-    return true
-  })
+  // ── Filtering + sorting ────────────────────────────────────────
+  const sources = useMemo(() => [...new Set(rows.map(r => r.source).filter(Boolean))], [rows])
 
-  const activeFilterCount = [filters.type !== 'All', filters.stage, filters.status, filters.source, filters.hasPhone, filters.hasEmail].filter(Boolean).length
-  const clearFilters = () => setFilters({ type: 'All', stage: '', status: '', source: '', hasPhone: false, hasEmail: false })
-  const sources = [...new Set(rows.map(r => r.source).filter(Boolean))]
+  const filtered = useMemo(() => {
+    let result = rows.filter(r => {
+      if (filters.types.length   && !filters.types.includes(r.type))   return false
+      if (filters.stages.length  && !(r.type === 'Lead' && filters.stages.includes(r.detail))) return false
+      if (filters.sources.length && !filters.sources.includes(r.source || '')) return false
+      if (filters.dateFrom) {
+        const d = new Date(r.created_at); d.setHours(0,0,0,0)
+        if (d < new Date(filters.dateFrom)) return false
+      }
+      if (filters.dateTo) {
+        const d = new Date(r.created_at); d.setHours(23,59,59,999)
+        if (d > new Date(filters.dateTo + 'T23:59:59')) return false
+      }
+      if (search) {
+        const q = search.toLowerCase()
+        return r.name.toLowerCase().includes(q) || (r.phone || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q)
+      }
+      return true
+    })
 
-  // selection
+    // sort
+    result = [...result].sort((a, b) => {
+      let va, vb
+      if (sort.col === 'name') {
+        va = a.name.toLowerCase(); vb = b.name.toLowerCase()
+      } else {
+        va = new Date(a.created_at).getTime(); vb = new Date(b.created_at).getTime()
+      }
+      if (va < vb) return sort.dir === 'asc' ? -1 : 1
+      if (va > vb) return sort.dir === 'asc' ? 1 : -1
+      return 0
+    })
+    return result
+  }, [rows, filters, search, sort])
+
+  const activeFilterCount = filters.types.length + filters.stages.length + filters.sources.length + (filters.dateFrom || filters.dateTo ? 1 : 0)
+  const clearFilters = () => setFilters({ types: [], stages: [], sources: [], dateFrom: '', dateTo: '' })
+
+  const toggleSort = (col) => {
+    setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+  const SortIcon = ({ col }) => {
+    if (sort.col !== col) return <ArrowUpDown size={12} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+    return sort.dir === 'asc' ? <ArrowUp size={12} style={{ color: 'var(--color-brand)' }} /> : <ArrowDown size={12} style={{ color: 'var(--color-brand)' }} />
+  }
+
+  // ── Selection ──────────────────────────────────────────────────
   const rowKey = (r) => `${r.type}:${r.id}`
   const allSelected = filtered.length > 0 && filtered.every(r => selected.has(rowKey(r)))
   const toggleRow = (r) => {
     const k = rowKey(r)
-    setSelected(prev => {
-      const next = new Set(prev)
-      next.has(k) ? next.delete(k) : next.add(k)
-      return next
-    })
+    setSelected(prev => { const next = new Set(prev); next.has(k) ? next.delete(k) : next.add(k); return next })
   }
-  const toggleAll = () => {
-    setSelected(prev => {
-      if (allSelected) return new Set()
-      return new Set(filtered.map(rowKey))
-    })
-  }
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(filtered.map(rowKey)))
 
+  // ── Export ─────────────────────────────────────────────────────
   const handleExport = (onlySelected) => {
     const data = onlySelected ? filtered.filter(r => selected.has(rowKey(r))) : filtered
     if (!data.length) return
@@ -274,9 +428,7 @@ export default function ContactsPage() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = `contacts-${format(new Date(), 'yyyy-MM-dd')}.csv`
-    a.click()
+    a.href = url; a.download = `contacts-${format(new Date(), 'yyyy-MM-dd')}.csv`; a.click()
     URL.revokeObjectURL(url)
     logAudit({ action: AUDIT.DATA_EXPORT, entityType: 'contact', description: `Exported ${data.length} contact record(s) to CSV${onlySelected ? ' (selected only)' : ''}`, metadata: { count: data.length, format: 'csv', scope: onlySelected ? 'selected' : 'all_filtered', columns: visibleCols.map(c => c.label) } })
   }
@@ -290,15 +442,14 @@ export default function ContactsPage() {
         if (type === 'Patient') await deletePatient(id)
         else await deleteLead(id)
       }
-      setSelected(new Set())
-      load()
+      setSelected(new Set()); load()
     } catch (err) { alert(err.message) }
   }
 
   const patientCount = rows.filter(r => r.type === 'Patient').length
   const leadCount    = rows.filter(r => r.type === 'Lead').length
 
-  // cell renderer (JSX)
+  // ── Cell renderer ──────────────────────────────────────────────
   const renderCell = (r, col) => {
     const isPatient = r.type === 'Patient'
     if (col.custom) {
@@ -343,144 +494,129 @@ export default function ContactsPage() {
 
   return (
     <div className="p-6 space-y-5" style={{ background: 'var(--color-bg)', minHeight: '100vh' }}>
-      {/* Header */}
-      <div className="flex items-start justify-between">
+
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-700 flex items-center gap-2" style={{ color: 'var(--color-text-primary)' }}>
             <Users size={20} style={{ color: 'var(--color-brand)' }} /> Contacts
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {rows.length} people · {patientCount} patients · {leadCount} leads
+            All leads and patients in one place
           </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}><Upload size={14} /> Import</Button>
+          <Button variant="secondary" size="sm" onClick={() => handleExport(false)}><Download size={14} /> Export</Button>
+          <Link href="/leads/new"><Button size="sm"><Plus size={14} /> New Lead</Button></Link>
         </div>
       </div>
 
-      {/* Toolbar */}
+      {/* ── Stats ── */}
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard label="Total contacts" value={rows.length} icon={Users} color="var(--color-brand)" />
+        <StatCard label="Patients" value={patientCount} icon={UserRound} color="#15803d" />
+        <StatCard label="Leads" value={leadCount} icon={TrendingUp} color="#1d4ed8" />
+      </div>
+
+      {/* ── Toolbar ── */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-48 max-w-72">
+
+        {/* Search */}
+        <div className="relative min-w-48 max-w-72 flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
           <input
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border outline-none"
+            className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border outline-none"
             style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
             placeholder="Search by name, phone, email…" value={search} onChange={e => setSearch(e.target.value)}
           />
         </div>
 
+        {/* Filter pills */}
+        <MultiSelect
+          label="Type"
+          icon={Users}
+          options={[{ value: 'Lead', label: 'Lead' }, { value: 'Patient', label: 'Patient' }]}
+          selected={filters.types}
+          onChange={v => setFilters(f => ({ ...f, types: v }))}
+        />
+        {stages.length > 0 && (
+          <MultiSelect
+            label="Stage"
+            options={stages.map(s => ({ value: s.name, label: s.name, color: s.color }))}
+            selected={filters.stages}
+            onChange={v => setFilters(f => ({ ...f, stages: v }))}
+          />
+        )}
+        {sources.length > 0 && (
+          <MultiSelect
+            label="Source"
+            options={sources.map(s => ({ value: s, label: s }))}
+            selected={filters.sources}
+            onChange={v => setFilters(f => ({ ...f, sources: v }))}
+          />
+        )}
+        <DateRangeSelect
+          from={filters.dateFrom}
+          to={filters.dateTo}
+          onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))}
+        />
+        {activeFilterCount > 0 && (
+          <button type="button" onClick={clearFilters}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-600 border border-dashed transition-colors hover:bg-(--color-surface-2)"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+            <X size={12} /> Clear ({activeFilterCount})
+          </button>
+        )}
+
         <div className="flex-1" />
 
-        {/* Filter */}
-        <div className="relative">
-          <button type="button" onClick={() => { setFilterOpen(o => !o); setColsOpen(false) }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
-            style={{ borderColor: activeFilterCount ? 'var(--color-brand)' : 'var(--color-border)', color: activeFilterCount ? 'var(--color-brand)' : 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
-            <SlidersHorizontal size={14} /> Filter
-            {activeFilterCount > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-700" style={{ background: 'var(--color-brand)', color: 'white' }}>{activeFilterCount}</span>}
-          </button>
-          <Dropdown open={filterOpen} onClose={() => setFilterOpen(false)} width="w-72">
-            <div className="p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Advanced Filters</p>
-                {activeFilterCount > 0 && <button type="button" onClick={clearFilters} className="text-[10px] font-600" style={{ color: 'var(--color-brand)' }}>Clear all</button>}
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-600 uppercase" style={{ color: 'var(--color-text-muted)' }}>Type</label>
-                <div className="flex gap-1">
-                  {['All', 'Patients', 'Leads'].map(t => (
-                    <button key={t} type="button" onClick={() => setFilters(f => ({ ...f, type: t }))}
-                      className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-600 border transition-all"
-                      style={filters.type === t ? { background: 'var(--color-brand)', color: 'white', borderColor: 'transparent' } : { color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>{t}</button>
-                  ))}
-                </div>
-              </div>
-              {stages.length > 0 && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-600 uppercase" style={{ color: 'var(--color-text-muted)' }}>Lead Stage</label>
-                  <select value={filters.stage} onChange={e => setFilters(f => ({ ...f, stage: e.target.value }))}
-                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                    <option value="">Any stage</option>
-                    {stages.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div className="space-y-1">
-                <label className="text-[10px] font-600 uppercase" style={{ color: 'var(--color-text-muted)' }}>Patient Status</label>
-                <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                  <option value="">Any status</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-              {sources.length > 0 && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-600 uppercase" style={{ color: 'var(--color-text-muted)' }}>Source</label>
-                  <select value={filters.source} onChange={e => setFilters(f => ({ ...f, source: e.target.value }))}
-                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                    <option value="">Any source</option>
-                    {sources.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              )}
-              <div className="flex gap-4 pt-1">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={filters.hasPhone} onChange={e => setFilters(f => ({ ...f, hasPhone: e.target.checked }))} className="w-3.5 h-3.5" style={{ accentColor: 'var(--color-brand)' }} />
-                  <span className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>Has phone</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="checkbox" checked={filters.hasEmail} onChange={e => setFilters(f => ({ ...f, hasEmail: e.target.checked }))} className="w-3.5 h-3.5" style={{ accentColor: 'var(--color-brand)' }} />
-                  <span className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>Has email</span>
-                </label>
-              </div>
-            </div>
-          </Dropdown>
-        </div>
-
-        {/* Columns */}
-        <div className="relative">
-          <button type="button" onClick={() => { setColsOpen(o => !o); setFilterOpen(false) }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
+        {/* Column toggle */}
+        <div className="relative" ref={colsRef}>
+          <button type="button" onClick={() => setColsOpen(o => !o)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
             style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
             <Columns3 size={14} /> Columns
           </button>
-          <Dropdown open={colsOpen} onClose={() => setColsOpen(false)} width="w-60">
-            <div className="p-2 max-h-80 overflow-y-auto">
-              <p className="text-[11px] font-700 uppercase tracking-wide px-2 py-1.5" style={{ color: 'var(--color-text-muted)' }}>Base Columns</p>
-              {BASE_COLUMNS.map(col => (
-                <button key={col.key} type="button" onClick={() => toggleColumn(col)} disabled={col.locked}
-                  className="w-full flex items-center justify-between px-2 py-2 rounded-lg text-xs transition-colors hover:bg-(--color-surface-2) disabled:opacity-50 disabled:cursor-not-allowed">
-                  <span style={{ color: 'var(--color-text-primary)' }}>{col.label}{col.locked && <span className="text-[9px] ml-1" style={{ color: 'var(--color-text-muted)' }}>(locked)</span>}</span>
-                  <span className="w-4 h-4 rounded flex items-center justify-center" style={{ background: isVisible(col) ? 'var(--color-brand)' : 'transparent', border: isVisible(col) ? 'none' : '1.5px solid var(--color-border)' }}>
-                    {isVisible(col) && <Check size={11} className="text-white" />}
-                  </span>
-                </button>
-              ))}
-              {customColumns.length > 0 && (
-                <>
-                  <p className="text-[11px] font-700 uppercase tracking-wide px-2 py-1.5 mt-1" style={{ color: 'var(--color-text-muted)' }}>Custom Fields</p>
-                  {customColumns.map(col => (
-                    <button key={col.key} type="button" onClick={() => toggleColumn(col)}
-                      className="w-full flex items-center justify-between px-2 py-2 rounded-lg text-xs transition-colors hover:bg-(--color-surface-2)">
-                      <span className="truncate text-left" style={{ color: 'var(--color-text-primary)' }}>
-                        {col.label}
-                        <span className="text-[9px] ml-1 capitalize" style={{ color: 'var(--color-text-muted)' }}>({col.page})</span>
-                      </span>
-                      <span className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: isVisible(col) ? 'var(--color-brand)' : 'transparent', border: isVisible(col) ? 'none' : '1.5px solid var(--color-border)' }}>
-                        {isVisible(col) && <Check size={11} className="text-white" />}
-                      </span>
-                    </button>
-                  ))}
-                </>
-              )}
+          {colsOpen && (
+            <div className="absolute top-full mt-1.5 right-0 w-60 rounded-xl border border-(--color-border) overflow-hidden z-20"
+              style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+              <div className="p-2 max-h-80 overflow-y-auto">
+                <p className="text-[11px] font-700 uppercase tracking-wide px-2 py-1.5" style={{ color: 'var(--color-text-muted)' }}>Base Columns</p>
+                {BASE_COLUMNS.map(col => (
+                  <button key={col.key} type="button" onClick={() => toggleColumn(col)} disabled={col.locked}
+                    className="w-full flex items-center justify-between px-2 py-2 rounded-lg text-xs transition-colors hover:bg-(--color-surface-2) disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span style={{ color: 'var(--color-text-primary)' }}>
+                      {col.label}{col.locked && <span className="text-[9px] ml-1" style={{ color: 'var(--color-text-muted)' }}>(locked)</span>}
+                    </span>
+                    <span className="w-4 h-4 rounded flex items-center justify-center" style={{ background: isVisible(col) ? 'var(--color-brand)' : 'transparent', border: isVisible(col) ? 'none' : '1.5px solid var(--color-border)' }}>
+                      {isVisible(col) && <Check size={11} className="text-white" />}
+                    </span>
+                  </button>
+                ))}
+                {customColumns.length > 0 && (
+                  <>
+                    <p className="text-[11px] font-700 uppercase tracking-wide px-2 py-1.5 mt-1" style={{ color: 'var(--color-text-muted)' }}>Custom Fields</p>
+                    {customColumns.map(col => (
+                      <button key={col.key} type="button" onClick={() => toggleColumn(col)}
+                        className="w-full flex items-center justify-between px-2 py-2 rounded-lg text-xs transition-colors hover:bg-(--color-surface-2)">
+                        <span className="truncate text-left" style={{ color: 'var(--color-text-primary)' }}>
+                          {col.label}<span className="text-[9px] ml-1 capitalize" style={{ color: 'var(--color-text-muted)' }}>({col.page})</span>
+                        </span>
+                        <span className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{ background: isVisible(col) ? 'var(--color-brand)' : 'transparent', border: isVisible(col) ? 'none' : '1.5px solid var(--color-border)' }}>
+                          {isVisible(col) && <Check size={11} className="text-white" />}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
             </div>
-          </Dropdown>
+          )}
         </div>
-
-        {/* Import / Export */}
-        <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}><Upload size={14} /> Import</Button>
-        <Button variant="secondary" size="sm" onClick={() => handleExport(false)}><Download size={14} /> Export</Button>
       </div>
 
-      {/* Selection action bar */}
+      {/* ── Bulk action bar ── */}
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border" style={{ background: 'var(--color-brand-50)', borderColor: 'var(--color-brand)' + '40' }}>
           <span className="text-xs font-600" style={{ color: 'var(--color-brand)' }}>{selected.size} selected</span>
@@ -501,7 +637,7 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* ── Table ── */}
       {loading ? (
         <div className="flex justify-center py-16"><Spinner size={28} /></div>
       ) : filtered.length === 0 ? (
@@ -510,6 +646,12 @@ export default function ContactsPage() {
           <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>
             {search || activeFilterCount ? 'No contacts match your filters.' : 'No leads or patients yet.'}
           </p>
+          {!search && !activeFilterCount && (
+            <Link href="/leads/new" className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-xs font-600 transition-colors hover:opacity-90"
+              style={{ background: 'var(--color-brand)', color: 'white' }}>
+              <Plus size={13} /> Add your first lead
+            </Link>
+          )}
         </div>
       ) : (
         <div className="rounded-2xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
@@ -521,8 +663,17 @@ export default function ContactsPage() {
                     <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} />
                   </th>
                   {visibleCols.map(c => (
-                    <th key={c.key} className="text-left px-4 py-2.5 text-[10px] font-700 uppercase tracking-widest border-b border-(--color-border) whitespace-nowrap" style={{ color: 'var(--color-text-muted)' }}>
-                      {c.label}
+                    <th key={c.key} className="text-left px-4 py-2.5 border-b border-(--color-border) whitespace-nowrap">
+                      {c.key === 'name' || c.key === 'created' ? (
+                        <button type="button" onClick={() => toggleSort(c.key === 'name' ? 'name' : 'created')}
+                          className="flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-widest transition-colors hover:opacity-80"
+                          style={{ color: 'var(--color-text-muted)' }}>
+                          {c.label}
+                          <SortIcon col={c.key === 'name' ? 'name' : 'created'} />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>{c.label}</span>
+                      )}
                     </th>
                   ))}
                   <th className="w-10 border-b border-(--color-border)"></th>
@@ -553,10 +704,17 @@ export default function ContactsPage() {
               </tbody>
             </table>
           </div>
+          <div className="px-4 py-2.5 border-t border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              {filtered.length} of {rows.length} contact{rows.length !== 1 ? 's' : ''}
+              {activeFilterCount > 0 ? ' (filtered)' : ''}
+            </p>
+          </div>
         </div>
       )}
 
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} orgId={orgId} onImported={(n) => { alert(`Imported ${n} lead${n !== 1 ? 's' : ''}.`); load() }} />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} orgId={orgId}
+        onImported={(n) => { alert(`Imported ${n} lead${n !== 1 ? 's' : ''}.`); load() }} />
     </div>
   )
 }
