@@ -1,6 +1,6 @@
 'use client'
-import { useState, useMemo } from 'react'
-import { Plus, Search, ClipboardList, X, Edit2, Trash2, Clock, Package, GripVertical, ArrowRight } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { Plus, Search, ClipboardList, X, Edit2, Trash2, Clock, Package, GripVertical, ArrowRight, SlidersHorizontal, ChevronDown } from 'lucide-react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
@@ -59,6 +59,15 @@ export default function ServicesSettingsPage() {
     setPackages(next)
   }
 
+  // Each tab registers its openAdd() here so the shared header button can trigger it.
+  const servicesApi = useRef(null)
+  const packagesApi = useRef(null)
+  const handleAdd = () => {
+    (tab === 'services' ? servicesApi : packagesApi).current?.openAdd()
+  }
+  // Hide the Add button on Packages when there are no services to bundle yet.
+  const hideAdd = tab === 'packages' && services.length === 0
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -71,39 +80,128 @@ export default function ServicesSettingsPage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-(--color-border)">
-        {[
-          { id: 'services', label: 'Services', icon: ClipboardList, count: services.length },
-          { id: 'packages', label: 'Packages', icon: Package, count: packages.length },
-        ].map(t => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-600 border-b-2 transition-all -mb-px"
-            style={tab === t.id
-              ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }
-              : { borderColor: 'transparent', color: 'var(--color-text-muted)' }}>
-            <t.icon size={15} />
-            {t.label}
-            {t.count > 0 && (
-              <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full"
-                style={tab === t.id ? { background: 'var(--color-brand-50)', color: 'var(--color-brand)' } : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Tabs + Add button on the same line */}
+      <div className="flex items-center justify-between border-b border-(--color-border)">
+        <div className="flex items-center gap-1">
+          {[
+            { id: 'services', label: 'Services', icon: ClipboardList, count: services.length },
+            { id: 'packages', label: 'Packages', icon: Package, count: packages.length },
+          ].map(t => (
+            <button key={t.id} type="button" onClick={() => setTab(t.id)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-600 border-b-2 transition-all -mb-px"
+              style={tab === t.id
+                ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }
+                : { borderColor: 'transparent', color: 'var(--color-text-muted)' }}>
+              <t.icon size={15} />
+              {t.label}
+              {t.count > 0 && (
+                <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full"
+                  style={tab === t.id ? { background: 'var(--color-brand-50)', color: 'var(--color-brand)' } : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        {!hideAdd && (
+          <Button size="sm" onClick={handleAdd} className="mb-1.5">
+            <Plus size={15} /> {tab === 'services' ? 'Add Service' : 'Add Package'}
+          </Button>
+        )}
       </div>
 
       {tab === 'services'
-        ? <ServicesTab services={services} persistServices={persistServices} />
-        : <PackagesTab services={services} packages={packages} persistPackages={persistPackages} onGoToServices={() => setTab('services')} />}
+        ? <ServicesTab services={services} persistServices={persistServices} controlRef={servicesApi} />
+        : <PackagesTab services={services} packages={packages} persistPackages={persistPackages} onGoToServices={() => setTab('services')} controlRef={packagesApi} />}
+    </div>
+  )
+}
+
+// Filter dropdown for the services list — price & duration ranges
+function ServiceFilter({ filters, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const set = (k, v) => onChange({ ...filters, [k]: v })
+  const count = (filters.priceMin !== '' || filters.priceMax !== '' ? 1 : 0)
+    + (filters.durMin !== '' || filters.durMax !== '' ? 1 : 0)
+    + (filters.has.length ? 1 : 0)
+  const toggleHas = (v) => set('has', filters.has.includes(v) ? filters.has.filter(x => x !== v) : [...filters.has, v])
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-600 transition-colors hover:bg-(--color-surface-2)"
+        style={count
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        <SlidersHorizontal size={14} /> Filter
+        {count > 0 && <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{count}</span>}
+        <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1.5 left-0 w-72 rounded-xl border border-(--color-border) z-30 overflow-hidden"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 12px 32px rgba(0,0,0,0.14)' }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-[11px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Filters</p>
+            {count > 0 && (
+              <button type="button" onClick={() => onChange({ priceMin: '', priceMax: '', durMin: '', durMax: '', has: [] })}
+                className="text-[10px] font-600 flex items-center gap-1" style={{ color: 'var(--color-brand)' }}><X size={11} /> Clear all</button>
+            )}
+          </div>
+          <div className="p-4 space-y-4">
+            {/* Price range */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Price (₹)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" min="0" placeholder="Min" value={filters.priceMin} onChange={e => set('priceMin', e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                <input type="number" min="0" placeholder="Max" value={filters.priceMax} onChange={e => set('priceMax', e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              </div>
+            </div>
+            {/* Duration range */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Duration (minutes)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" min="0" placeholder="Min" value={filters.durMin} onChange={e => set('durMin', e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                <input type="number" min="0" placeholder="Max" value={filters.durMax} onChange={e => set('durMax', e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+              </div>
+            </div>
+            {/* Has set */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Only show</p>
+              <div className="flex gap-1.5">
+                {['Price', 'Duration', 'Description'].map(v => {
+                  const on = filters.has.includes(v)
+                  return (
+                    <button key={v} type="button" onClick={() => toggleHas(v)}
+                      className="flex-1 py-1.5 rounded-lg text-[11px] font-600 border transition-all"
+                      style={on ? { background: 'var(--color-brand-50)', color: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>
+                      {v}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Services tab ────────────────────────────────────────────────
-function ServicesTab({ services, persistServices }) {
+const EMPTY_SERVICE_FILTERS = { priceMin: '', priceMax: '', durMin: '', durMax: '', has: [] }
+
+function ServicesTab({ services, persistServices, controlRef }) {
   const [search, setSearch]     = useState('')
+  const [filters, setFilters]   = useState(EMPTY_SERVICE_FILTERS)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm]         = useState(EMPTY_SERVICE)
@@ -111,12 +209,22 @@ function ServicesTab({ services, persistServices }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return services
-    return services.filter(s =>
-      (s.name || '').toLowerCase().includes(q) ||
-      (s.description || '').toLowerCase().includes(q)
-    )
-  }, [services, search])
+    return services.filter(s => {
+      if (q && !(s.name || '').toLowerCase().includes(q) && !(s.description || '').toLowerCase().includes(q)) return false
+      const price = s.price != null ? Number(s.price) : null
+      if (filters.priceMin !== '' && (price == null || price < Number(filters.priceMin))) return false
+      if (filters.priceMax !== '' && (price == null || price > Number(filters.priceMax))) return false
+      const dur = s.duration != null ? Number(s.duration) : null
+      if (filters.durMin !== '' && (dur == null || dur < Number(filters.durMin))) return false
+      if (filters.durMax !== '' && (dur == null || dur > Number(filters.durMax))) return false
+      if (filters.has.includes('Price') && price == null) return false
+      if (filters.has.includes('Duration') && dur == null) return false
+      if (filters.has.includes('Description') && !s.description) return false
+      return true
+    })
+  }, [services, search, filters])
+
+  const hasFilters = filters.priceMin !== '' || filters.priceMax !== '' || filters.durMin !== '' || filters.durMax !== '' || filters.has.length > 0
 
   const resetForm = () => { setForm(EMPTY_SERVICE); setEditingId(null); setShowForm(false) }
   const openAdd = () => { setForm(EMPTY_SERVICE); setEditingId(null); setShowForm(true) }
@@ -124,6 +232,9 @@ function ServicesTab({ services, persistServices }) {
     setForm({ name: s.name || '', price: s.price ?? '', duration: s.duration ?? '', description: s.description || '' })
     setEditingId(s.id); setShowForm(true)
   }
+
+  // Expose openAdd to the shared header button
+  useEffect(() => { if (controlRef) controlRef.current = { openAdd } })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -157,12 +268,6 @@ function ServicesTab({ services, persistServices }) {
 
   return (
     <div className="space-y-4">
-      {!showForm && (
-        <div className="flex justify-end">
-          <Button onClick={openAdd}><Plus size={16} /> Add Service</Button>
-        </div>
-      )}
-
       {showForm && (
         <Card className="p-5 border-(--color-border)">
           <div className="flex items-center justify-between mb-4">
@@ -191,6 +296,14 @@ function ServicesTab({ services, persistServices }) {
             <input className="w-full pl-9 pr-9 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} placeholder="Search services or tests…" value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={13} style={{ color: 'var(--color-text-muted)' }} /></button>}
           </div>
+          <ServiceFilter filters={filters} onChange={setFilters} />
+          {hasFilters && (
+            <button type="button" onClick={() => setFilters(EMPTY_SERVICE_FILTERS)}
+              className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-600 border border-dashed transition-colors hover:bg-(--color-surface-2)"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+              <X size={12} /> Clear
+            </button>
+          )}
           <span className="text-xs ml-auto" style={{ color: 'var(--color-text-muted)' }}>{filtered.length} of {services.length} service{services.length !== 1 ? 's' : ''}</span>
         </div>
       )}
@@ -198,7 +311,7 @@ function ServicesTab({ services, persistServices }) {
       {filtered.length === 0 ? (
         <div className="py-24 text-center border border-dashed rounded-2xl border-(--color-border)">
           <ClipboardList size={32} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>{services.length === 0 ? 'No services added yet.' : 'No services match your search.'}</p>
+          <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>{services.length === 0 ? 'No services added yet.' : (search || hasFilters) ? 'No services match your filters.' : 'No services found.'}</p>
           {services.length === 0 && !showForm && (
             <button onClick={openAdd} className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-xs font-600 transition-colors hover:opacity-90" style={{ background: 'var(--color-brand)', color: 'white' }}><Plus size={13} /> Add your first service</button>
           )}
@@ -249,7 +362,7 @@ function ServicesTab({ services, persistServices }) {
 }
 
 // ── Packages tab ────────────────────────────────────────────────
-function PackagesTab({ services, packages, persistPackages, onGoToServices }) {
+function PackagesTab({ services, packages, persistPackages, onGoToServices, controlRef }) {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_PACKAGE)
@@ -262,6 +375,9 @@ function PackagesTab({ services, packages, persistPackages, onGoToServices }) {
     setForm({ name: p.name || '', description: p.description || '', items: [...(p.items || [])], customPriceEnabled: !!p.customPriceEnabled, price: p.price ?? '' })
     setEditingId(p.id); setShowForm(true)
   }
+
+  // Expose openAdd to the shared header button
+  useEffect(() => { if (controlRef) controlRef.current = { openAdd } })
 
   const addItem = (sid) => setForm(f => f.items.includes(sid) ? f : { ...f, items: [...f.items, sid] })
   const removeItem = (sid) => setForm(f => ({ ...f, items: f.items.filter(x => x !== sid) }))
@@ -327,12 +443,6 @@ function PackagesTab({ services, packages, persistPackages, onGoToServices }) {
 
   return (
     <div className="space-y-4">
-      {!showForm && (
-        <div className="flex justify-end">
-          <Button onClick={openAdd}><Plus size={16} /> Add Package</Button>
-        </div>
-      )}
-
       {/* Add / Edit package form */}
       {showForm && (
         <Card className="p-5 border-(--color-border)">
