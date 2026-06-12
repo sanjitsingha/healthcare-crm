@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
 import { getLeads, deleteLead, updateLead, getTags } from '@/lib/supabase/queries'
 import { getPref, setPref } from '@/lib/prefs'
@@ -146,6 +146,97 @@ function MultiSelect({ label, icon: Icon, options, selected, onChange, align = '
             <button type="button" onClick={() => onChange([])}
               className="w-full text-left px-2.5 py-1.5 mt-1 border-t border-(--color-border) text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
               Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Date-range dropdown — one button, opens start + end pickers with presets ──
+function DateRangeSelect({ from, to, onChange, label = 'Date range', align = 'left' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const active = !!(from || to)
+  const fmt = (d) => { try { return format(new Date(d), 'MMM d, yyyy') } catch { return d } }
+  const summary = from && to ? `${fmt(from)} – ${fmt(to)}`
+    : from ? `From ${fmt(from)}`
+    : to   ? `Until ${fmt(to)}`
+    : label
+
+  const iso = (d) => format(d, 'yyyy-MM-dd')
+  const applyPreset = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - (days - 1))
+    onChange(iso(start), iso(end))
+  }
+  const applyThisMonth = () => {
+    const now = new Date()
+    onChange(iso(new Date(now.getFullYear(), now.getMonth(), 1)), iso(now))
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors"
+        style={active
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        <Calendar size={13} />
+        <span className="flex-1 text-left truncate">{summary}</span>
+        {active && (
+          <span onClick={(e) => { e.stopPropagation(); onChange('', '') }}
+            className="shrink-0 rounded hover:bg-(--color-surface-2) p-0.5" title="Clear">
+            <X size={12} />
+          </span>
+        )}
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className={clsx('absolute z-30 mt-1 w-64 rounded-xl border border-(--color-border) p-2.5', align === 'right' ? 'right-0' : 'left-0')}
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+
+          {/* Quick presets */}
+          <div className="flex flex-wrap gap-1 mb-2.5">
+            {[
+              { label: 'Today',     run: () => applyPreset(1) },
+              { label: 'Last 7d',   run: () => applyPreset(7) },
+              { label: 'Last 30d',  run: () => applyPreset(30) },
+              { label: 'This month', run: applyThisMonth },
+            ].map(p => (
+              <button key={p.label} type="button" onClick={p.run}
+                className="px-2 py-1 text-[11px] font-600 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-brand-50) hover:border-(--color-brand)"
+                style={{ color: 'var(--color-text-secondary)' }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Start / end */}
+          <label className="block text-[10px] font-700 uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-muted)' }}>Start date</label>
+          <input type="date" value={from || ''} max={to || undefined}
+            onChange={e => onChange(e.target.value, to)}
+            className="w-full px-2 py-1.5 mb-2.5 text-xs rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+
+          <label className="block text-[10px] font-700 uppercase tracking-wider mb-1" style={{ color: 'var(--color-text-muted)' }}>End date</label>
+          <input type="date" value={to || ''} min={from || undefined}
+            onChange={e => onChange(from, e.target.value)}
+            className="w-full px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+
+          {active && (
+            <button type="button" onClick={() => { onChange('', ''); }}
+              className="w-full text-center px-2.5 py-1.5 mt-2.5 border-t border-(--color-border) text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+              Clear dates
             </button>
           )}
         </div>
@@ -602,16 +693,9 @@ export default function LeadsPage() {
 
           {/* Date range + activated custom filters */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 items-start">
-            <div className="col-span-2 flex items-center gap-1.5">
-              <input type="date" value={filters.dateFrom} max={filters.dateTo || undefined}
-                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-              <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>–</span>
-              <input type="date" value={filters.dateTo} min={filters.dateFrom || undefined}
-                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-                className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+            <div className="col-span-2">
+              <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
+                onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
             </div>
 
             {activeCustom.map(colId => {
