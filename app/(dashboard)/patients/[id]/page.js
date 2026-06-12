@@ -6,7 +6,7 @@ import {
   CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
   List, Table2, ArrowUpDown, Search,
 } from 'lucide-react'
-import { Button, Card, Input, Textarea, Spinner, Modal, Select } from '@/components/ui'
+import { Button, Card, Input, Textarea, Spinner, Select } from '@/components/ui'
 import {
   getPatient, updatePatient, deletePatient,
   getPersonTimeline, createActivity,
@@ -31,6 +31,9 @@ const STATUS_STYLE = {
   Active: { bg: '#dcfce7', color: '#15803d' },
   Inactive: { bg: '#fee2e2', color: '#b91c1c' },
 }
+
+const GENDERS      = ['Male', 'Female', 'Other']
+const BLOOD_GROUPS = ['A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−']
 
 // Timeline icon per activity type
 const ACTIVITY_ICON = {
@@ -182,8 +185,9 @@ export default function PatientDetailPage({ params }) {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tasks')
   const [bottomTab, setBottomTab] = useState('history')
-  const [editOpen, setEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({})
+  const [profileEditing, setProfileEditing] = useState(false)
+  const [profileDraft, setProfileDraft] = useState({})
+  const [profileSaving, setProfileSaving] = useState(false)
   const [taskOpen, setTaskOpen] = useState(false)
   const [newTask, setNewTask] = useState({ title: '', priority: 'Medium', due_date: '' })
   const [addingRecord, setAddingRecord] = useState(false)
@@ -244,7 +248,47 @@ export default function PatientDetailPage({ params }) {
   }, [id, orgId])
 
   const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
-  const handleEdit = async (e) => { e.preventDefault(); try { const updated = await updatePatient(id, editForm); setPatient(prev => ({ ...prev, ...updated })); setEditOpen(false) } catch (err) { alert(err.message) } }
+
+  const openProfileEdit = () => {
+    setProfileDraft({
+      first_name:    patient.first_name    || '',
+      last_name:     patient.last_name     || '',
+      phone:         patient.phone         || '',
+      email:         patient.email         || '',
+      gender:        patient.gender        || '',
+      date_of_birth: patient.date_of_birth || '',
+      blood_group:   patient.custom_data?.blood_group || '',
+      address:       patient.address       || '',
+      status:        patient.status        || 'Active',
+    })
+    setProfileEditing(true)
+  }
+
+  const handleProfileSave = async () => {
+    setProfileSaving(true)
+    try {
+      const before = patient
+      const patch = {
+        first_name:    profileDraft.first_name?.trim() || patient.first_name,
+        last_name:     profileDraft.last_name?.trim()  || null,
+        phone:         profileDraft.phone?.trim()      || null,
+        email:         profileDraft.email?.trim()      || null,
+        gender:        profileDraft.gender             || null,
+        date_of_birth: profileDraft.date_of_birth      || null,
+        address:       profileDraft.address?.trim()    || null,
+        status:        profileDraft.status             || 'Active',
+        custom_data:   { ...(patient.custom_data || {}), blood_group: profileDraft.blood_group || null },
+      }
+      const updated = await updatePatient(id, patch)
+      setPatient(prev => ({ ...prev, ...updated }))
+      await logActivity('note', 'Profile details updated')
+      if (before.status !== updated.status) await logActivity('status_change', `Status changed to ${updated.status}`)
+      logAudit({ action: AUDIT.PATIENT_EDIT, entityType: 'patient', entityId: id, entityName: fullName, description: 'Patient profile updated' })
+      setProfileEditing(false)
+      if (before.status !== updated.status) await applyRules('status_changed')
+    } catch (err) { alert(err.message) }
+    finally { setProfileSaving(false) }
+  }
   const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)); if (status === 'Completed') await applyRules('task_completed') }
   const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); logAudit({ action: AUDIT.TASK_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `Task created: "${t.title}"`, metadata: { task_id: t.id, priority: t.priority, due_date: t.due_date } }); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); toast({ type: 'task', title: 'Task Added', message: `${fullName}: ${t.title}` }); await applyRules('task_added') }
 
@@ -532,7 +576,6 @@ export default function PatientDetailPage({ params }) {
             )}
           </div>
 
-          <Button variant="secondary" size="sm" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}><Edit2 size={14} /> Edit</Button>
           <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border)"><Trash2 size={15} className="text-red-500" /></button>
         </div>
       </div>
@@ -543,82 +586,180 @@ export default function PatientDetailPage({ params }) {
             <Card className="p-5 border-(--color-border)">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
-                <button type="button" onClick={() => { setEditForm({ first_name: patient.first_name, last_name: patient.last_name || '', phone: patient.phone || '', email: patient.email || '', address: patient.address || '', status: patient.status || 'Active' }); setEditOpen(true) }}
-                  className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit patient" style={{ color: 'var(--color-text-muted)' }}>
-                  <Edit2 size={13} />
-                </button>
-              </div>
-              <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p>{patient.patient_code && <p className="text-[11px] font-600 font-mono mt-0.5" style={{ color: 'var(--color-brand)' }}>{patient.patient_code}</p>}<div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
-              <div className="mb-4">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
-                    const tc = tag.color || '#6366f1'
-                    return (
-                      <span key={tag.id}
-                        className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"
-                        style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
-                        {tag.name}
-                        <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-70 hover:opacity-100 transition-opacity">
-                          <X size={11} />
-                        </button>
-                      </span>
-                    )
-                  })}
-
-                  {/* Add Tag + searchable dropdown (fixed-positioned so it never gets clipped) */}
-                  <button ref={tagBtnRef} type="button" onClick={() => addingTag ? setAddingTag(false) : openTagMenu()}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
-                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-                    <Plus size={10} /> Add Tag
+                {!profileEditing && (
+                  <button type="button" onClick={openProfileEdit}
+                    className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit patient" style={{ color: 'var(--color-text-muted)' }}>
+                    <Edit2 size={13} />
                   </button>
-                  {addingTag && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setAddingTag(false)} />
-                      <div className="fixed w-56 rounded-lg border border-(--color-border) overflow-hidden z-50"
-                        style={{ top: tagMenuPos.top, left: tagMenuPos.left, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
-                        <div className="p-2 border-b border-(--color-border)">
-                          <div className="relative">
-                            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
-                            <input
-                              autoFocus
-                              value={tagSearch}
-                              onChange={e => setTagSearch(e.target.value)}
-                              placeholder="Search tags…"
-                              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-(--color-border) outline-none"
-                              style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
-                            />
-                          </div>
-                        </div>
-                        <div className="max-h-52 overflow-y-auto py-1">
-                          {unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 ? (
-                            <p className="px-3 py-3 text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
-                              {availableTags.length === 0 ? 'No patient tags. Create them in Settings → Tags.' : 'No matching tags.'}
-                            </p>
-                          ) : (
-                            unlinkedTags
-                              .filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()))
-                              .map(tag => (
-                                <button key={tag.id} type="button" onClick={() => handleAddTag(tag.id)}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)">
-                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tag.color }} />
-                                  <span className="flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
-                                  <Plus size={11} style={{ color: 'var(--color-text-muted)' }} />
-                                </button>
-                              ))
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                )}
+              </div>
+
+              {profileEditing ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>First name</label>
+                      <input type="text" value={profileDraft.first_name} onChange={e => setProfileDraft(d => ({ ...d, first_name: e.target.value }))}
+                        placeholder="First name"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Last name</label>
+                      <input type="text" value={profileDraft.last_name} onChange={e => setProfileDraft(d => ({ ...d, last_name: e.target.value }))}
+                        placeholder="Last name"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Phone</label>
+                    <input type="tel" value={profileDraft.phone} onChange={e => setProfileDraft(d => ({ ...d, phone: e.target.value }))}
+                      placeholder="Phone number"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Email</label>
+                    <input type="email" value={profileDraft.email} onChange={e => setProfileDraft(d => ({ ...d, email: e.target.value }))}
+                      placeholder="Email address"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Date of birth</label>
+                      <input type="date" value={profileDraft.date_of_birth ? profileDraft.date_of_birth.slice(0, 10) : ''}
+                        onChange={e => setProfileDraft(d => ({ ...d, date_of_birth: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Gender</label>
+                      <select value={profileDraft.gender} onChange={e => setProfileDraft(d => ({ ...d, gender: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                        <option value="">—</option>
+                        {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Blood group</label>
+                    <select value={profileDraft.blood_group} onChange={e => setProfileDraft(d => ({ ...d, blood_group: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="">—</option>
+                      {BLOOD_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Address</label>
+                    <input type="text" value={profileDraft.address} onChange={e => setProfileDraft(d => ({ ...d, address: e.target.value }))}
+                      placeholder="Full address"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Status</label>
+                    <div className="flex gap-2">
+                      {['Active', 'Inactive'].map(s => (
+                        <button key={s} type="button" onClick={() => setProfileDraft(d => ({ ...d, status: s }))}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-500 border transition-all"
+                          style={profileDraft.status === s ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>{s}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
+                    <Button variant="secondary" size="sm" type="button" onClick={() => setProfileEditing(false)}>Cancel</Button>
+                    <Button size="sm" type="button" onClick={handleProfileSave} disabled={profileSaving}>
+                      {profileSaving ? 'Saving…' : 'Save'}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2.5">
-                {patient.phone && <div className="flex items-center gap-2"><Phone size={13} /><span className="text-xs">{patient.phone}</span></div>}
-                {patient.email && <div className="flex items-center gap-2"><Mail size={13} /><span className="text-xs">{patient.email}</span></div>}
-                {patient.date_of_birth && <div className="flex items-center gap-2"><Calendar size={13} /><span className="text-xs">DOB: {format(new Date(patient.date_of_birth), 'MMM d, yyyy')}</span></div>}
-                {patient.address && <div className="flex items-center gap-2"><MapPin size={13} /><span className="text-xs">{patient.address}</span></div>}
-              </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p>{patient.patient_code && <p className="text-[11px] font-600 font-mono mt-0.5" style={{ color: 'var(--color-brand)' }}>{patient.patient_code}</p>}<div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
+                  <div className="mb-4">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
+                        const tc = tag.color || '#6366f1'
+                        return (
+                          <span key={tag.id}
+                            className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"
+                            style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
+                            <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                            {tag.name}
+                            <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-70 hover:opacity-100 transition-opacity">
+                              <X size={11} />
+                            </button>
+                          </span>
+                        )
+                      })}
+
+                      {/* Add Tag + searchable dropdown (fixed-positioned so it never gets clipped) */}
+                      <button ref={tagBtnRef} type="button" onClick={() => addingTag ? setAddingTag(false) : openTagMenu()}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                        <Plus size={10} /> Add Tag
+                      </button>
+                      {addingTag && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setAddingTag(false)} />
+                          <div className="fixed w-56 rounded-lg border border-(--color-border) overflow-hidden z-50"
+                            style={{ top: tagMenuPos.top, left: tagMenuPos.left, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                            <div className="p-2 border-b border-(--color-border)">
+                              <div className="relative">
+                                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+                                <input
+                                  autoFocus
+                                  value={tagSearch}
+                                  onChange={e => setTagSearch(e.target.value)}
+                                  placeholder="Search tags…"
+                                  className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-(--color-border) outline-none"
+                                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-52 overflow-y-auto py-1">
+                              {unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 ? (
+                                <p className="px-3 py-3 text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
+                                  {availableTags.length === 0 ? 'No patient tags. Create them in Settings → Tags.' : 'No matching tags.'}
+                                </p>
+                              ) : (
+                                unlinkedTags
+                                  .filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()))
+                                  .map(tag => (
+                                    <button key={tag.id} type="button" onClick={() => handleAddTag(tag.id)}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)">
+                                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tag.color }} />
+                                      <span className="flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
+                                      <Plus size={11} style={{ color: 'var(--color-text-muted)' }} />
+                                    </button>
+                                  ))
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2.5">
+                    {[
+                      { icon: Phone,    label: patient.phone || '—' },
+                      { icon: Mail,     label: patient.email || '—' },
+                      { icon: Calendar, label: patient.date_of_birth ? `DOB: ${format(new Date(patient.date_of_birth), 'MMM d, yyyy')}` : 'DOB: —' },
+                      { icon: MapPin,   label: patient.address || '—' },
+                      { icon: Tag,      label: patient.custom_data?.blood_group ? `Blood: ${patient.custom_data.blood_group}` : 'Blood: —' },
+                    ].map(({ icon: Icon, label }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <Icon size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                        <span className="text-xs truncate" style={{ color: label.endsWith('—') ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </Card>
             <Card className="p-5 border-(--color-border)"><p className="text-[10px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>Quick Stats</p><div className="grid grid-cols-2 gap-3">{[{ label: 'Visits', value: patient.appointments?.length || 0 }, { label: 'Invoices', value: patient.invoices?.length || 0 }, { label: 'Records', value: patient.medical_history?.length || 0 }, { label: 'Leads', value: patient.leads?.length || 0 }].map(s => <div key={s.label} className="p-3 rounded-xl text-center" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><p className="text-xl font-800">{s.value}</p><p className="text-[10px]">{s.label}</p></div>)}</div></Card>
           </div>
@@ -794,15 +935,6 @@ export default function PatientDetailPage({ params }) {
         </Card>
       </div>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Patient">
-        <form onSubmit={handleEdit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4"><Input label="First Name *" value={editForm.first_name || ''} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} required /><Input label="Last Name" value={editForm.last_name || ''} onChange={e => setEditForm(f => ({ ...f, last_name: e.target.value }))} /></div>
-          <div className="grid grid-cols-2 gap-4"><Input label="Phone" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /><Input label="Email" type="email" value={editForm.email || ''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
-          <Input label="Address" value={editForm.address || ''} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
-          <div className="space-y-1.5"><label className="block text-xs font-500">Status</label><div className="flex gap-2">{['Active', 'Inactive'].map(s => <button key={s} type="button" onClick={() => setEditForm(f => ({ ...f, status: s }))} className="flex-1 py-2 rounded-lg text-xs font-500 border" style={editForm.status === s ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{s}</button>)}</div></div>
-          <div className="flex justify-end gap-2 pt-2 border-t border-(--color-border)"><Button variant="secondary" type="button" onClick={() => setEditOpen(false)}>Cancel</Button><Button type="submit">Save Changes</Button></div>
-        </form>
-      </Modal>
     </div>
   )
 }
