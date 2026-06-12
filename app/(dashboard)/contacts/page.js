@@ -39,7 +39,7 @@ const BASE_DEFAULT_VISIBLE = {
 
 const EMPTY_FILTERS = {
   types: [], stages: [], statuses: [], sources: [], genders: [], tags: [], has: [],
-  createdFrom: '', createdTo: '', modifiedFrom: '', modifiedTo: '',
+  createdFrom: '', createdTo: '', modifiedFrom: '', modifiedTo: '', custom: {},
 }
 
 // ── Cell text for CSV export ────────────────────────────────────
@@ -200,6 +200,52 @@ function DateRangeSelect({ from, to, onChange, label = 'Date range', align = 'le
   )
 }
 
+// ── "Custom" field picker — choose which custom fields to filter by ─
+function CustomFieldPicker({ fields, active, onToggle }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-500 transition-colors"
+        style={active.length
+          ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+          : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+        <SlidersHorizontal size={13} />
+        <span className="flex-1 text-left">Custom field</span>
+        {active.length > 0 && <span className="text-[10px] font-700 px-1.5 rounded-full" style={{ background: 'var(--color-brand)', color: 'white' }}>{active.length}</span>}
+        <ChevronDown size={13} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 right-0 min-w-48 max-h-64 overflow-y-auto rounded-xl border border-(--color-border) p-1"
+          style={{ background: 'var(--color-surface)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)' }}>
+          <p className="px-2.5 py-1.5 text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Custom fields</p>
+          {fields.length === 0 && <p className="px-2.5 py-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>No custom fields</p>}
+          {fields.map(f => {
+            const on = active.includes(f.colId)
+            return (
+              <button key={f.colId} type="button" onClick={() => onToggle(f.colId)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left hover:bg-(--color-surface-2)"
+                style={{ color: 'var(--color-text-primary)' }}>
+                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                  style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                  {on && <Check size={10} className="text-white" />}
+                </span>
+                <span className="flex-1 truncate">{f.label}<span className="text-[9px] ml-1 capitalize" style={{ color: 'var(--color-text-muted)' }}>({f.page})</span></span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Column visibility dropdown (identical pattern to Leads page) ─
 function ColumnToggle({ baseColumns, customColumns, isVisible, toggleColumn }) {
   const [open, setOpen] = useState(false)
@@ -268,6 +314,7 @@ export default function ContactsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [visible, setVisible]   = useState(() => ({ ...(org?.settings?.contacts_columns || {}) }))
   const [filters, setFilters]   = useState({ ...EMPTY_FILTERS })
+  const [activeCustom, setActiveCustom] = useState([]) // colIds of custom fields shown as filters
   const [selected, setSelected] = useState(new Set())
   const [sort, setSort]         = useState({ field: 'created', dir: 'desc' })
 
@@ -341,6 +388,23 @@ export default function ContactsPage() {
     return [...map.values()]
   }, [rows])
 
+  // Custom module fields available to filter on (leads + patients modules).
+  const contactModuleFields = useMemo(() =>
+    (org?.settings?.modules || [])
+      .filter(m => m.active)
+      .flatMap(m => (m.fields || []).map(f => ({
+        colId: `cf:${m.id}:${f.id}`,
+        moduleId: m.id, fieldId: f.id, label: f.label, type: f.type, page: m.page,
+        options: (f.options || '').split(',').map(s => s.trim()).filter(Boolean),
+      }))),
+    [org])
+
+  const setCustom = (colId, value) => setFilters(f => ({ ...f, custom: { ...f.custom, [colId]: value } }))
+  const toggleCustomField = (colId) => {
+    setActiveCustom(prev => prev.includes(colId) ? prev.filter(c => c !== colId) : [...prev, colId])
+    if (activeCustom.includes(colId)) setCustom(colId, undefined) // clear value when hiding
+  }
+
   // ── Filtering ──────────────────────────────────────────────────
   const filtered = useMemo(() => rows.filter(r => {
     if (search) {
@@ -362,8 +426,18 @@ export default function ContactsPage() {
     if (filters.createdTo    && new Date(r.created_at) > endOfDay(new Date(filters.createdTo)))      return false
     if (filters.modifiedFrom && new Date(r.updated_at) < startOfDay(new Date(filters.modifiedFrom))) return false
     if (filters.modifiedTo   && new Date(r.updated_at) > endOfDay(new Date(filters.modifiedTo)))     return false
+    // Custom module-field filters
+    for (const [colId, val] of Object.entries(filters.custom)) {
+      if (!val || (Array.isArray(val) && !val.length)) continue
+      const fld = contactModuleFields.find(f => f.colId === colId)
+      if (!fld) continue
+      const applies = (fld.page === 'leads' && r.type === 'Lead') || (fld.page === 'patients' && r.type === 'Patient')
+      const cell = applies ? (r.custom_data?.[fld.moduleId]?.[fld.fieldId] ?? '') : ''
+      if (Array.isArray(val)) { if (!val.includes(cell)) return false }
+      else if (!String(cell).toLowerCase().includes(String(val).toLowerCase())) return false
+    }
     return true
-  }), [rows, filters, search])
+  }), [rows, filters, search, contactModuleFields])
 
   const sortedFiltered = useMemo(() => {
     const arr = [...filtered]
@@ -385,13 +459,14 @@ export default function ContactsPage() {
     return arr
   }, [filtered, sort])
 
+  const customCount = Object.values(filters.custom).filter(v => Array.isArray(v) ? v.length : v).length
   const filterCount =
     filters.types.length + filters.stages.length + filters.statuses.length +
     filters.sources.length + filters.genders.length + filters.tags.length + filters.has.length +
     (filters.createdFrom || filters.createdTo ? 1 : 0) +
-    (filters.modifiedFrom || filters.modifiedTo ? 1 : 0)
+    (filters.modifiedFrom || filters.modifiedTo ? 1 : 0) + customCount
   const hasFilters = filterCount > 0
-  const clearFilters = () => setFilters({ ...EMPTY_FILTERS })
+  const clearFilters = () => { setFilters({ ...EMPTY_FILTERS }); setActiveCustom([]) }
 
   const toggleSort = (field) =>
     setSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' })
@@ -479,14 +554,18 @@ export default function ContactsPage() {
         return <span style={{ color: r.gender ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{r.gender || '—'}</span>
       case 'tags':
         return r.tags?.length ? (
-          <div className="flex flex-wrap gap-1">
-            {r.tags.slice(0, 3).map(tag => (
-              <span key={tag.id} className="inline-flex items-center gap-1 text-[10px] font-600 px-1.5 py-0.5 rounded-md"
-                style={{ background: (tag.color || '#6366f1') + '20', color: tag.color || '#6366f1' }}>
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: tag.color || '#6366f1' }} />
-                {tag.name}
-              </span>
-            ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {r.tags.slice(0, 3).map(tag => {
+              const tc = tag.color || '#6366f1'
+              return (
+                <span key={tag.id}
+                  className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-[10px] font-600"
+                  style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
+                  <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                  {tag.name}
+                </span>
+              )
+            })}
             {r.tags.length > 3 && <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>+{r.tags.length - 3}</span>}
           </div>
         ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>
@@ -576,9 +655,14 @@ export default function ContactsPage() {
               <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))} selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
             )}
             <MultiSelect label="Has" options={opts(['Phone', 'Email'])} selected={filters.has} onChange={v => setFilters(f => ({ ...f, has: v }))} />
+
+            {/* Custom field picker — choose which custom fields to filter by */}
+            {contactModuleFields.length > 0 && (
+              <CustomFieldPicker fields={contactModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+            )}
           </div>
 
-          {/* Date ranges */}
+          {/* Date ranges + activated custom filters */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 items-start">
             <div className="col-span-2">
               <DateRangeSelect label="Created" from={filters.createdFrom} to={filters.createdTo}
@@ -588,6 +672,27 @@ export default function ContactsPage() {
               <DateRangeSelect label="Modified" from={filters.modifiedFrom} to={filters.modifiedTo}
                 onChange={(modifiedFrom, modifiedTo) => setFilters(f => ({ ...f, modifiedFrom, modifiedTo }))} />
             </div>
+
+            {activeCustom.map(colId => {
+              const fld = contactModuleFields.find(f => f.colId === colId)
+              if (!fld) return null
+              if (fld.type === 'select' || fld.type === 'boolean') {
+                return <MultiSelect key={colId} label={fld.label}
+                  options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
+                  selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
+              }
+              return (
+                <div key={colId} className="relative">
+                  <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
+                    placeholder={fld.label}
+                    className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
+                    <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
 
           {hasFilters && (
