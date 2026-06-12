@@ -6,7 +6,7 @@ import {
   MessageSquare, Check, X, RotateCcw, AlertCircle, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Search,
   List, Table2, ArrowUpDown,
 } from 'lucide-react'
-import { Button, Card, Modal, Input, Select, Textarea, Spinner } from '@/components/ui'
+import { Button, Card, Input, Select, Textarea, Spinner } from '@/components/ui'
 import {
   getLead, updateLead, deleteLead,
   createActivity, getPersonTimeline,
@@ -28,14 +28,10 @@ import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfW
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
-const DEFAULT_LEAD_STAGES = [
-  { name: 'New',        color: '#6366f1' },
-  { name: 'Contacted',  color: '#0ea5e9' },
-  { name: 'Interested', color: '#f59e0b' },
-  { name: 'Follow-up',  color: '#8b5cf6' },
-  { name: 'Converted',  color: '#10b981' },
-  { name: 'Lost',       color: '#ef4444' },
-]
+const LEAD_SOURCES  = ['WhatsApp','Meta Ads','Website','Referral','Call','Email','Walk-in','Event','Other']
+const LEAD_PRIORITIES = ['Low','Medium','High','Urgent']
+const GENDERS       = ['Male','Female','Other']
+const BLOOD_GROUPS  = ['A+','A−','B+','B−','AB+','AB−','O+','O−']
 
 const FOLLOWUP_TYPES = ['Call', 'WhatsApp', 'Email']
 
@@ -453,8 +449,12 @@ export default function LeadDetailPage({ params }) {
 
   const [changingStage,  setChangingStage]  = useState(false)
   const [assigningLead,  setAssigningLead]  = useState(false)
-  const [editOpen,  setEditOpen]  = useState(false)
-  const [editForm,  setEditForm]  = useState({})
+  const [profileEditing, setProfileEditing] = useState(false)
+  const [profileDraft,   setProfileDraft]   = useState({})
+  const [profileSaving,  setProfileSaving]  = useState(false)
+  const [infoEditing,    setInfoEditing]    = useState(false)
+  const [infoDraft,      setInfoDraft]      = useState({})
+  const [infoSaving,     setInfoSaving]     = useState(false)
   const [taskOpen,  setTaskOpen]  = useState(false)
   const [newTask,   setNewTask]   = useState({ title: '', priority: 'Medium', due_date: '' })
   const [showFuForm,   setShowFuForm]   = useState(false)
@@ -570,27 +570,53 @@ export default function LeadDetailPage({ params }) {
   }, [addingTag])
 
   // ── Lead handlers ──
-  const handleEdit = async (e) => {
-    e.preventDefault()
+  const handleProfileSave = async () => {
+    setProfileSaving(true)
     try {
       const before = lead
-      const updated = await updateLead(id, editForm)
+      const patch = {
+        first_name:    profileDraft.first_name  || null,
+        last_name:     profileDraft.last_name   || null,
+        phone:         profileDraft.phone       || null,
+        email:         profileDraft.email       || null,
+        gender:        profileDraft.gender      || null,
+        date_of_birth: profileDraft.date_of_birth || null,
+        address:       profileDraft.address     || null,
+        title:         [profileDraft.first_name, profileDraft.last_name].filter(Boolean).join(' ').trim() || lead.title,
+        custom_data:   { ...(lead.custom_data || {}), blood_group: profileDraft.blood_group || null },
+      }
+      const updated = await updateLead(id, patch)
       setLead(prev => ({ ...prev, ...updated }))
-      await logActivity('note', `Lead details updated`)
+      await logActivity('note', 'Profile details updated')
       await refreshActivities()
-      setEditOpen(false)
-      // Capture which fields changed for the audit diff
-      const changed = Object.keys(editForm).filter(k => editForm[k] !== before[k])
-      const beforeSnap = Object.fromEntries(changed.map(k => [k, before[k]]))
-      const afterSnap  = Object.fromEntries(changed.map(k => [k, editForm[k]]))
-      logAudit({ action: AUDIT.LEAD_EDIT, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Lead details updated${changed.length ? ` (${changed.join(', ')})` : ''}`, before: beforeSnap, after: afterSnap })
-      // Fire field-specific + generic events so rules can react (use fresh entity).
+      setProfileEditing(false)
+      logAudit({ action: AUDIT.LEAD_EDIT, entityType: 'lead', entityId: id, entityName: lead?.title, description: 'Lead profile updated' })
+      await applyRules('lead_updated', { ...before, ...updated })
+    } catch (e) { alert(e.message) }
+    finally { setProfileSaving(false) }
+  }
+
+  const handleInfoSave = async () => {
+    setInfoSaving(true)
+    try {
+      const before = lead
+      const patch = {
+        priority:             infoDraft.priority || null,
+        source:               infoDraft.source   || null,
+        expected_close_date:  infoDraft.expected_close_date || null,
+      }
+      const updated = await updateLead(id, patch)
+      setLead(prev => ({ ...prev, ...updated }))
+      await logActivity('note', 'Lead info updated')
+      await refreshActivities()
+      setInfoEditing(false)
+      logAudit({ action: AUDIT.LEAD_EDIT, entityType: 'lead', entityId: id, entityName: lead?.title, description: 'Lead info updated' })
       const fresh = { ...before, ...updated }
       await applyRules('lead_updated', fresh)
-      if (updated.source !== before?.source) await applyRules('source_changed', fresh)
+      if (updated.source !== before?.source)     await applyRules('source_changed', fresh)
       if (updated.priority !== before?.priority) await applyRules('priority_changed', fresh)
-      if (updated.stage !== before?.stage) await applyRules('stage_changed', fresh)
     } catch (e) { alert(e.message) }
+    finally { setInfoSaving(false) }
   }
 
   const handleDelete = async () => {
@@ -635,7 +661,7 @@ export default function LeadDetailPage({ params }) {
     const entity = entityOverride || lead
     if (!entity) return
     const rules = matchingRules(org?.settings?.rules || [], { target: 'lead', event: eventKey, entity })
-    const orgStages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s => typeof s === 'string' ? s : s.name)
+    const orgStages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? s : s.name)
     const staff = org?.settings?.staff_members || []
     let changed = false
     const by = (rule) => rule.name ? ` by rule "${rule.name}"` : ' by rule'
@@ -976,7 +1002,7 @@ export default function LeadDetailPage({ params }) {
   const displayDOB   = lead.date_of_birth || pat?.date_of_birth || null
   const displayAddr  = lead.address  || pat?.address  || null
 
-  const stages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s =>
+  const stages = (org?.settings?.lead_stages || []).map(s =>
     typeof s === 'string' ? { name: s, color: '#6366f1' } : s
   )
   const stageC = stages.find(s => s.name === lead.stage)?.color || '#6366f1'
@@ -1113,9 +1139,6 @@ export default function LeadDetailPage({ params }) {
             )}
           </div>
 
-          <Button variant="secondary" size="sm" onClick={() => { setEditForm({ stage: lead.stage, priority: lead.priority, source: lead.source, description: lead.description || '' }); setEditOpen(true) }}>
-            <Edit2 size={14} /> Edit
-          </Button>
           <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border) hover:bg-red-50 hover:border-red-200 transition-colors">
             <Trash2 size={15} className="text-red-500" />
           </button>
@@ -1132,97 +1155,188 @@ export default function LeadDetailPage({ params }) {
             <Card className="p-5 border-(--color-border)">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Lead Profile</p>
-                <button type="button" onClick={() => { setEditForm({ stage: lead.stage, priority: lead.priority, source: lead.source, description: lead.description || '' }); setEditOpen(true) }}
-                  className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit lead" style={{ color: 'var(--color-text-muted)' }}>
-                  <Edit2 size={13} />
-                </button>
-              </div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-base font-800 shrink-0" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
-                  {(displayName[0] || '?').toUpperCase()}{displayName.split(' ')[1]?.[0]?.toUpperCase() || ''}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
-                  {displayGender && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{displayGender}</p>}
-                </div>
-              </div>
-
-              {/* Tags */}
-              <div className="mb-4">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {(lead.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
-                    const tc = tag.color || '#6366f1'
-                    return (
-                      <span key={tag.id}
-                        className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"
-                        style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
-                        {tag.name}
-                        <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-70 hover:opacity-100 transition-opacity">
-                          <X size={11} />
-                        </button>
-                      </span>
-                    )
-                  })}
-
-                  {/* Add Tag + searchable dropdown (fixed-positioned so it never gets clipped) */}
-                  <button ref={tagBtnRef} type="button" onClick={() => addingTag ? setAddingTag(false) : openTagMenu()}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
-                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-                    <Plus size={10} /> Add Tag
+                {!profileEditing && (
+                  <button type="button"
+                    onClick={() => {
+                      setProfileDraft({
+                        first_name:    lead.first_name    || '',
+                        last_name:     lead.last_name     || '',
+                        phone:         displayPhone       || '',
+                        email:         displayEmail       || '',
+                        gender:        displayGender      || '',
+                        date_of_birth: displayDOB         || '',
+                        address:       displayAddr        || '',
+                        blood_group:   lead.custom_data?.blood_group || '',
+                      })
+                      setProfileEditing(true)
+                    }}
+                    className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit profile" style={{ color: 'var(--color-text-muted)' }}>
+                    <Edit2 size={13} />
                   </button>
-                  {addingTag && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setAddingTag(false)} />
-                      <div className="fixed w-56 rounded-lg border border-(--color-border) overflow-hidden z-50"
-                        style={{ top: tagMenuPos.top, left: tagMenuPos.left, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
-                        <div className="p-2 border-b border-(--color-border)">
-                          <div className="relative">
-                            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
-                            <input
-                              autoFocus
-                              value={tagSearch}
-                              onChange={e => setTagSearch(e.target.value)}
-                              placeholder="Search tags…"
-                              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-(--color-border) outline-none"
-                              style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
-                            />
-                          </div>
-                        </div>
-                        <div className="max-h-52 overflow-y-auto py-1">
-                          {unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 ? (
-                            <p className="px-3 py-3 text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
-                              {availableTags.length === 0 ? 'No lead tags. Create them in Settings → Tags.' : 'No matching tags.'}
-                            </p>
-                          ) : (
-                            unlinkedTags
-                              .filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()))
-                              .map(tag => (
-                                <button key={tag.id} type="button" onClick={() => handleAddTag(tag.id)}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)">
-                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tag.color }} />
-                                  <span className="flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
-                                  <Plus size={11} style={{ color: 'var(--color-text-muted)' }} />
-                                </button>
-                              ))
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                {displayPhone && <div className="flex items-center gap-2"><Phone size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{displayPhone}</span></div>}
-                {displayEmail && <div className="flex items-center gap-2"><Mail size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>{displayEmail}</span></div>}
-                {displayDOB   && <div className="flex items-center gap-2"><User size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>DOB: {format(new Date(displayDOB), 'MMM d, yyyy')}</span></div>}
-                {displayAddr  && <div className="flex items-center gap-2"><MapPin size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>{displayAddr}</span></div>}
-                {!displayPhone && !displayEmail && !displayDOB && !displayAddr && (
-                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No contact details on record.</p>
                 )}
               </div>
-              <div className="mt-4 pt-4 border-t border-(--color-border)">
+
+              {profileEditing ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>First name</label>
+                      <input type="text" value={profileDraft.first_name} onChange={e => setProfileDraft(d => ({ ...d, first_name: e.target.value }))}
+                        placeholder="First name"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Last name</label>
+                      <input type="text" value={profileDraft.last_name} onChange={e => setProfileDraft(d => ({ ...d, last_name: e.target.value }))}
+                        placeholder="Last name"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Phone</label>
+                    <input type="tel" value={profileDraft.phone} onChange={e => setProfileDraft(d => ({ ...d, phone: e.target.value }))}
+                      placeholder="Phone number"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Email</label>
+                    <input type="email" value={profileDraft.email} onChange={e => setProfileDraft(d => ({ ...d, email: e.target.value }))}
+                      placeholder="Email address"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Date of birth</label>
+                      <input type="date" value={profileDraft.date_of_birth ? profileDraft.date_of_birth.slice(0, 10) : ''}
+                        onChange={e => setProfileDraft(d => ({ ...d, date_of_birth: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Gender</label>
+                      <select value={profileDraft.gender} onChange={e => setProfileDraft(d => ({ ...d, gender: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                        <option value="">—</option>
+                        {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Address</label>
+                    <input type="text" value={profileDraft.address} onChange={e => setProfileDraft(d => ({ ...d, address: e.target.value }))}
+                      placeholder="Full address"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Blood group</label>
+                    <select value={profileDraft.blood_group} onChange={e => setProfileDraft(d => ({ ...d, blood_group: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="">—</option>
+                      {BLOOD_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
+                    <Button variant="secondary" size="sm" type="button" onClick={() => setProfileEditing(false)}>Cancel</Button>
+                    <Button size="sm" type="button" onClick={handleProfileSave} disabled={profileSaving}>
+                      {profileSaving ? 'Saving…' : 'Save'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-base font-800 shrink-0" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                      {(displayName[0] || '?').toUpperCase()}{displayName.split(' ')[1]?.[0]?.toUpperCase() || ''}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{displayName}</p>
+                      {displayGender && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{displayGender}</p>}
+                    </div>
+                  </div>
+
+                  {/* Tags */}
+                  <div className="mb-4">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(lead.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
+                        const tc = tag.color || '#6366f1'
+                        return (
+                          <span key={tag.id}
+                            className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"
+                            style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
+                            <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                            {tag.name}
+                            <button type="button" onClick={() => handleRemoveTag(tag.id)} className="opacity-70 hover:opacity-100 transition-opacity">
+                              <X size={11} />
+                            </button>
+                          </span>
+                        )
+                      })}
+                      <button ref={tagBtnRef} type="button" onClick={() => addingTag ? setAddingTag(false) : openTagMenu()}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[10px] font-600 transition-colors hover:bg-(--color-surface-2)"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                        <Plus size={10} /> Add Tag
+                      </button>
+                      {addingTag && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setAddingTag(false)} />
+                          <div className="fixed w-56 rounded-lg border border-(--color-border) overflow-hidden z-50"
+                            style={{ top: tagMenuPos.top, left: tagMenuPos.left, background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                            <div className="p-2 border-b border-(--color-border)">
+                              <div className="relative">
+                                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
+                                <input autoFocus value={tagSearch} onChange={e => setTagSearch(e.target.value)}
+                                  placeholder="Search tags…"
+                                  className="w-full pl-7 pr-2 py-1.5 text-xs rounded-md border border-(--color-border) outline-none"
+                                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                              </div>
+                            </div>
+                            <div className="max-h-52 overflow-y-auto py-1">
+                              {unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 ? (
+                                <p className="px-3 py-3 text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
+                                  {availableTags.length === 0 ? 'No lead tags. Create them in Settings → Tags.' : 'No matching tags.'}
+                                </p>
+                              ) : (
+                                unlinkedTags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => (
+                                  <button key={tag.id} type="button" onClick={() => handleAddTag(tag.id)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tag.color }} />
+                                    <span className="flex-1 truncate" style={{ color: 'var(--color-text-primary)' }}>{tag.name}</span>
+                                    <Plus size={11} style={{ color: 'var(--color-text-muted)' }} />
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {[
+                      { icon: Phone,   label: displayPhone || '—' },
+                      { icon: Mail,    label: displayEmail || '—' },
+                      { icon: User,    label: displayDOB ? `DOB: ${format(new Date(displayDOB), 'MMM d, yyyy')}` : 'DOB: —' },
+                      { icon: MapPin,  label: displayAddr || '—' },
+                      { icon: Tag,     label: lead.custom_data?.blood_group ? `Blood: ${lead.custom_data.blood_group}` : 'Blood: —' },
+                    ].map(({ icon: Icon, label }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <Icon size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                        <span className="text-xs truncate" style={{ color: label.endsWith('—') ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className={profileEditing ? 'hidden' : 'mt-4 pt-4 border-t border-(--color-border)'}>
                 {lead.patient_id ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-600" style={{ background: '#dcfce7', color: '#15803d' }}>
@@ -1246,24 +1360,77 @@ export default function LeadDetailPage({ params }) {
             <Card className="p-5 border-(--color-border)">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Lead Info</p>
-                <button type="button" onClick={() => { setEditForm({ stage: lead.stage, priority: lead.priority, source: lead.source, description: lead.description || '' }); setEditOpen(true) }}
-                  className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit lead" style={{ color: 'var(--color-text-muted)' }}>
-                  <Edit2 size={13} />
-                </button>
+                {!infoEditing && (
+                  <button type="button"
+                    onClick={() => {
+                      setInfoDraft({
+                        priority:            lead.priority            || '',
+                        source:              lead.source              || '',
+                        expected_close_date: lead.expected_close_date || '',
+                      })
+                      setInfoEditing(true)
+                    }}
+                    className="p-1.5 -m-1.5 rounded-lg transition-colors hover:bg-(--color-brand-50)" title="Edit info" style={{ color: 'var(--color-text-muted)' }}>
+                    <Edit2 size={13} />
+                  </button>
+                )}
               </div>
-              <div className="space-y-3">
-                {[
-                  { label: 'Priority', value: lead.priority,  icon: Tag },
-                  { label: 'Source',   value: lead.source,    icon: TrendingUp },
-                  { label: 'Created',  value: format(new Date(lead.created_at), 'MMM d, yyyy'), icon: Clock },
-                  ...(lead.expected_close_date ? [{ label: 'Expected Close', value: format(new Date(lead.expected_close_date), 'MMM d, yyyy'), icon: Calendar }] : []),
-                ].map(({ label, value, icon: Icon }) => (
-                  <div key={label} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2"><Icon size={13} style={{ color: 'var(--color-text-muted)' }} /><span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{label}</span></div>
-                    <span className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>{value}</span>
+
+              {infoEditing ? (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Priority</label>
+                    <select value={infoDraft.priority} onChange={e => setInfoDraft(d => ({ ...d, priority: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="">—</option>
+                      {LEAD_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Source</label>
+                    <select value={infoDraft.source} onChange={e => setInfoDraft(d => ({ ...d, source: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="">—</option>
+                      {LEAD_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Expected close date</label>
+                    <input type="date" value={infoDraft.expected_close_date ? infoDraft.expected_close_date.slice(0, 10) : ''}
+                      onChange={e => setInfoDraft(d => ({ ...d, expected_close_date: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
+                    <Button variant="secondary" size="sm" type="button" onClick={() => setInfoEditing(false)}>Cancel</Button>
+                    <Button size="sm" type="button" onClick={handleInfoSave} disabled={infoSaving}>
+                      {infoSaving ? 'Saving…' : 'Save'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: 'Priority',       value: lead.priority  || '—',    icon: Tag },
+                    { label: 'Source',         value: lead.source    || '—',    icon: TrendingUp },
+                    { label: 'Created',        value: format(new Date(lead.created_at), 'MMM d, yyyy'), icon: Clock },
+                    { label: 'Expected Close', value: lead.expected_close_date ? format(new Date(lead.expected_close_date), 'MMM d, yyyy') : '—', icon: Calendar },
+                    ...(lead.custom_data?.reason     ? [{ label: 'Reason',     value: lead.custom_data.reason,     icon: Tag }] : []),
+                    ...(lead.custom_data?.department  ? [{ label: 'Department', value: lead.custom_data.department, icon: Tag }] : []),
+                    ...(lead.custom_data?.referred_by ? [{ label: 'Referred by',value: lead.custom_data.referred_by, icon: User }] : []),
+                  ].map(({ label, value, icon: Icon }) => (
+                    <div key={label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon size={13} style={{ color: 'var(--color-text-muted)' }} />
+                        <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+                      </div>
+                      <span className="text-xs font-600" style={{ color: value === '—' ? 'var(--color-text-muted)' : 'var(--color-text-primary)' }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* Custom modules */}
@@ -1717,24 +1884,6 @@ export default function LeadDetailPage({ params }) {
         </Card>
       </div>
 
-      {/* Edit Lead modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Lead">
-        <form onSubmit={handleEdit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Select label="Stage" value={editForm.stage || ''} onChange={e => setEditForm(f => ({ ...f, stage: e.target.value }))}
-              options={stages.map(({ name }) => ({ value: name, label: name }))} />
-            <Select label="Priority" value={editForm.priority || ''} onChange={e => setEditForm(f => ({ ...f, priority: e.target.value }))}
-              options={['Low','Medium','High','Urgent'].map(s => ({ value: s, label: s }))} />
-          </div>
-          <Select label="Source" value={editForm.source || ''} onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
-            options={['WhatsApp','Meta Ads','Website','Referral','Call','Email','Walk-in','Event','Other'].map(s => ({ value: s, label: s }))} />
-          <Textarea label="Notes" value={editForm.description || ''} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={3} />
-          <div className="flex justify-end gap-2 pt-2 border-t border-(--color-border)">
-            <Button variant="secondary" type="button" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Changes</Button>
-          </div>
-        </form>
-      </Modal>
 
     </div>
   )

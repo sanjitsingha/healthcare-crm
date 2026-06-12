@@ -102,14 +102,16 @@ export default function NewLeadPage() {
     if (!form.first_name.trim() || !orgId) return
     setSaving(true)
     try {
-      const fullName  = [form.first_name, form.last_name].filter(Boolean).join(' ').trim()
-      const descParts = [
-        form.reason      && `Reason: ${form.reason}`,
-        form.department  && `Department: ${form.department}`,
-        form.referred_by && `Referred by: ${form.referred_by}`,
-        form.blood_group && `Blood group: ${form.blood_group}`,
-        form.notes,
-      ].filter(Boolean)
+      const fullName = [form.first_name, form.last_name].filter(Boolean).join(' ').trim()
+
+      // Structured fields go into custom_data; only free-text notes go into description
+      const extraFields = {
+        ...(form.blood_group  ? { blood_group:  form.blood_group  } : {}),
+        ...(form.reason       ? { reason:       form.reason       } : {}),
+        ...(form.department   ? { department:   form.department   } : {}),
+        ...(form.referred_by  ? { referred_by:  form.referred_by  } : {}),
+      }
+      const mergedCustomData = { ...customData, ...extraFields }
 
       const lead = await createLead({
         title:           fullName,
@@ -120,12 +122,12 @@ export default function NewLeadPage() {
         gender:          form.gender            || null,
         date_of_birth:   form.date_of_birth     || null,
         address:         [form.address, form.city, form.state, form.pincode].filter(Boolean).join(', ') || null,
-        description:     descParts.join('\n')   || null,
+        description:     form.notes             || null,
         stage:           form.stage,
         priority:        form.priority,
         source:          form.source,
         organization_id: orgId,
-        custom_data:     Object.keys(customData).length ? customData : null,
+        custom_data:     Object.keys(mergedCustomData).length ? mergedCustomData : null,
       })
 
       toast({ type: 'lead_created', title: 'Lead Created', message: `${fullName} was added as a new lead.` })
