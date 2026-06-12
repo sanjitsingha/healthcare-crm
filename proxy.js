@@ -34,7 +34,10 @@ export async function proxy(request) {
   const isWebhookRoute = pathname.startsWith('/api/webhooks/')
   // Public docs — readable by anyone, no auth.
   const isDocsRoute = pathname === '/docs' || pathname.startsWith('/docs/')
-  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute
+  // Public legal / marketing pages — readable by anyone, no auth.
+  const LEGAL_ROUTES = ['/privacy', '/terms', '/cookies', '/security', '/data-retention', '/contact']
+  const isLegalRoute = LEGAL_ROUTES.includes(pathname)
+  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute || isLegalRoute
   const isProtectedRoute = !isPublicRoute && !isSetupRoute
 
   // Unauthenticated + protected → login
