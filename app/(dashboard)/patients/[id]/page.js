@@ -4,7 +4,7 @@ import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
   CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
-  List, Table2, ArrowUpDown, Search,
+  List, Table2, ArrowUpDown, Search, Package,
 } from 'lucide-react'
 import { Button, Card, Input, Textarea, Spinner, Select } from '@/components/ui'
 import {
@@ -169,6 +169,56 @@ function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
   )
 }
 
+// Dropdown multi-select for services availed in a visit
+function ServiceMultiSelect({ services, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const toggle = (sid) => onChange(selected.includes(sid) ? selected.filter(x => x !== sid) : [...selected, sid])
+  const chosen = selected.map(id => services.find(s => s.id === id)).filter(Boolean)
+  return (
+    <div className="space-y-1.5">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-(--color-border) text-sm outline-none"
+        style={{ background: 'var(--color-surface)', color: selected.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+        <span>{selected.length ? `${selected.length} service${selected.length > 1 ? 's' : ''} selected` : 'Select services'}</span>
+        <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        services.length === 0 ? (
+          <p className="text-xs px-3 py-2 rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>No services configured. Add them in Settings → Services.</p>
+        ) : (
+          <div className="rounded-xl border border-(--color-border) max-h-44 overflow-y-auto" style={{ background: 'var(--color-surface)' }}>
+            {services.map((s, i) => {
+              const on = selected.includes(s.id)
+              return (
+                <button key={s.id} type="button" onClick={() => toggle(s.id)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-(--color-surface-2)"
+                  style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                  <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                    style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                    {on && <Check size={10} className="text-white" />}
+                  </span>
+                  <span className="flex-1 text-xs font-500 truncate" style={{ color: 'var(--color-text-primary)' }}>{s.name}</span>
+                  <span className="text-xs font-600 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>{s.price != null ? `₹${Number(s.price).toLocaleString()}` : '—'}</span>
+                </button>
+              )
+            })}
+          </div>
+        )
+      )}
+      {chosen.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {chosen.map(s => (
+            <span key={s.id} className="inline-flex items-center gap-1 text-[11px] font-600 px-2 py-0.5 rounded-md" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+              {s.name}
+              <button type="button" onClick={() => toggle(s.id)} className="opacity-70 hover:opacity-100"><X size={11} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PatientDetailPage({ params }) {
   const { id } = use(params)
   const router = useRouter()
@@ -206,6 +256,7 @@ export default function PatientDetailPage({ params }) {
   const [addingVisit, setAddingVisit] = useState(false)
   const [visitForm, setVisitForm] = useState({ date: '', service_ids: [], package_id: '', doctor_id: '', misc_cost: '', next_visit_date: '' })
   const [savingVisit, setSavingVisit] = useState(false)
+  const [visitView, setVisitView] = useState('regular') // 'regular' | 'table'
 
   const doctors  = org?.settings?.doctors  || []
   const services = org?.settings?.services || []
@@ -445,9 +496,6 @@ export default function PatientDetailPage({ params }) {
     setVisitForm({ date: new Date().toISOString().slice(0, 10), service_ids: [], package_id: '', doctor_id: '', misc_cost: '', next_visit_date: '' })
     setAddingVisit(true)
   }
-  const toggleVisitService = (sid) =>
-    setVisitForm(f => ({ ...f, service_ids: f.service_ids.includes(sid) ? f.service_ids.filter(x => x !== sid) : [...f.service_ids, sid] }))
-
   const handleAddVisit = async (e) => {
     e.preventDefault()
     if (!visitForm.date || !orgId) return
@@ -935,7 +983,18 @@ export default function PatientDetailPage({ params }) {
         {/* Visit Details */}
         <Card className="border-(--color-border) overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Activity size={13} /> Visit Details</p>
+            <div className="flex items-center gap-2.5">
+              <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Activity size={13} /> Visit Details</p>
+              <div className="flex items-center gap-0.5">
+                {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id: vid, Icon, title }) => (
+                  <button key={vid} type="button" title={title} onClick={() => setVisitView(vid)}
+                    className="p-1.5 rounded-md transition-all"
+                    style={visitView === vid ? { background: 'var(--color-brand)', color: 'white' } : { color: 'var(--color-text-muted)' }}>
+                    <Icon size={14} />
+                  </button>
+                ))}
+              </div>
+            </div>
             {!addingVisit && <Button size="sm" onClick={openAddVisit}><Plus size={14} /> Add Visit</Button>}
           </div>
           <div className="p-3 space-y-3">
@@ -957,30 +1016,11 @@ export default function PatientDetailPage({ params }) {
                   </div>
                 </div>
 
-                {/* Services availed */}
+                {/* Services availed — dropdown multi-select */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Services availed</label>
-                  {services.length === 0 ? (
-                    <p className="text-xs px-3 py-2 rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>No services configured. Add them in Settings → Services.</p>
-                  ) : (
-                    <div className="rounded-xl border border-(--color-border) max-h-44 overflow-y-auto" style={{ background: 'var(--color-surface)' }}>
-                      {services.map((s, i) => {
-                        const on = visitForm.service_ids.includes(s.id)
-                        return (
-                          <button key={s.id} type="button" onClick={() => toggleVisitService(s.id)}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-(--color-surface-2)"
-                            style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
-                            <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
-                              style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
-                              {on && <Check size={10} className="text-white" />}
-                            </span>
-                            <span className="flex-1 text-xs font-500 truncate" style={{ color: 'var(--color-text-primary)' }}>{s.name}</span>
-                            <span className="text-xs font-600 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>{s.price != null ? `₹${Number(s.price).toLocaleString()}` : '—'}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <ServiceMultiSelect services={services} selected={visitForm.service_ids}
+                    onChange={(ids) => setVisitForm(f => ({ ...f, service_ids: ids }))} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1034,45 +1074,91 @@ export default function PatientDetailPage({ params }) {
             {visits.length === 0 && !addingVisit ? (
               <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><Activity size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No visits recorded yet.</p></div>
             ) : visits.length > 0 && (
-              <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
-                {[...visits].sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
-                  const doc = v.doctor_id ? doctors.find(d => d.id === v.doctor_id) : null
-                  const pkg = v.package_id ? packages.find(p => p.id === v.package_id) : null
-                  const svcNames = (v.service_ids || []).map(sid => services.find(s => s.id === sid)?.name).filter(Boolean)
-                  return (
-                    <div key={v.id} className="rounded-xl border border-(--color-border) p-4 group" style={{ background: 'var(--color-surface-2)' }}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(v.date), 'EEE, MMM d yyyy')}</span>
-                          {doc && <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{doc.name}</span>}
+              visitView === 'table' ? (
+                /* ── Table / excel view ── */
+                <div className="-mx-3 -mb-3 overflow-x-auto border-t border-(--color-border)">
+                  <table className="w-full text-xs" style={{ minWidth: '820px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-surface-2)' }}>
+                        {['Date', 'Doctor', 'Services', 'Package', 'Misc', 'Total', 'Next Visit', ''].map((h, i) => (
+                          <th key={i} className="text-left px-3 py-2.5 text-[10px] font-700 uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...visits].sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
+                        const doc = v.doctor_id ? doctors.find(d => d.id === v.doctor_id) : null
+                        const pkg = v.package_id ? packages.find(p => p.id === v.package_id) : null
+                        const svcNames = (v.service_ids || []).map(sid => services.find(s => s.id === sid)?.name).filter(Boolean)
+                        return (
+                          <tr key={v.id} className="group transition-colors hover:bg-(--color-surface-2)" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                            <td className="px-3 py-2.5 whitespace-nowrap font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(v.date), 'MMM d, yyyy')}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: doc ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{doc?.name || '—'}</td>
+                            <td className="px-3 py-2.5" style={{ color: svcNames.length ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{svcNames.length ? svcNames.join(', ') : '—'}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: pkg ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{pkg?.name || '—'}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: v.misc_cost ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{v.misc_cost ? `₹${Number(v.misc_cost).toLocaleString()}` : '—'}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap font-700" style={{ color: 'var(--color-brand)' }}>₹{Number(v.total || 0).toLocaleString()}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: v.next_visit_date ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{v.next_visit_date ? format(new Date(v.next_visit_date), 'MMM d, yyyy') : '—'}</td>
+                            <td className="px-3 py-2.5 text-right">
+                              <button type="button" onClick={() => handleDeleteVisit(v.id)} title="Delete" className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* ── Regular / card view ── */
+                <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
+                  {[...visits].sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
+                    const doc = v.doctor_id ? doctors.find(d => d.id === v.doctor_id) : null
+                    const pkg = v.package_id ? packages.find(p => p.id === v.package_id) : null
+                    const svcNames = (v.service_ids || []).map(sid => services.find(s => s.id === sid)?.name).filter(Boolean)
+                    const dt = new Date(v.date)
+                    return (
+                      <div key={v.id} className="flex items-start gap-3 p-4 rounded-xl border border-(--color-border) group" style={{ background: 'var(--color-surface-2)' }}>
+                        {/* Date block */}
+                        <div className="w-11 shrink-0 rounded-lg overflow-hidden border border-(--color-border) text-center" style={{ background: 'var(--color-surface)' }}>
+                          <div className="text-[9px] font-700 uppercase py-0.5" style={{ background: 'var(--color-brand)', color: 'white' }}>{format(dt, 'MMM')}</div>
+                          <div className="text-base font-800 leading-tight py-1" style={{ color: 'var(--color-text-primary)' }}>{format(dt, 'd')}</div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-sm font-800" style={{ color: 'var(--color-brand)' }}>₹{Number(v.total || 0).toLocaleString()}</span>
-                          <button type="button" onClick={() => handleDeleteVisit(v.id)} title="Delete" className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-600" style={{ color: 'var(--color-text-muted)' }}>{format(dt, 'EEEE, yyyy')}</p>
+                              {doc && <p className="text-sm font-600 mt-0.5 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}><User size={12} style={{ color: 'var(--color-text-muted)' }} /> {doc.name}{doc.department ? ` · ${doc.department}` : ''}</p>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-base font-800" style={{ color: 'var(--color-brand)' }}>₹{Number(v.total || 0).toLocaleString()}</span>
+                              <button type="button" onClick={() => handleDeleteVisit(v.id)} title="Delete" className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>
+                            </div>
+                          </div>
+
+                          {(svcNames.length > 0 || pkg) && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {pkg && <span className="inline-flex items-center gap-1 text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: '#f3e8ff', color: '#7c3aed' }}><Package size={10} /> {pkg.name}</span>}
+                              {svcNames.map((n, idx) => (
+                                <span key={idx} className="text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{n}</span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 flex-wrap mt-2">
+                            {v.misc_cost ? <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Misc: ₹{Number(v.misc_cost).toLocaleString()}</span> : null}
+                            {v.next_visit_date && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-600 px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>
+                                <Calendar size={11} /> Next visit: {format(new Date(v.next_visit_date), 'MMM d, yyyy')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-
-                      {(svcNames.length > 0 || pkg) && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {pkg && <span className="text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: '#f3e8ff', color: '#7c3aed' }}>📦 {pkg.name}</span>}
-                          {svcNames.map((n, idx) => (
-                            <span key={idx} className="text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{n}</span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-3 flex-wrap mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                        {v.misc_cost ? <span>Misc: ₹{Number(v.misc_cost).toLocaleString()}</span> : null}
-                        {v.next_visit_date && (
-                          <span className="inline-flex items-center gap-1 font-600 px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>
-                            <Calendar size={11} /> Next visit: {format(new Date(v.next_visit_date), 'MMM d, yyyy')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              )
             )}
           </div>
         </Card>
