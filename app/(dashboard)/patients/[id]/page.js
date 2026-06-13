@@ -203,8 +203,28 @@ export default function PatientDetailPage({ params }) {
   const [addingAppt, setAddingAppt] = useState(false)
   const [apptForm, setApptForm] = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
   const [savingAppt, setSavingAppt] = useState(false)
+  const [addingVisit, setAddingVisit] = useState(false)
+  const [visitForm, setVisitForm] = useState({ date: '', service_ids: [], package_id: '', doctor_id: '', misc_cost: '', next_visit_date: '' })
+  const [savingVisit, setSavingVisit] = useState(false)
 
-  const doctors = org?.settings?.doctors || []
+  const doctors  = org?.settings?.doctors  || []
+  const services = org?.settings?.services || []
+  const packages = org?.settings?.packages || []
+
+  // Pricing helpers — services/packages/doctor fees come from Settings (org config).
+  const servicePrice = (sid) => { const s = services.find(x => x.id === sid); return s && s.price != null ? Number(s.price) : 0 }
+  const packagePrice = (pid) => {
+    const p = packages.find(x => x.id === pid); if (!p) return 0
+    const items = (p.items || []).map(i => services.find(s => s.id === i)).filter(Boolean)
+    const auto = items.reduce((sum, s) => sum + (s.price != null ? Number(s.price) : 0), 0)
+    return p.customPriceEnabled && p.price != null && p.price !== '' ? Number(p.price) : auto
+  }
+  const doctorFee = (did) => { const d = doctors.find(x => x.id === did); return d && d.fee != null ? Number(d.fee) : 0 }
+  const computeVisitTotal = (v) =>
+    (v.service_ids || []).reduce((s, id) => s + servicePrice(id), 0)
+    + (v.package_id ? packagePrice(v.package_id) : 0)
+    + (v.doctor_id ? doctorFee(v.doctor_id) : 0)
+    + (v.misc_cost ? Number(v.misc_cost) : 0)
 
   const logActivity = (type, content, entityType = 'patient', entityId = id) => orgId && createActivity({ organization_id: orgId, entity_type: entityType, entity_id: entityId, type, content, source_page: 'patient' })
 
@@ -420,6 +440,51 @@ export default function PatientDetailPage({ params }) {
     catch (err) { alert(err.message) }
   }
 
+  // ── Visit details (stored on patient.custom_data.visits) ──
+  const openAddVisit = () => {
+    setVisitForm({ date: new Date().toISOString().slice(0, 10), service_ids: [], package_id: '', doctor_id: '', misc_cost: '', next_visit_date: '' })
+    setAddingVisit(true)
+  }
+  const toggleVisitService = (sid) =>
+    setVisitForm(f => ({ ...f, service_ids: f.service_ids.includes(sid) ? f.service_ids.filter(x => x !== sid) : [...f.service_ids, sid] }))
+
+  const handleAddVisit = async (e) => {
+    e.preventDefault()
+    if (!visitForm.date || !orgId) return
+    setSavingVisit(true)
+    try {
+      const record = {
+        id: crypto.randomUUID(),
+        date: visitForm.date,
+        service_ids: visitForm.service_ids,
+        package_id: visitForm.package_id || null,
+        doctor_id: visitForm.doctor_id || null,
+        misc_cost: visitForm.misc_cost === '' ? 0 : Number(visitForm.misc_cost),
+        total: computeVisitTotal(visitForm),
+        next_visit_date: visitForm.next_visit_date || null,
+        created_at: new Date().toISOString(),
+      }
+      const visits = [record, ...(patient.custom_data?.visits || [])]
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), visits } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+      const row = await logActivity('note', `Visit on ${format(new Date(record.date), 'MMM d, yyyy')} · ₹${record.total.toLocaleString()}`)
+      if (row) setActivities(prev => [row, ...prev])
+      logAudit({ action: AUDIT.PATIENT_EDIT, entityType: 'patient', entityId: id, entityName: fullName, description: `Visit recorded (₹${record.total})`, metadata: { date: record.date, total: record.total } })
+      toast({ type: 'default', title: 'Visit recorded', message: `${fullName} · ₹${record.total.toLocaleString()}` })
+      setAddingVisit(false)
+    } catch (err) { alert(err.message) }
+    finally { setSavingVisit(false) }
+  }
+
+  const handleDeleteVisit = async (visitId) => {
+    if (!confirm('Delete this visit record?')) return
+    try {
+      const visits = (patient.custom_data?.visits || []).filter(v => v.id !== visitId)
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), visits } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+    } catch (err) { alert(err.message) }
+  }
+
   const linkedTagIds = (patient?.tags || []).map(t => t.tags?.id).filter(Boolean)
   const unlinkedTags = availableTags.filter(t => !linkedTagIds.includes(t.id))
 
@@ -487,6 +552,14 @@ export default function PatientDetailPage({ params }) {
   const pendingTasks = tasks.filter(t => t.status === 'Pending').length
   const staffMembers = org?.settings?.staff_members || []
   const assignee = patient.assigned_to ? staffMembers.find(m => m.id === patient.assigned_to) : null
+
+  // Visit records + live totals for the add form
+  const visits = patient.custom_data?.visits || []
+  const liveServices = visitForm.service_ids.reduce((s, id) => s + servicePrice(id), 0)
+  const livePackage  = visitForm.package_id ? packagePrice(visitForm.package_id) : 0
+  const liveFee      = visitForm.doctor_id ? doctorFee(visitForm.doctor_id) : 0
+  const liveMisc     = visitForm.misc_cost === '' ? 0 : Number(visitForm.misc_cost)
+  const liveTotal    = liveServices + livePackage + liveFee + liveMisc
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -851,6 +924,151 @@ export default function PatientDetailPage({ params }) {
                           <button type="button" onClick={() => handleApptStatus(appt.id, 'cancelled')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={11} /> Cancel</button>
                         </div>
                       )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Visit Details */}
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Activity size={13} /> Visit Details</p>
+            {!addingVisit && <Button size="sm" onClick={openAddVisit}><Plus size={14} /> Add Visit</Button>}
+          </div>
+          <div className="p-3 space-y-3">
+            {addingVisit && (
+              <form onSubmit={handleAddVisit} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Visit Date *</label>
+                    <input type="date" required value={visitForm.date} onChange={e => setVisitForm(f => ({ ...f, date: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Doctor consulted</label>
+                    <select value={visitForm.doctor_id} onChange={e => setVisitForm(f => ({ ...f, doctor_id: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="">— None —</option>
+                      {doctors.map(d => <option key={d.id} value={d.id}>{d.name}{d.fee != null ? ` · ₹${Number(d.fee).toLocaleString()}` : ''}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Services availed */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Services availed</label>
+                  {services.length === 0 ? (
+                    <p className="text-xs px-3 py-2 rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>No services configured. Add them in Settings → Services.</p>
+                  ) : (
+                    <div className="rounded-xl border border-(--color-border) max-h-44 overflow-y-auto" style={{ background: 'var(--color-surface)' }}>
+                      {services.map((s, i) => {
+                        const on = visitForm.service_ids.includes(s.id)
+                        return (
+                          <button key={s.id} type="button" onClick={() => toggleVisitService(s.id)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-(--color-surface-2)"
+                            style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                            <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                              style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
+                              {on && <Check size={10} className="text-white" />}
+                            </span>
+                            <span className="flex-1 text-xs font-500 truncate" style={{ color: 'var(--color-text-primary)' }}>{s.name}</span>
+                            <span className="text-xs font-600 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>{s.price != null ? `₹${Number(s.price).toLocaleString()}` : '—'}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Package</label>
+                    <select value={visitForm.package_id} onChange={e => setVisitForm(f => ({ ...f, package_id: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="">— None —</option>
+                      {packages.map(p => <option key={p.id} value={p.id}>{p.name} · ₹{packagePrice(p.id).toLocaleString()}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Miscellaneous cost (₹)</label>
+                    <input type="number" min="0" step="0.01" placeholder="0" value={visitForm.misc_cost} onChange={e => setVisitForm(f => ({ ...f, misc_cost: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                </div>
+
+                {/* Auto-calculated total */}
+                <div className="rounded-xl border border-(--color-border) p-3 space-y-1.5" style={{ background: 'var(--color-surface)' }}>
+                  {[
+                    { label: 'Services', val: liveServices },
+                    { label: 'Package', val: livePackage },
+                    { label: 'Consultation fee', val: liveFee },
+                    { label: 'Miscellaneous', val: liveMisc },
+                  ].map(r => (
+                    <div key={r.label} className="flex items-center justify-between text-xs">
+                      <span style={{ color: 'var(--color-text-muted)' }}>{r.label}</span>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>₹{r.val.toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-2 border-t border-(--color-border)">
+                    <span className="text-xs font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Total</span>
+                    <span className="text-base font-800" style={{ color: 'var(--color-brand)' }}>₹{liveTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Next preferred visit date</label>
+                  <input type="date" value={visitForm.next_visit_date} onChange={e => setVisitForm(f => ({ ...f, next_visit_date: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1 border-t border-(--color-border)">
+                  <Button variant="secondary" size="sm" type="button" onClick={() => setAddingVisit(false)}>Cancel</Button>
+                  <Button size="sm" type="submit" disabled={savingVisit || !visitForm.date}>{savingVisit ? 'Saving…' : <><Save size={13} /> Save Visit</>}</Button>
+                </div>
+              </form>
+            )}
+
+            {visits.length === 0 && !addingVisit ? (
+              <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><Activity size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No visits recorded yet.</p></div>
+            ) : visits.length > 0 && (
+              <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
+                {[...visits].sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
+                  const doc = v.doctor_id ? doctors.find(d => d.id === v.doctor_id) : null
+                  const pkg = v.package_id ? packages.find(p => p.id === v.package_id) : null
+                  const svcNames = (v.service_ids || []).map(sid => services.find(s => s.id === sid)?.name).filter(Boolean)
+                  return (
+                    <div key={v.id} className="rounded-xl border border-(--color-border) p-4 group" style={{ background: 'var(--color-surface-2)' }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(v.date), 'EEE, MMM d yyyy')}</span>
+                          {doc && <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{doc.name}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-800" style={{ color: 'var(--color-brand)' }}>₹{Number(v.total || 0).toLocaleString()}</span>
+                          <button type="button" onClick={() => handleDeleteVisit(v.id)} title="Delete" className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>
+                        </div>
+                      </div>
+
+                      {(svcNames.length > 0 || pkg) && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {pkg && <span className="text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: '#f3e8ff', color: '#7c3aed' }}>📦 {pkg.name}</span>}
+                          {svcNames.map((n, idx) => (
+                            <span key={idx} className="text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{n}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3 flex-wrap mt-2 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                        {v.misc_cost ? <span>Misc: ₹{Number(v.misc_cost).toLocaleString()}</span> : null}
+                        {v.next_visit_date && (
+                          <span className="inline-flex items-center gap-1 font-600 px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>
+                            <Calendar size={11} /> Next visit: {format(new Date(v.next_visit_date), 'MMM d, yyyy')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
