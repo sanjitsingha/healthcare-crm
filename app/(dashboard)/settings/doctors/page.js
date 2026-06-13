@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Stethoscope, Plus, Trash2, X, Edit2, Clock, IndianRupee } from 'lucide-react'
-import { Button, Card, Input, Textarea, Avatar } from '@/components/ui'
+import { Button, Card, Input, Textarea, Avatar, Select } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
@@ -26,6 +26,13 @@ export default function DoctorsPage() {
   const [editingId, setEditingId] = useState(null)
   const [form,     setForm]     = useState(makeEmptyForm)
   const [saving,   setSaving]   = useState(false)
+
+  // Department options come from the configured departments (Settings → Departments).
+  // Keep the doctor's current value selectable even if it predates the list.
+  const deptNames = (org?.settings?.departments || []).map(d => d.name).filter(Boolean)
+  const deptOptions = form.department && !deptNames.includes(form.department)
+    ? [...deptNames, form.department]
+    : deptNames
 
   const resetForm = () => { setForm(makeEmptyForm()); setEditingId(null); setShowForm(false) }
   const openAdd = () => { setForm(makeEmptyForm()); setEditingId(null); setShowForm(true) }
@@ -106,8 +113,14 @@ export default function DoctorsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <Input label="Full Name *" placeholder="Dr. Priya Sharma" value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
-              <Input label="Department" placeholder="Cardiology" value={form.department}
-                onChange={e => setForm(f => ({ ...f, department: e.target.value }))} />
+              {deptNames.length > 0 ? (
+                <Select label="Department" value={form.department}
+                  onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+                  options={[{ value: '', label: '— Select —' }, ...deptOptions.map(n => ({ value: n, label: n }))]} />
+              ) : (
+                <Input label="Department" placeholder="Add departments in Settings → Departments" value={form.department}
+                  onChange={e => setForm(f => ({ ...f, department: e.target.value }))} />
+              )}
               <Input label="Qualification" placeholder="MBBS, MD" value={form.qualification}
                 onChange={e => setForm(f => ({ ...f, qualification: e.target.value }))} />
             </div>
