@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText, ClipboardList, Stethoscope } from 'lucide-react'
+import { Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText, ClipboardList, Stethoscope, Network } from 'lucide-react'
 import clsx from 'clsx'
 
 const NAV_ITEMS = [
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/settings/organization',  label: 'Organization',  icon: Building2 },
   { href: '/settings/users',         label: 'Users',         icon: Users },
   { href: '/settings/doctors',       label: 'Doctors',       icon: Stethoscope },
+  { href: '/settings/departments',   label: 'Departments',   icon: Network },
   { href: '/settings/tags',          label: 'Tags',          icon: Tags },
   { href: '/settings/modules',       label: 'Modules',       icon: LayoutGrid },
   { href: '/settings/services',      label: 'Services',      icon: ClipboardList },

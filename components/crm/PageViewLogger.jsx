@@ -19,6 +19,7 @@ const EXACT = {
   '/settings/modules':    'Module Settings',
   '/settings/users':      'Users & Team Members',
   '/settings/doctors':    'Doctors',
+  '/settings/departments': 'Departments',
   '/settings/logs':       'Audit Logs',
   '/settings/branding':   'Branding Settings',
   '/settings/billing':    'Billing',
