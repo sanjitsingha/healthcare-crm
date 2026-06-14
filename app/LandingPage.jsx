@@ -205,9 +205,11 @@ const INTEGRATIONS = [
 ]
 
 // ── Page ──────────────────────────────────────────────────────
-export default function LandingPage() {
+export default function LandingPage({ loggedIn = false, homeHref = '/dashboard' }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeMini, setActiveMini] = useState('Overview')
+
+  const dest = homeHref || '/dashboard'
 
   return (
     <div style={{ fontFamily: "'Inter', 'DM Sans', system-ui, sans-serif", color: B.text, background: B.surface }}>
@@ -291,12 +293,20 @@ export default function LandingPage() {
 
           {/* Desktop CTAs */}
           <div className="desk-only" style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-            <Link href="/login" className="nav-link" style={{ fontSize: 13.5, color: B.muted, padding: '7px 16px', borderRadius: 8, background: 'transparent' }}>
-              Log in
-            </Link>
-            <Link href="/login" className="btn-main" style={{ fontSize: 13.5, padding: '8px 20px' }}>
-              Get started free <ArrowRight size={14} />
-            </Link>
+            {loggedIn ? (
+              <Link href={dest} className="btn-main" style={{ fontSize: 13.5, padding: '8px 20px' }}>
+                <LayoutDashboard size={14} /> Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="nav-link" style={{ fontSize: 13.5, color: B.muted, padding: '7px 16px', borderRadius: 8, background: 'transparent' }}>
+                  Log in
+                </Link>
+                <Link href="/login" className="btn-main" style={{ fontSize: 13.5, padding: '8px 20px' }}>
+                  Get started free <ArrowRight size={14} />
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile hamburger */}
@@ -313,8 +323,16 @@ export default function LandingPage() {
               <a key={item} href="#" style={{ fontSize: 14, color: B.muted, textDecoration: 'none', padding: '10px 8px', borderRadius: 8 }}>{item}</a>
             ))}
             <div style={{ borderTop: `1px solid ${B.border}`, marginTop: 8, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Link href="/login" style={{ fontSize: 14, color: B.muted, textDecoration: 'none', textAlign: 'center', padding: '11px', border: `1px solid ${B.border}`, borderRadius: 10 }}>Log in</Link>
-              <Link href="/login" style={{ fontSize: 14, fontWeight: 700, textDecoration: 'none', textAlign: 'center', padding: '11px', borderRadius: 10, background: B.brand, color: '#fff' }}>Get started free</Link>
+              {loggedIn ? (
+                <Link href={dest} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 700, textDecoration: 'none', textAlign: 'center', padding: '11px', borderRadius: 10, background: B.brand, color: '#fff' }}>
+                  <LayoutDashboard size={15} /> Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" style={{ fontSize: 14, color: B.muted, textDecoration: 'none', textAlign: 'center', padding: '11px', border: `1px solid ${B.border}`, borderRadius: 10 }}>Log in</Link>
+                  <Link href="/login" style={{ fontSize: 14, fontWeight: 700, textDecoration: 'none', textAlign: 'center', padding: '11px', borderRadius: 10, background: B.brand, color: '#fff' }}>Get started free</Link>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -392,8 +410,8 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 80 }}>
-            <Link href="/login" className="btn-main" style={{ fontSize: 15.5, padding: '14px 32px', boxShadow: `0 8px 32px rgba(${RGB},.55)` }}>
-              Start for free <ArrowRight size={16} />
+            <Link href={loggedIn ? dest : '/login'} className="btn-main" style={{ fontSize: 15.5, padding: '14px 32px', boxShadow: `0 8px 32px rgba(${RGB},.55)` }}>
+              {loggedIn ? <>Go to Dashboard <LayoutDashboard size={16} /></> : <>Start for free <ArrowRight size={16} /></>}
             </Link>
             <a href="#how" className="btn-ghost" style={{ fontSize: 15.5, padding: '14px 28px' }}>
               See how it works
@@ -578,15 +596,17 @@ export default function LandingPage() {
           </p>
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
-            <Link href="/login" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 700, padding: '14px 32px', borderRadius: 11, background: '#fff', color: B.brand, textDecoration: 'none', boxShadow: '0 8px 40px rgba(0,0,0,.35)', transition: 'all .15s' }}
+            <Link href={loggedIn ? dest : '/login'} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 700, padding: '14px 32px', borderRadius: 11, background: '#fff', color: B.brand, textDecoration: 'none', boxShadow: '0 8px 40px rgba(0,0,0,.35)', transition: 'all .15s' }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 56px rgba(0,0,0,.45)' }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 40px rgba(0,0,0,.35)' }}
             >
-              Get started for free <ArrowRight size={16} />
+              {loggedIn ? <>Go to Dashboard <LayoutDashboard size={16} /></> : <>Get started for free <ArrowRight size={16} /></>}
             </Link>
-            <Link href="/login" className="btn-ghost" style={{ fontSize: 15.5, padding: '14px 28px' }}>
-              Log in to your account
-            </Link>
+            {!loggedIn && (
+              <Link href="/login" className="btn-ghost" style={{ fontSize: 15.5, padding: '14px 28px' }}>
+                Log in to your account
+              </Link>
+            )}
           </div>
 
           {/* Trust pills */}
