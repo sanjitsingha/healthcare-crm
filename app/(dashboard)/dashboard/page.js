@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Clock, Target, Zap, LifeBuoy } from 'lucide-react'
+import { TrendingUp, Users, Building2, CheckSquare, Bell, DollarSign, Clock, Target, Zap, Sparkles } from 'lucide-react'
+import { useAIPanel } from '@/lib/context/AIPanelContext'
 import { StatCard, Card, Badge, Spinner } from '@/components/ui'
 import { getDashboardStats, getLeads, getTasks, getFollowups, getAppointments } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -22,6 +23,7 @@ function formatCurrency(n) {
 
 export default function DashboardPage() {
   const { orgId, org } = useOrg()
+  const { setOpen: openAI } = useAIPanel()
   const [stats, setStats] = useState(null)
   const [recentLeads, setRecentLeads] = useState([])
   const [tasks, setTasks] = useState([])
@@ -65,13 +67,24 @@ export default function DashboardPage() {
             {format(new Date(), 'EEEE, d MMMM yyyy')}
           </p>
         </div>
-        <Link
-          href="/tickets"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 border transition-colors hover:bg-(--color-brand-50)"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-brand)', background: 'var(--color-surface)' }}
-        >
-          <LifeBuoy size={16} /> Raise a Ticket
-        </Link>
+        <span className="relative rounded-full p-[1.5px]" style={{ background: 'linear-gradient(90deg, var(--color-brand), #a78bfa, #38bdf8, #a78bfa, var(--color-brand))', backgroundSize: '300% 100%', animation: 'ai-border 3s linear infinite' }}>
+          <button
+            type="button"
+            onClick={() => openAI(true)}
+            className="relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-700 text-white transition-opacity hover:opacity-90 active:opacity-75"
+            style={{ background: 'var(--color-brand)' }}
+          >
+            <Sparkles size={14} style={{ filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.9))' }} />
+            <span style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.7))' }}>Ask Zeo</span>
+          </button>
+        </span>
+
+        <style>{`
+          @keyframes ai-border {
+            0%   { background-position: 0% 0% }
+            100% { background-position: 300% 0% }
+          }
+        `}</style>
       </div>
 
       {/* Stats Grid */}

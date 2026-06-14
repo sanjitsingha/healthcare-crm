@@ -393,12 +393,12 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <PersonDropdown people={people} value={person} setValue={setPerson} />
-          <RangeDropdown rangeKey={rangeKey} setRangeKey={setRangeKey} custom={custom} setCustom={setCustom} label={rangeLabel} />
           <button type="button" onClick={load} title="Refresh"
             className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
             <RefreshCw size={15} />
           </button>
+          <PersonDropdown people={people} value={person} setValue={setPerson} />
+          <RangeDropdown rangeKey={rangeKey} setRangeKey={setRangeKey} custom={custom} setCustom={setCustom} label={rangeLabel} />
         </div>
       </div>
 

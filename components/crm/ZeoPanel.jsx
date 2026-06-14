@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, X, Send, Bot, User, Plus } from 'lucide-react'
+import { useAIPanel } from '@/lib/context/AIPanelContext'
 
-// Zeo — AI assistant panel (UI only for now). Slides in from the right.
-// Wiring to a real RAG backend comes later; for now replies are stubbed.
+// Zeo — AI assistant side panel.
+// Opens by shifting content left (no overlay on desktop).
+// Wiring to a real RAG backend comes later; replies are stubbed.
 
 const SUGGESTIONS = [
   'How many leads converted this month?',
@@ -32,7 +34,10 @@ function Bubble({ role, children }) {
   )
 }
 
-export default function ZeoPanel({ open, onClose }) {
+export default function ZeoPanel() {
+  const { open, setOpen } = useAIPanel()
+  const onClose = () => setOpen(false)
+
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -40,20 +45,19 @@ export default function ZeoPanel({ open, onClose }) {
   const inputRef = useRef(null)
 
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 250)
+    if (open) setTimeout(() => inputRef.current?.focus(), 300)
   }, [open])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, thinking])
 
-  // Close on Escape
   useEffect(() => {
     if (!open) return
     const h = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [open, onClose])
+  }, [open])
 
   const send = (text) => {
     const q = (text ?? input).trim()
@@ -61,7 +65,6 @@ export default function ZeoPanel({ open, onClose }) {
     setMessages(m => [...m, { role: 'user', content: q }])
     setInput('')
     setThinking(true)
-    // Stubbed response — real RAG wiring comes later.
     setTimeout(() => {
       setThinking(false)
       setMessages(m => [...m, {
@@ -75,26 +78,30 @@ export default function ZeoPanel({ open, onClose }) {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Mobile-only backdrop */}
       <div
         onClick={onClose}
-        className="fixed inset-0 z-50 transition-opacity duration-300"
+        className="md:hidden fixed inset-0 z-40 transition-opacity duration-300"
         style={{ background: 'rgba(13,22,52,0.35)', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
       />
 
       {/* Panel */}
       <aside
-        className="fixed top-0 right-0 z-50 h-screen w-full sm:w-[420px] flex flex-col border-l border-(--color-border) transition-transform duration-300"
+        className="fixed top-0 right-0 z-40 h-screen w-full sm:w-[420px] flex flex-col border-l border-(--color-border)"
         style={{
           background: 'var(--color-surface)',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
-          boxShadow: open ? '-12px 0 40px rgba(13,22,52,0.18)' : 'none',
+          transition: 'transform 300ms ease-in-out',
+          willChange: 'transform',
+          boxShadow: open ? '-8px 0 32px rgba(13,22,52,0.10)' : 'none',
         }}
         aria-hidden={!open}
       >
         {/* Header */}
-        <div className="flex items-center gap-2.5 px-4 h-14 border-b border-(--color-border) shrink-0"
-          style={{ background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-light, #3a43b5))' }}>
+        <div
+          className="flex items-center gap-2.5 px-4 h-14 border-b border-(--color-border) shrink-0"
+          style={{ background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-light, #3a43b5))' }}
+        >
           <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
             <Sparkles size={17} className="text-white" />
           </div>
@@ -150,7 +157,7 @@ export default function ZeoPanel({ open, onClose }) {
         </div>
 
         {/* Composer */}
-        <div className="border-t border-(--color-border) p-3 shrink-0" style={{ background: 'var(--color-surface)' }}>
+        <div className="border-t border-(--color-border) p-3 pb-12 shrink-0" style={{ background: 'var(--color-surface)' }}>
           <form onSubmit={e => { e.preventDefault(); send() }} className="flex items-end gap-2">
             <textarea
               ref={inputRef}
