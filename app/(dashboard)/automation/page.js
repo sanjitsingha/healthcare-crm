@@ -10,6 +10,8 @@ import {
   getAutomationRules, createAutomationRule, updateAutomationRule, deleteAutomationRule, getTags,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 
 // ── Catalog ────────────────────────────────────────────────────
 const TRIGGERS = [
@@ -218,15 +220,16 @@ export default function AutomationPage() {
         const c = await createAutomationRule(payload)
         setRules(rs => [c, ...rs]); setRuleId(c.id)
       }
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
   const handleDeleteRule = async () => {
     if (!ruleId) { newRule(); return }
-    if (!confirm('Delete this automation?')) return
+    const ok = await showConfirm({ title: 'Delete this automation?', confirmLabel: 'Delete' })
+    if (!ok) return
     try { await deleteAutomationRule(ruleId); setRules(rs => rs.filter(r => r.id !== ruleId)); newRule() }
-    catch (err) { alert(err.message) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const nodeById = (id) => nodes.find(n => n.id === id)

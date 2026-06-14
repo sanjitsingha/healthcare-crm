@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BellRing, CheckCheck, Trash2, X, RefreshCw } from 'lucide-react'
 import { Card, Spinner } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
+import { showConfirm } from '@/lib/confirm'
 import { NOTIF_STYLE } from '@/components/crm/Toast'
 import { getNotifications } from '@/lib/supabase/queries'
 import { createClient } from '@/lib/supabase/client'
@@ -86,7 +87,7 @@ export default function NotificationsPage() {
             style={{ color: 'var(--color-text-secondary)' }}>
             <CheckCheck size={14} /> Mark all read
           </button>
-          <button type="button" onClick={() => { if (confirm('Clear all notifications from your view?')) clearAll(uid, visible.map(n => n.id)) }} disabled={!visible.length}
+          <button type="button" onClick={async () => { const ok = await showConfirm({ title: 'Clear all notifications?', confirmLabel: 'Clear all', variant: 'info' }); if (ok) clearAll(uid, visible.map(n => n.id)) }} disabled={!visible.length}
             className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
             style={{ color: 'var(--color-text-secondary)' }}>
             <Trash2 size={14} /> Clear

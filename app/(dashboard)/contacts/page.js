@@ -12,6 +12,8 @@ import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import clsx from 'clsx'
 
 // ── Constants ───────────────────────────────────────────────────
@@ -306,7 +308,7 @@ function ColumnToggle({ baseColumns, customColumns, isVisible, toggleColumn }) {
 
 // ── Page ────────────────────────────────────────────────────────
 export default function ContactsPage() {
-  const { orgId, org } = useOrg()
+  const { orgId, org, hasPermission } = useOrg()
   const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
@@ -373,7 +375,7 @@ export default function ContactsPage() {
   const persistColumns = async (next) => {
     setVisible(next)
     try { await updateOrganization(orgId, { settings: { ...(org?.settings || {}), contacts_columns: next } }) }
-    catch (err) { alert(err.message) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
   const toggleColumn = (col) => {
     if (col.locked) return
@@ -501,7 +503,12 @@ export default function ContactsPage() {
 
   const handleDeleteSelected = async () => {
     if (!selected.size) return
-    if (!confirm(`Delete ${selected.size} selected contact${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    const ok = await showConfirm({
+      title: `Delete ${selected.size} contact${selected.size !== 1 ? 's' : ''}?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
     try {
       for (const key of selected) {
         const [type, id] = key.split(':')
@@ -509,7 +516,8 @@ export default function ContactsPage() {
         else await deleteLead(id)
       }
       clearSelection(); load()
-    } catch (err) { alert(err.message) }
+      toast({ type: 'success', title: 'Deleted', message: `${selected.size} contact${selected.size !== 1 ? 's' : ''} deleted` })
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // ── Cell renderer ──────────────────────────────────────────────
@@ -593,12 +601,14 @@ export default function ContactsPage() {
             style={{ color: 'var(--color-text-muted)' }}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-          <Link href="/leads/new">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--color-brand)' }}>
-              <Plus size={16} /> Add Contact
-            </button>
-          </Link>
+          {hasPermission('contacts.create') && (
+            <Link href="/leads/new">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
+                style={{ background: 'var(--color-brand)' }}>
+                <Plus size={16} /> Add Contact
+              </button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -721,10 +731,12 @@ export default function ContactsPage() {
             style={{ color: 'var(--color-text-secondary)' }}>
             <Download size={14} /> Export
           </button>
-          <button onClick={handleDeleteSelected}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors">
-            <Trash2 size={14} /> Delete
-          </button>
+          {hasPermission('contacts.delete') && (
+            <button onClick={handleDeleteSelected}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors">
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       )}
 

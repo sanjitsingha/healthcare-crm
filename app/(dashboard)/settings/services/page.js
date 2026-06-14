@@ -5,6 +5,8 @@ import { Button, Card, Input, Textarea } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import clsx from 'clsx'
 
 const EMPTY_SERVICE = { name: '', price: '', duration: '', description: '' }
@@ -253,17 +255,18 @@ function ServicesTab({ services, persistServices, controlRef }) {
       await persistServices(next)
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `${editingId ? 'Updated' : 'Added'} service: ${payload.name}`, metadata: { name: payload.name, price: payload.price, duration: payload.duration } })
       resetForm()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
     const svc = services.find(s => s.id === id)
-    if (!confirm(`Delete "${svc?.name || 'this service'}"? This cannot be undone.`)) return
+    const ok = await showConfirm({ title: `Delete "${svc?.name || 'this service'}"?`, message: 'This cannot be undone.', confirmLabel: 'Delete' })
+    if (!ok) return
     try {
       await persistServices(services.filter(s => s.id !== id))
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `Deleted service: ${svc?.name || id}`, metadata: { name: svc?.name } })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   return (
@@ -415,17 +418,18 @@ function PackagesTab({ services, packages, persistPackages, onGoToServices, cont
       await persistPackages(next)
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `${editingId ? 'Updated' : 'Added'} package: ${payload.name}`, metadata: { name: payload.name, items: payload.items.length, price: payload.price } })
       resetForm()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
     const pkg = packages.find(p => p.id === id)
-    if (!confirm(`Delete package "${pkg?.name || 'this package'}"? This cannot be undone.`)) return
+    const ok = await showConfirm({ title: `Delete "${pkg?.name || 'this package'}"?`, message: 'This cannot be undone.', confirmLabel: 'Delete' })
+    if (!ok) return
     try {
       await persistPackages(packages.filter(p => p.id !== id))
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `Deleted package: ${pkg?.name || id}`, metadata: { name: pkg?.name } })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // No services at all → can't build a package

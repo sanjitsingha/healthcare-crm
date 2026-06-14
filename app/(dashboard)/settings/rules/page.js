@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Button, Card, Input, Select, Spinner, Switch } from "@/components/ui";
 import { useOrg } from "@/lib/context/OrgContext";
+import { toast } from "@/lib/toast";
+import { showConfirm } from "@/lib/confirm";
 import { updateOrganization, getTags } from "@/lib/supabase/queries";
 import {
   RULE_TARGETS,
@@ -613,11 +615,11 @@ export default function RulesPage() {
     setRules((prev) => prev.map((x) => (x.id === r.id ? r : x)));
     setDirty(true);
   };
-  const removeRule = (id) => {
-    if (confirm("Delete this rule?")) {
-      setRules((prev) => prev.filter((r) => r.id !== id));
-      setDirty(true);
-    }
+  const removeRule = async (id) => {
+    const ok = await showConfirm({ title: 'Delete this rule?', confirmLabel: 'Delete' });
+    if (!ok) return;
+    setRules((prev) => prev.filter((r) => r.id !== id));
+    setDirty(true);
   };
 
   const handleSave = async () => {
@@ -629,7 +631,7 @@ export default function RulesPage() {
       setSavedAt(Date.now());
       setDirty(false);
     } catch (err) {
-      alert(err.message);
+      toast({ type: 'error', title: 'Error', message: err.message });
     } finally {
       setSaving(false);
     }

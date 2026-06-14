@@ -8,6 +8,8 @@ import {
 import { Spinner } from '@/components/ui'
 import { getTasks, updateTask, deleteTask } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { format, isPast, isToday, isTomorrow, isThisWeek, isThisMonth } from 'date-fns'
@@ -223,12 +225,13 @@ export default function TasksPage() {
     try {
       const updated = await updateTask(id, updates)
       setAllTasks(prev => prev.map(t => t.id === id ? updated : t))
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) }
   }
   const handleDelete = async (id) => {
-    if (!confirm('Delete this task?')) return
+    const ok = await showConfirm({ title: 'Delete this task?', confirmLabel: 'Delete' })
+    if (!ok) return
     try { await deleteTask(id); setAllTasks(prev => prev.filter(t => t.id !== id)) }
-    catch (e) { alert(e.message) }
+    catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) }
   }
 
   // Shared filter logic

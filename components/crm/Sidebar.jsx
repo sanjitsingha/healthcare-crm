@@ -27,47 +27,54 @@ import {
   Stethoscope,
   BarChart3,
   BellRing,
+  LogOut,
+  Search,
+  Radio,
+  Plus,
+  X as XIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useOrg } from "@/lib/context/OrgContext";
 import { useSidebar } from "@/lib/context/SidebarContext";
+import { createClient } from "@/lib/supabase/client";
 
 const navGroups = [
   {
     label: "Overview",
     items: [
-      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-      { href: "/notifications", icon: BellRing, label: "Notifications" },
-      { href: "/reports", icon: BarChart3, label: "Reports" },
+      { href: "/dashboard",      icon: LayoutDashboard, label: "Dashboard",     permission: "dashboard" },
+      { href: "/notifications",  icon: BellRing,        label: "Notifications", permission: "notifications" },
+      { href: "/reports",        icon: BarChart3,        label: "Reports",       permission: "reports" },
     ],
   },
   {
     label: "Sales",
     items: [
-      { type: "leads" },
-      { href: "/contacts", icon: Users, label: "Contacts" },
-      { href: "/organizations", icon: Building2, label: "Organizations" },
+      { type: "leads", permission: "leads" },
+      { href: "/contacts",      icon: Users,    label: "Contacts",      permission: "contacts" },
+      { href: "/organizations", icon: Building2, label: "Organizations", permission: "organizations" },
     ],
   },
   {
     label: "Care Delivery",
     items: [
-      { href: "/patients", icon: UserRound, label: "Patients" },
-      { href: "/appointments", icon: CalendarDays, label: "Appointments" },
-      { href: "/consultation", icon: Stethoscope, label: "Consultations" },
+      { href: "/patients",      icon: UserRound,    label: "Patients",      permission: "patients" },
+      { href: "/appointments",  icon: CalendarDays, label: "Appointments",  permission: "appointments" },
+      { href: "/consultation",  icon: Stethoscope,  label: "Consultations", permission: "consultations" },
     ],
   },
   {
     label: "Operations",
     items: [
-      { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-      { href: "/billing", icon: CreditCard, label: "Billing & Finance" },
+      { href: "/tasks",   icon: CheckSquare, label: "Tasks",           permission: "tasks" },
+      { href: "/billing", icon: CreditCard,  label: "Billing & Finance", permission: "billing" },
     ],
   },
   {
     label: "Tools",
-    items: [{ href: "/automation", icon: Zap, label: "Automation" }],
+    items: [{ href: "/automation", icon: Zap, label: "Automation", permission: "automation" }],
   },
 ];
 
@@ -101,8 +108,15 @@ function OrgLogo({ logoUrl, orgName }) {
 }
 
 function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
-  const { org } = useOrg();
+  const { org, user, userRoleName, hasPermission } = useOrg();
   const { collapsed: _collapsed, toggle } = useSidebar();
+  const router = useRouter();
+
+  const handleLogout = useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  }, [router]);
   const collapsed = forceExpanded ? false : _collapsed;
 
   const orgName = org?.name || "Your Clinic";
@@ -111,6 +125,70 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
     pathname.startsWith("/leads"),
   );
   const leadsExpanded = leadsOpen || pathname.startsWith("/leads");
+
+  // Inline sidebar search
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchOpen, setSearchOpen]   = useState(false)
+  const searchInputRef = useRef(null)
+  const searchContainerRef = useRef(null)
+
+  const openSearch = useCallback(() => {
+    setSearchOpen(true)
+    setTimeout(() => searchInputRef.current?.focus(), 0)
+  }, [])
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false)
+    setSearchQuery("")
+  }, [])
+
+  // ⌘K / Ctrl+K focuses the sidebar search instead of any modal
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        openSearch()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [openSearch])
+
+  // Build the flat list of searchable nav items
+  const searchNavItems = useMemo(() => {
+    const items = []
+    for (const group of navGroups) {
+      for (const item of group.items) {
+        if (item.type === "leads") {
+          if (hasPermission("leads")) {
+            LEADS_SUB.forEach(s => items.push({ ...s, group: "Sales" }))
+          }
+        } else if (item.href && (!item.permission || hasPermission(item.permission))) {
+          items.push({ ...item, group: group.label })
+        }
+      }
+    }
+    if (hasPermission("settings")) {
+      items.push({ href: "/settings", icon: Settings, label: "Settings", group: "Settings" })
+    }
+    items.push({ href: "/status",  icon: Radio,        label: "System Status", group: "Other" })
+    items.push({ href: "/help",    icon: CircleHelp,   label: "Help",          group: "Other" })
+    return items
+  }, [hasPermission])
+
+  const createActions = useMemo(() => [
+    hasPermission("leads.create")        && { href: "/leads/new",        label: "New Lead",        icon: Plus },
+    hasPermission("patients.create")     && { href: "/patients/new",     label: "New Patient",     icon: Plus },
+    hasPermission("appointments.create") && { href: "/appointments/new", label: "New Appointment", icon: Plus },
+  ].filter(Boolean), [hasPermission])
+
+  const filteredNav = searchQuery.trim()
+    ? searchNavItems.filter(i => i.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : searchNavItems
+
+  const filteredCreate = searchQuery.trim()
+    ? createActions.filter(i => i.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    : createActions
 
   const isActive = (href) =>
     href === "/dashboard"
@@ -274,9 +352,119 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-2 py-4 space-y-4 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:var(--color-border)_transparent] [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--color-border) [&::-webkit-scrollbar-thumb:hover]:bg-(--color-text-muted)">
-        {navGroups.map((group) => (
+      {/* Inline sidebar search */}
+      {!collapsed && (
+        <div
+          ref={searchContainerRef}
+          className="mx-2 mt-3 mb-1"
+          onBlur={(e) => {
+            if (!searchContainerRef.current?.contains(e.relatedTarget)) closeSearch()
+          }}
+        >
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all"
+            style={{
+              borderColor: searchOpen ? 'var(--color-brand)' : 'var(--color-border)',
+              background: 'var(--color-surface-2)',
+              boxShadow: searchOpen ? '0 0 0 3px var(--color-brand-50)' : 'none',
+            }}
+          >
+            <Search size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={e => { if (e.key === "Escape") closeSearch() }}
+              placeholder="Search…"
+              className="flex-1 bg-transparent outline-none text-xs min-w-0"
+              style={{ color: 'var(--color-text-primary)' }}
+            />
+            {searchOpen ? (
+              <button type="button" tabIndex={-1} onClick={closeSearch} className="shrink-0 hover:opacity-70 transition-opacity">
+                <XIcon size={12} style={{ color: 'var(--color-text-muted)' }} />
+              </button>
+            ) : (
+              <kbd
+                onClick={openSearch}
+                className="text-[10px] font-600 px-1 py-0.5 rounded border cursor-pointer select-none shrink-0"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+              >
+                ⌘K
+              </kbd>
+            )}
+          </div>
+
+          {searchOpen && (
+            <div
+              className="mt-1.5 rounded-xl border overflow-hidden"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+            >
+              <div className="max-h-[320px] overflow-y-auto [scrollbar-width:thin]">
+                {filteredNav.length > 0 && (
+                  <div className="p-1.5">
+                    <p className="px-2.5 pt-1 pb-1 text-[9px] font-800 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Navigate</p>
+                    {filteredNav.map(item => {
+                      const Icon = item.icon
+                      const active = isActive(item.href)
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          tabIndex={0}
+                          onClick={() => { closeSearch(); setMobileOpen(false) }}
+                          className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-500 transition-colors hover:bg-(--color-brand-50)"
+                          style={{ color: active ? 'var(--color-brand)' : 'var(--color-text-secondary)' }}
+                        >
+                          <Icon size={13} />
+                          {item.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {filteredCreate.length > 0 && (
+                  <div className="p-1.5 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="px-2.5 pt-1 pb-1 text-[9px] font-800 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Create</p>
+                    {filteredCreate.map(item => {
+                      const Icon = item.icon
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          tabIndex={0}
+                          onClick={() => { closeSearch(); setMobileOpen(false) }}
+                          className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-500 transition-colors hover:bg-(--color-brand-50)"
+                          style={{ color: 'var(--color-text-secondary)' }}
+                        >
+                          <Icon size={13} />
+                          {item.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {filteredNav.length === 0 && filteredCreate.length === 0 && (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      No results for &ldquo;{searchQuery}&rdquo;
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Nav — hidden while search results are shown */}
+      <nav className={`flex-1 px-2 py-4 space-y-4 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:var(--color-border)_transparent] [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-(--color-border) [&::-webkit-scrollbar-thumb:hover]:bg-(--color-text-muted)] ${!collapsed && searchOpen ? 'hidden' : ''}`}>
+        {navGroups.map((group) => {
+          const visibleItems = group.items.filter(item => !item.permission || hasPermission(item.permission))
+          if (visibleItems.length === 0) return null
+          return (
           <div
             key={group.label}
             className={collapsed ? "space-y-0.5" : "space-y-1"}
@@ -290,12 +478,13 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
               </p>
             )}
             <div className="space-y-0.5">
-              {group.items.map((item) =>
+              {visibleItems.map((item) =>
                 item.type === "leads" ? renderLeadsNav() : renderNavLink(item),
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </nav>
 
       {/* Bottom: settings */}
@@ -327,15 +516,63 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
         </Link>
 
         <Link
-          href="/settings"
+          href="/status"
+          target="_blank"
+          rel="noopener noreferrer"
           onClick={() => setMobileOpen(false)}
-          title={collapsed ? "Settings" : undefined}
-          className={navLinkClass(isActive("/settings"))}
-          style={navLinkStyle(isActive("/settings"))}
+          title={collapsed ? "System Status" : undefined}
+          className={navLinkClass(false)}
+          style={navLinkStyle(false)}
         >
-          <Settings size={16} />
-          {!collapsed && "Settings"}
+          <Radio size={16} />
+          {!collapsed && "System Status"}
         </Link>
+
+        {hasPermission("settings") && (
+          <Link
+            href="/settings"
+            onClick={() => setMobileOpen(false)}
+            title={collapsed ? "Settings" : undefined}
+            className={navLinkClass(isActive("/settings"))}
+            style={navLinkStyle(isActive("/settings"))}
+          >
+            <Settings size={16} />
+            {!collapsed && "Settings"}
+          </Link>
+        )}
+
+        {/* User strip + logout */}
+        <div
+          className={clsx(
+            "mt-1 pt-2 border-t border-(--color-border) flex items-center gap-2",
+            collapsed ? "justify-center" : "px-1"
+          )}
+        >
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-700 text-white"
+            style={{ background: "var(--color-brand)" }}
+          >
+            {(user?.user_metadata?.name || user?.email || "?")[0].toUpperCase()}
+          </div>
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-600 truncate" style={{ color: "var(--color-text-primary)" }}>
+                {user?.user_metadata?.name || user?.email?.split("@")[0] || "User"}
+              </p>
+              <p className="text-[10px] truncate font-500" style={{ color: userRoleName ? 'var(--color-brand)' : 'var(--color-text-muted)' }}>
+                {userRoleName || 'Owner · Full access'}
+              </p>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            title="Log out"
+            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            <LogOut size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );

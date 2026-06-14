@@ -5,6 +5,8 @@ import { Button, Card, Input } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 
 const EMPTY_FORM = { name: '', description: '' }
 
@@ -32,19 +34,20 @@ export default function DepartmentsPage() {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), departments: updated } })
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `${editingId ? 'Updated' : 'Added'} department: ${payload.name}`, metadata: { name: payload.name } })
       setDepartments(updated); resetForm()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Remove this department?')) return
+    const ok = await showConfirm({ title: 'Remove this department?', confirmLabel: 'Remove' })
+    if (!ok) return
     const dept = departments.find(d => d.id === id)
     const updated = departments.filter(d => d.id !== id)
     try {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), departments: updated } })
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `Department removed: ${dept?.name || id}`, metadata: { name: dept?.name } })
       setDepartments(updated)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   return (

@@ -6,10 +6,12 @@ import Sidebar from '@/components/crm/Sidebar'
 import MainContent from '@/components/crm/MainContent'
 import ThemeApplier from '@/components/crm/ThemeApplier'
 import ToastHost from '@/components/crm/Toast'
+import ConfirmHost from '@/components/crm/ConfirmHost'
 import CookieBanner from '@/components/crm/CookieBanner'
 import InactivityGuard from '@/components/crm/InactivityGuard'
 import PageViewLogger from '@/components/crm/PageViewLogger'
 import GeoPermissionBanner from '@/components/crm/GeoPermissionBanner'
+import RouteGuard from '@/components/crm/RouteGuard'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -25,15 +27,29 @@ export default async function DashboardLayout({ children }) {
 
   if (!profile?.organization_id) redirect('/setup')
 
+  // Fetch this user's role → permissions. Null means owner (full access).
+  const { data: userRoleRow } = await supabase
+    .from('user_roles')
+    .select('roles(name, role_permissions(permissions(name)))')
+    .eq('user_id', user.id)
+    .eq('organization_id', profile.organization_id)
+    .maybeSingle()
+
+  const userPermissions = userRoleRow
+    ? (userRoleRow.roles?.role_permissions || []).map(rp => rp.permissions?.name).filter(Boolean)
+    : null
+  const userRoleName = userRoleRow?.roles?.name || null
+
   return (
-    <OrgProvider org={profile.organizations} user={user}>
+    <OrgProvider org={profile.organizations} user={user} userPermissions={userPermissions} userRoleName={userRoleName}>
       <SidebarStateProvider>
         <ThemeApplier />
         <div className="flex min-h-screen">
           <Sidebar />
-          <MainContent>{children}</MainContent>
+          <MainContent><RouteGuard>{children}</RouteGuard></MainContent>
         </div>
         <ToastHost />
+        <ConfirmHost />
         <CookieBanner />
         <InactivityGuard />
         <PageViewLogger />

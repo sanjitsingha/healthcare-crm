@@ -4,14 +4,14 @@ import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
   CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
-  List, Table2, ArrowUpDown, Search, Package,
+  List, Table2, ArrowUpDown, ArrowUp, ArrowDown, Search,
 } from 'lucide-react'
 import { Button, Card, Input, Textarea, Spinner, Select } from '@/components/ui'
 import {
-  getPatient, updatePatient, deletePatient,
+  getPatient, updatePatient, deletePatient, updateLead,
   getPersonTimeline, createActivity,
   getTasks, createTask, updateTask,
-  getFollowups, createFollowup, updateFollowup,
+  getFollowups, createFollowup, updateFollowup, deleteFollowup,
   getTags, assignTagToPatient, removeTagFromPatient,
   getAppointments, createAppointment, updateAppointment,
 } from '@/lib/supabase/queries'
@@ -21,7 +21,9 @@ import Link from 'next/link'
 import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
+import VisitsTable from '@/components/crm/VisitsTable'
 import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import { logAudit, AUDIT } from '@/lib/audit'
 import { matchingRules, ruleActions } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, addDays } from 'date-fns'
@@ -67,162 +69,10 @@ const FU_STATUS_STYLE = {
   Rescheduled: { bg: '#f3e8ff', color: '#7c3aed' },
 }
 
-function CustomDateTimePicker({ value, onChange, label = 'Date & Time *' }) {
-  const [open, setOpen] = useState(false)
-  const selected = value ? new Date(value) : new Date()
-  const [month, setMonth] = useState(startOfMonth(selected))
-  const monthStart = startOfMonth(month)
-  const monthEnd = endOfMonth(month)
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-  const days = []
-  let pointer = gridStart
-  while (pointer <= gridEnd) { days.push(pointer); pointer = new Date(pointer.getFullYear(), pointer.getMonth(), pointer.getDate() + 1) }
-
-  const setDatePart = (date) => {
-    const next = new Date(date)
-    next.setHours(selected.getHours(), selected.getMinutes(), 0, 0)
-    onChange(next.toISOString())
-  }
-  const setTimePart = (key, val) => {
-    const next = new Date(selected)
-    if (key === 'hour') next.setHours(Number(val))
-    if (key === 'minute') next.setMinutes(Number(val))
-    onChange(next.toISOString())
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{label}</label>
-      <button type="button" onClick={() => setOpen(o => !o)} className="w-full px-3 py-2 rounded-lg border text-left text-sm" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-        {format(selected, 'EEE, MMM d yyyy · h:mm a')}
-      </button>
-      {open && (
-        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-          <div className="flex items-center justify-between">
-            <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => subMonths(m, 1))}><ChevronLeft size={15} /></button>
-            <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(month, 'MMMM yyyy')}</p>
-            <button type="button" className="p-1 rounded hover:bg-(--color-surface-2)" onClick={() => setMonth(m => addMonths(m, 1))}><ChevronRight size={15} /></button>
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-[11px] text-center">
-            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => <span key={day} style={{ color: 'var(--color-text-muted)' }}>{day}</span>)}
-            {days.map((day, i) => {
-              const active = isSameDay(day, selected)
-              const inMonth = isSameMonth(day, month)
-              return <button key={i} type="button" onClick={() => setDatePart(day)} className="py-1.5 rounded text-xs" style={active ? { background: 'var(--color-brand)', color: 'white' } : { color: inMonth ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>{format(day, 'd')}</button>
-            })}
-          </div>
-          <div className="flex items-center gap-2">
-            <select value={selected.getHours()} onChange={e => setTimePart('hour', e.target.value)} className="px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }}>{Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}</option>)}</select>
-            <span>:</span>
-            <select value={selected.getMinutes()} onChange={e => setTimePart('minute', e.target.value)} className="px-2 py-1.5 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }}>{Array.from({ length: 60 }).map((_, m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}</select>
-            <Button type="button" variant="secondary" size="sm" className="ml-auto" onClick={() => onChange(new Date().toISOString())}>Now</Button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
-  const [completing, setCompleting] = useState(false)
-  const [rescheduling, setRescheduling] = useState(false)
-  const [outcome, setOutcome] = useState('')
-  const [nextType, setNextType] = useState('Call')
-  const [nextDate, setNextDate] = useState('')
-  const [saving, setSaving] = useState(false)
-  const Icon = TYPE_ICON[f.type] || Bell
-  const typeC = TYPE_COLOR[f.type] || TYPE_COLOR.Other
-  const statC = FU_STATUS_STYLE[f.status] || FU_STATUS_STYLE.Scheduled
-
-  const handleComplete = async () => {
-    setSaving(true)
-    try { await onComplete(f.id, outcome); setCompleting(false) } catch (e) { alert(e.message) } finally { setSaving(false) }
-  }
-  const handleReschedule = async () => {
-    if (!nextDate) return
-    setSaving(true)
-    try { await onReschedule(f.id, nextDate, nextType); setRescheduling(false) } catch (e) { alert(e.message) } finally { setSaving(false) }
-  }
-
-  return (
-    <div className="rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-      <div className="flex items-start gap-3 p-4">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: typeC.bg }}><Icon size={16} style={{ color: typeC.color }} /></div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{f.type}</span><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statC.bg, color: statC.color }}>{f.status}</span>{f.status === 'Scheduled' && isPast(new Date(f.scheduled_at)) && <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c' }}>Overdue</span>}</div>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{format(new Date(f.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}</p>
-          {f.notes && <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>{f.notes}</p>}
-          {f.outcome && <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>Outcome: {f.outcome}</p>}
-        </div>
-        {!completing && !rescheduling && f.status !== 'Completed' && (
-          <div className="flex gap-1.5 shrink-0">
-            <button onClick={() => setCompleting(true)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-600" style={{ background: '#dcfce7', color: '#15803d' }}><Check size={12} className="inline mr-1" />Done</button>
-            <button onClick={() => { setRescheduling(true); setNextType(f.type); setNextDate('') }} className="px-2.5 py-1.5 rounded-lg text-[11px] font-600 border border-(--color-border)"><RotateCcw size={11} className="inline mr-1" />Reschedule</button>
-            <button onClick={() => onMiss(f.id)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={11} className="inline mr-1" />Missed</button>
-          </div>
-        )}
-      </div>
-      {completing && <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}><Textarea label="Outcome" value={outcome} onChange={e => setOutcome(e.target.value)} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" onClick={() => setCompleting(false)}>Cancel</Button><Button size="sm" onClick={handleComplete} disabled={saving}>{saving ? 'Saving...' : 'Mark Complete'}</Button></div></div>}
-      {rescheduling && <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="grid grid-cols-2 gap-3"><Select label="Type" value={nextType} onChange={e => setNextType(e.target.value)} options={FOLLOWUP_TYPES.map(t => ({ value: t, label: t }))} /><Input label="New Date & Time *" type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} /></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" onClick={() => setRescheduling(false)}>Cancel</Button><Button size="sm" onClick={handleReschedule} disabled={saving || !nextDate}>{saving ? 'Saving...' : 'Reschedule'}</Button></div></div>}
-    </div>
-  )
-}
-
-// Dropdown multi-select for services availed in a visit
-function ServiceMultiSelect({ services, selected, onChange }) {
-  const [open, setOpen] = useState(false)
-  const toggle = (sid) => onChange(selected.includes(sid) ? selected.filter(x => x !== sid) : [...selected, sid])
-  const chosen = selected.map(id => services.find(s => s.id === id)).filter(Boolean)
-  return (
-    <div className="space-y-1.5">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-(--color-border) text-sm outline-none"
-        style={{ background: 'var(--color-surface)', color: selected.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-        <span>{selected.length ? `${selected.length} service${selected.length > 1 ? 's' : ''} selected` : 'Select services'}</span>
-        <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-      </button>
-      {open && (
-        services.length === 0 ? (
-          <p className="text-xs px-3 py-2 rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>No services configured. Add them in Settings → Services.</p>
-        ) : (
-          <div className="rounded-xl border border-(--color-border) max-h-44 overflow-y-auto" style={{ background: 'var(--color-surface)' }}>
-            {services.map((s, i) => {
-              const on = selected.includes(s.id)
-              return (
-                <button key={s.id} type="button" onClick={() => toggle(s.id)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-(--color-surface-2)"
-                  style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
-                  <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
-                    style={on ? { background: 'var(--color-brand)', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>
-                    {on && <Check size={10} className="text-white" />}
-                  </span>
-                  <span className="flex-1 text-xs font-500 truncate" style={{ color: 'var(--color-text-primary)' }}>{s.name}</span>
-                  <span className="text-xs font-600 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>{s.price != null ? `₹${Number(s.price).toLocaleString()}` : '—'}</span>
-                </button>
-              )
-            })}
-          </div>
-        )
-      )}
-      {chosen.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {chosen.map(s => (
-            <span key={s.id} className="inline-flex items-center gap-1 text-[11px] font-600 px-2 py-0.5 rounded-md" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
-              {s.name}
-              <button type="button" onClick={() => toggle(s.id)} className="opacity-70 hover:opacity-100"><X size={11} /></button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function PatientDetailPage({ params }) {
   const { id } = use(params)
   const router = useRouter()
-  const { orgId, org } = useOrg()
+  const { orgId, org, hasPermission } = useOrg()
   const [patient, setPatient] = useState(null)
   const [activities, setActivities] = useState([])
   const [tasks, setTasks] = useState([])
@@ -243,20 +93,16 @@ export default function PatientDetailPage({ params }) {
   const [addingRecord, setAddingRecord] = useState(false)
   const [medEntry, setMedEntry] = useState({ diagnosis: '', treatment: '', notes: '' })
   const [savingRecord, setSavingRecord] = useState(false)
-  const [showFuForm, setShowFuForm] = useState(false)
-  const [newFu, setNewFu] = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
-  const [fuView, setFuView] = useState('regular')
-  const [fuSort, setFuSort] = useState('added')
-  const [fuSortOpen, setFuSortOpen] = useState(false)
+  const [fuSort, setFuSort] = useState('scheduled_desc') // 'scheduled_desc' | 'scheduled_asc'
   const [assigningPatient, setAssigningPatient] = useState(false)
   const [appointments, setAppointments] = useState([])
   const [addingAppt, setAddingAppt] = useState(false)
   const [apptForm, setApptForm] = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
   const [savingAppt, setSavingAppt] = useState(false)
-  const [addingVisit, setAddingVisit] = useState(false)
-  const [visitForm, setVisitForm] = useState({ date: '', service_ids: [], package_id: '', doctor_id: '', misc_cost: '', next_visit_date: '' })
-  const [savingVisit, setSavingVisit] = useState(false)
-  const [visitView, setVisitView] = useState('regular') // 'regular' | 'table'
+  const [visitSort, setVisitSort] = useState('desc') // 'desc' | 'asc' by visit date
+  const [notesEditing, setNotesEditing] = useState(false)
+  const [notesDraft, setNotesDraft] = useState('')
+  const [notesSaving, setNotesSaving] = useState(false)
 
   const doctors  = org?.settings?.doctors  || []
   const services = org?.settings?.services || []
@@ -318,7 +164,12 @@ export default function PatientDetailPage({ params }) {
     if (id && orgId) logAudit({ action: AUDIT.PATIENT_VIEW, entityType: 'patient', entityId: id, description: 'Viewed patient record' })
   }, [id, orgId])
 
-  const handleDelete = async () => { if (!confirm('Delete this patient? This cannot be undone.')) return; await deletePatient(id); router.push('/patients') }
+  const handleDelete = async () => {
+    const ok = await showConfirm({ title: 'Delete this patient?', message: 'This cannot be undone.', confirmLabel: 'Delete patient' })
+    if (!ok) return
+    await deletePatient(id)
+    router.push('/patients')
+  }
 
   const openProfileEdit = () => {
     setProfileDraft({
@@ -357,7 +208,7 @@ export default function PatientDetailPage({ params }) {
       logAudit({ action: AUDIT.PATIENT_EDIT, entityType: 'patient', entityId: id, entityName: fullName, description: 'Patient profile updated' })
       setProfileEditing(false)
       if (before.status !== updated.status) await applyRules('status_changed')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setProfileSaving(false) }
   }
   const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)); if (status === 'Completed') await applyRules('task_completed') }
@@ -373,23 +224,53 @@ export default function PatientDetailPage({ params }) {
       await logActivity('note', `Medical record added: ${medEntry.diagnosis}`)
       await loadAll(); setAddingRecord(false); setMedEntry({ diagnosis: '', treatment: '', notes: '' })
       await applyRules('medical_record_added')
-    } catch (e) { alert(e.message) } finally { setSavingRecord(false) }
+    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) } finally { setSavingRecord(false) }
   }
 
-  const handleScheduleFollowup = async (e) => {
-    e.preventDefault()
-    if (!newFu.scheduled_at || !newFu.status_detail || !orgId) return
-    const isFuture = new Date(newFu.scheduled_at).getTime() > Date.now()
-    const f = await createFollowup({ type: newFu.type, scheduled_at: newFu.scheduled_at, notes: newFu.response || null, outcome: newFu.status_detail, status: isFuture ? 'Scheduled' : 'Completed', organization_id: orgId, patient_id: id, lead_id: null })
-    setFollowups(prev => [f, ...prev])
-    await logActivity('note', `${newFu.type} logged: ${newFu.status_detail}${newFu.response ? ` | Response: ${newFu.response}` : ''}`)
-    logAudit({ action: AUDIT.FOLLOWUP_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `${f.type} logged: ${f.outcome || f.status}`, metadata: { type: f.type, status: f.status, outcome: f.outcome, scheduled_at: f.scheduled_at } })
-    setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '' })
-    toast({ type: 'followup', title: `${f.type} logged`, message: `${fullName}${f.outcome ? ` — ${f.outcome}` : ''}` })
+  // Add Follow-up inserts a blank row; values are filled inline in the table.
+  const handleAddBlankFollowup = async () => {
+    if (!orgId) return
+    try {
+      const f = await createFollowup({
+        type: 'Call', scheduled_at: new Date().toISOString(),
+        notes: null, outcome: null, caller_name: null, status: 'Scheduled',
+        organization_id: orgId, patient_id: id, lead_id: null,
+      })
+      setFollowups(prev => [f, ...prev])
+      const row = await logActivity('note', 'Follow-up added')
+      if (row) setActivities(prev => [row, ...prev])
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
-  const handleCompleteFollowup = async (fuId, outcome) => { const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
-  const handleMissFollowup = async (fuId) => { const updated = await updateFollowup(fuId, { status: 'Missed' }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
-  const handleRescheduleFollowup = async (fuId, newDate, newType) => { const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType }); setFollowups(prev => prev.map(f => f.id === fuId ? updated : f)) }
+
+  // Notes are shared with the lead this patient was converted from (single source
+  // of truth = linked lead's description), so they stay in sync across both pages.
+  // If there's no linked lead, fall back to patient.custom_data.notes.
+  const handleSaveNotes = async () => {
+    setNotesSaving(true)
+    try {
+      const linkedLead = patient.leads?.[0] || null
+      if (linkedLead) {
+        const updated = await updateLead(linkedLead.id, { description: notesDraft || null })
+        setPatient(prev => ({ ...prev, leads: prev.leads.map(l => l.id === linkedLead.id ? { ...l, description: updated.description } : l) }))
+      } else {
+        const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), notes: notesDraft || null } })
+        setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+      }
+      const row = await logActivity('note', 'Notes updated')
+      if (row) setActivities(prev => [row, ...prev])
+      setNotesEditing(false)
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setNotesSaving(false) }
+  }
+
+  const handleDeleteFollowup = async (fuId) => {
+    const ok = await showConfirm({ title: 'Delete this follow-up?', confirmLabel: 'Delete' })
+    if (!ok) return
+    const prev = followups
+    setFollowups(list => list.filter(f => f.id !== fuId))
+    try { await deleteFollowup(fuId) }
+    catch (err) { setFollowups(prev); toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
 
   // Inline cell edit from the table view.
   const handleFollowupField = async (fuId, patch) => {
@@ -398,7 +279,7 @@ export default function PatientDetailPage({ params }) {
     try {
       const updated = await updateFollowup(fuId, patch)
       setFollowups(list => list.map(f => f.id === fuId ? updated : f))
-    } catch (err) { setFollowups(list => list.map(f => f.id === fuId ? prev : f)); alert(err.message) }
+    } catch (err) { setFollowups(list => list.map(f => f.id === fuId ? prev : f)); toast({ type: 'error', title: 'Error', message: err.message }) }
   }
   // Inline create from the table's empty bottom row.
   const handleCreateFollowupInline = async (patch) => {
@@ -413,9 +294,10 @@ export default function PatientDetailPage({ params }) {
         organization_id: orgId, patient_id: id, lead_id: null,
       })
       setFollowups(prev => [f, ...prev])
-      await logActivity('note', `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
+      const row = await logActivity('note', `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
+      if (row) setActivities(prev => [row, ...prev])
       toast({ type: 'followup', title: `${f.type} logged`, message: `${fullName}${f.outcome ? ` — ${f.outcome}` : ''}` })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // Apply configured automation rules (Settings → Rules) for a patient event.
@@ -484,53 +366,64 @@ export default function PatientDetailPage({ params }) {
       toast({ type: 'appointment', title: 'Appointment Booked', message: `${fullName} on ${format(scheduledAt, 'MMM d, h:mm a')}${apptDoc ? ` with ${apptDoc.name}` : ''}` })
       setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
       await applyRules('appointment_booked')
-    } catch (err) { alert(err.message) } finally { setSavingAppt(false) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) } finally { setSavingAppt(false) }
   }
   const handleApptStatus = async (aid, status) => {
     try { const u = await updateAppointment(aid, { status }); setAppointments(prev => prev.map(a => a.id === aid ? { ...a, status: u.status } : a)) }
-    catch (err) { alert(err.message) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // ── Visit details (stored on patient.custom_data.visits) ──
-  const openAddVisit = () => {
-    setVisitForm({ date: new Date().toISOString().slice(0, 10), service_ids: [], package_id: '', doctor_id: '', misc_cost: '', next_visit_date: '' })
-    setAddingVisit(true)
-  }
-  const handleAddVisit = async (e) => {
-    e.preventDefault()
-    if (!visitForm.date || !orgId) return
-    setSavingVisit(true)
+  // Add Visit inserts a blank row at the top; values are filled inline in the table.
+  const handleAddBlankVisit = async () => {
+    if (!orgId) return
+    const prevVisits = patient.custom_data?.visits || []
+    const record = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString().slice(0, 10),
+      service_ids: [], package_id: null, doctor_id: null,
+      misc_cost: 0, total: 0, next_visit_date: null,
+      created_at: new Date().toISOString(),
+    }
+    const visits = [record, ...prevVisits]
+    setPatient(prev => ({ ...prev, custom_data: { ...(prev.custom_data || {}), visits } }))
     try {
-      const record = {
-        id: crypto.randomUUID(),
-        date: visitForm.date,
-        service_ids: visitForm.service_ids,
-        package_id: visitForm.package_id || null,
-        doctor_id: visitForm.doctor_id || null,
-        misc_cost: visitForm.misc_cost === '' ? 0 : Number(visitForm.misc_cost),
-        total: computeVisitTotal(visitForm),
-        next_visit_date: visitForm.next_visit_date || null,
-        created_at: new Date().toISOString(),
-      }
-      const visits = [record, ...(patient.custom_data?.visits || [])]
       const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), visits } })
       setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
-      const row = await logActivity('note', `Visit on ${format(new Date(record.date), 'MMM d, yyyy')} · ₹${record.total.toLocaleString()}`)
-      if (row) setActivities(prev => [row, ...prev])
-      logAudit({ action: AUDIT.PATIENT_EDIT, entityType: 'patient', entityId: id, entityName: fullName, description: `Visit recorded (₹${record.total})`, metadata: { date: record.date, total: record.total } })
-      toast({ type: 'default', title: 'Visit recorded', message: `${fullName} · ₹${record.total.toLocaleString()}` })
-      setAddingVisit(false)
-    } catch (err) { alert(err.message) }
-    finally { setSavingVisit(false) }
+    } catch (err) {
+      setPatient(prev => ({ ...prev, custom_data: { ...(prev.custom_data || {}), visits: prevVisits } }))
+      toast({ type: 'error', title: 'Error', message: err.message })
+    }
   }
 
   const handleDeleteVisit = async (visitId) => {
-    if (!confirm('Delete this visit record?')) return
+    const ok = await showConfirm({ title: 'Delete this visit record?', confirmLabel: 'Delete' })
+    if (!ok) return
     try {
       const visits = (patient.custom_data?.visits || []).filter(v => v.id !== visitId)
       const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), visits } })
       setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
+
+  // Inline cell edit from the visits table — recompute total on every change.
+  const handleVisitField = async (visitId, patch) => {
+    const prevVisits = patient.custom_data?.visits || []
+    const next = prevVisits.map(v => {
+      if (v.id !== visitId) return v
+      const merged = { ...v, ...patch }
+      merged.total = computeVisitTotal(merged)
+      return merged
+    })
+    // optimistic update
+    setPatient(prev => ({ ...prev, custom_data: { ...(prev.custom_data || {}), visits: next } }))
+    try {
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), visits: next } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+    } catch (err) {
+      setPatient(prev => ({ ...prev, custom_data: { ...(prev.custom_data || {}), visits: prevVisits } }))
+      toast({ type: 'error', title: 'Error', message: err.message })
+    }
   }
 
   const linkedTagIds = (patient?.tags || []).map(t => t.tags?.id).filter(Boolean)
@@ -547,7 +440,7 @@ export default function PatientDetailPage({ params }) {
       if (row) setActivities(prev => [row, ...prev])
       logAudit({ action: AUDIT.TAG_ADD, entityType: 'patient', entityId: id, entityName: fullName, description: `Tag "${tag?.name || tagId}" added to patient` })
       await applyRules('tag_added')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleRemoveTag = async (tagId) => {
@@ -559,7 +452,7 @@ export default function PatientDetailPage({ params }) {
       const row = await logActivity('tag', `Tag "${tag?.name || 'tag'}" removed`)
       if (row) setActivities(prev => [row, ...prev])
       logAudit({ action: AUDIT.TAG_REMOVE, entityType: 'patient', entityId: id, entityName: fullName, description: `Tag "${tag?.name || tagId}" removed from patient` })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const openTagMenu = () => {
@@ -586,7 +479,7 @@ export default function PatientDetailPage({ params }) {
       await logActivity('note', memberId
         ? `Patient assigned to ${member?.name || 'team member'}`
         : 'Patient unassigned')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     setAssigningPatient(false)
   }
 
@@ -601,13 +494,11 @@ export default function PatientDetailPage({ params }) {
   const staffMembers = org?.settings?.staff_members || []
   const assignee = patient.assigned_to ? staffMembers.find(m => m.id === patient.assigned_to) : null
 
-  // Visit records + live totals for the add form
+  // Visit records (edited inline in the table)
   const visits = patient.custom_data?.visits || []
-  const liveServices = visitForm.service_ids.reduce((s, id) => s + servicePrice(id), 0)
-  const livePackage  = visitForm.package_id ? packagePrice(visitForm.package_id) : 0
-  const liveFee      = visitForm.doctor_id ? doctorFee(visitForm.doctor_id) : 0
-  const liveMisc     = visitForm.misc_cost === '' ? 0 : Number(visitForm.misc_cost)
-  const liveTotal    = liveServices + livePackage + liveFee + liveMisc
+  // Notes: linked lead's description (synced) or patient.custom_data.notes
+  const linkedLead = patient.leads?.[0] || null
+  const notesValue = linkedLead ? linkedLead.description : patient.custom_data?.notes
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -697,7 +588,11 @@ export default function PatientDetailPage({ params }) {
             )}
           </div>
 
-          <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border)"><Trash2 size={15} className="text-red-500" /></button>
+          {hasPermission('patients.delete') && (
+            <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border) hover:bg-red-50 hover:border-red-200 transition-colors">
+              <Trash2 size={15} className="text-red-500" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -983,182 +878,33 @@ export default function PatientDetailPage({ params }) {
         {/* Visit Details */}
         <Card className="border-(--color-border) overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            <div className="flex items-center gap-2.5">
-              <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Activity size={13} /> Visit Details</p>
-              <div className="flex items-center gap-0.5">
-                {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id: vid, Icon, title }) => (
-                  <button key={vid} type="button" title={title} onClick={() => setVisitView(vid)}
-                    className="p-1.5 rounded-md transition-all"
-                    style={visitView === vid ? { background: 'var(--color-brand)', color: 'white' } : { color: 'var(--color-text-muted)' }}>
-                    <Icon size={14} />
-                  </button>
-                ))}
-              </div>
+            <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><Activity size={13} /> Visit Details</p>
+            <div className="flex items-center gap-2">
+              {visits.length > 1 && (
+                <button type="button" onClick={() => setVisitSort(s => s === 'desc' ? 'asc' : 'desc')}
+                  title={visitSort === 'desc' ? 'Date: newest first' : 'Date: oldest first'}
+                  className="p-1.5 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-surface)" style={{ color: 'var(--color-text-muted)' }}>
+                  {visitSort === 'desc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
+                </button>
+              )}
+              <Button size="sm" onClick={handleAddBlankVisit}><Plus size={14} /> Add Visit</Button>
             </div>
-            {!addingVisit && <Button size="sm" onClick={openAddVisit}><Plus size={14} /> Add Visit</Button>}
           </div>
           <div className="p-3 space-y-3">
-            {addingVisit && (
-              <form onSubmit={handleAddVisit} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Visit Date *</label>
-                    <input type="date" required value={visitForm.date} onChange={e => setVisitForm(f => ({ ...f, date: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Doctor consulted</label>
-                    <select value={visitForm.doctor_id} onChange={e => setVisitForm(f => ({ ...f, doctor_id: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                      <option value="">— None —</option>
-                      {doctors.map(d => <option key={d.id} value={d.id}>{d.name}{d.fee != null ? ` · ₹${Number(d.fee).toLocaleString()}` : ''}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Services availed — dropdown multi-select */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Services availed</label>
-                  <ServiceMultiSelect services={services} selected={visitForm.service_ids}
-                    onChange={(ids) => setVisitForm(f => ({ ...f, service_ids: ids }))} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Package</label>
-                    <select value={visitForm.package_id} onChange={e => setVisitForm(f => ({ ...f, package_id: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                      <option value="">— None —</option>
-                      {packages.map(p => <option key={p.id} value={p.id}>{p.name} · ₹{packagePrice(p.id).toLocaleString()}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Miscellaneous cost (₹)</label>
-                    <input type="number" min="0" step="0.01" placeholder="0" value={visitForm.misc_cost} onChange={e => setVisitForm(f => ({ ...f, misc_cost: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                  </div>
-                </div>
-
-                {/* Auto-calculated total */}
-                <div className="rounded-xl border border-(--color-border) p-3 space-y-1.5" style={{ background: 'var(--color-surface)' }}>
-                  {[
-                    { label: 'Services', val: liveServices },
-                    { label: 'Package', val: livePackage },
-                    { label: 'Consultation fee', val: liveFee },
-                    { label: 'Miscellaneous', val: liveMisc },
-                  ].map(r => (
-                    <div key={r.label} className="flex items-center justify-between text-xs">
-                      <span style={{ color: 'var(--color-text-muted)' }}>{r.label}</span>
-                      <span style={{ color: 'var(--color-text-secondary)' }}>₹{r.val.toLocaleString()}</span>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between pt-2 border-t border-(--color-border)">
-                    <span className="text-xs font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Total</span>
-                    <span className="text-base font-800" style={{ color: 'var(--color-brand)' }}>₹{liveTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Next preferred visit date</label>
-                  <input type="date" value={visitForm.next_visit_date} onChange={e => setVisitForm(f => ({ ...f, next_visit_date: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1 border-t border-(--color-border)">
-                  <Button variant="secondary" size="sm" type="button" onClick={() => setAddingVisit(false)}>Cancel</Button>
-                  <Button size="sm" type="submit" disabled={savingVisit || !visitForm.date}>{savingVisit ? 'Saving…' : <><Save size={13} /> Save Visit</>}</Button>
-                </div>
-              </form>
-            )}
-
-            {visits.length === 0 && !addingVisit ? (
-              <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><Activity size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No visits recorded yet.</p></div>
-            ) : visits.length > 0 && (
-              visitView === 'table' ? (
-                /* ── Table / excel view ── */
-                <div className="-mx-3 -mb-3 overflow-x-auto border-t border-(--color-border)">
-                  <table className="w-full text-xs" style={{ minWidth: '820px' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--color-surface-2)' }}>
-                        {['Date', 'Doctor', 'Services', 'Package', 'Misc', 'Total', 'Next Visit', ''].map((h, i) => (
-                          <th key={i} className="text-left px-3 py-2.5 text-[10px] font-700 uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...visits].sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
-                        const doc = v.doctor_id ? doctors.find(d => d.id === v.doctor_id) : null
-                        const pkg = v.package_id ? packages.find(p => p.id === v.package_id) : null
-                        const svcNames = (v.service_ids || []).map(sid => services.find(s => s.id === sid)?.name).filter(Boolean)
-                        return (
-                          <tr key={v.id} className="group transition-colors hover:bg-(--color-surface-2)" style={{ borderBottom: '1px solid var(--color-border)' }}>
-                            <td className="px-3 py-2.5 whitespace-nowrap font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(v.date), 'MMM d, yyyy')}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: doc ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{doc?.name || '—'}</td>
-                            <td className="px-3 py-2.5" style={{ color: svcNames.length ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{svcNames.length ? svcNames.join(', ') : '—'}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: pkg ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{pkg?.name || '—'}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: v.misc_cost ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{v.misc_cost ? `₹${Number(v.misc_cost).toLocaleString()}` : '—'}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap font-700" style={{ color: 'var(--color-brand)' }}>₹{Number(v.total || 0).toLocaleString()}</td>
-                            <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: v.next_visit_date ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{v.next_visit_date ? format(new Date(v.next_visit_date), 'MMM d, yyyy') : '—'}</td>
-                            <td className="px-3 py-2.5 text-right">
-                              <button type="button" onClick={() => handleDeleteVisit(v.id)} title="Delete" className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                /* ── Regular / card view ── */
-                <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
-                  {[...visits].sort((a, b) => new Date(b.date) - new Date(a.date)).map(v => {
-                    const doc = v.doctor_id ? doctors.find(d => d.id === v.doctor_id) : null
-                    const pkg = v.package_id ? packages.find(p => p.id === v.package_id) : null
-                    const svcNames = (v.service_ids || []).map(sid => services.find(s => s.id === sid)?.name).filter(Boolean)
-                    const dt = new Date(v.date)
-                    return (
-                      <div key={v.id} className="flex items-start gap-3 p-4 rounded-xl border border-(--color-border) group" style={{ background: 'var(--color-surface-2)' }}>
-                        {/* Date block */}
-                        <div className="w-11 shrink-0 rounded-lg overflow-hidden border border-(--color-border) text-center" style={{ background: 'var(--color-surface)' }}>
-                          <div className="text-[9px] font-700 uppercase py-0.5" style={{ background: 'var(--color-brand)', color: 'white' }}>{format(dt, 'MMM')}</div>
-                          <div className="text-base font-800 leading-tight py-1" style={{ color: 'var(--color-text-primary)' }}>{format(dt, 'd')}</div>
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-xs font-600" style={{ color: 'var(--color-text-muted)' }}>{format(dt, 'EEEE, yyyy')}</p>
-                              {doc && <p className="text-sm font-600 mt-0.5 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}><User size={12} style={{ color: 'var(--color-text-muted)' }} /> {doc.name}{doc.department ? ` · ${doc.department}` : ''}</p>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-base font-800" style={{ color: 'var(--color-brand)' }}>₹{Number(v.total || 0).toLocaleString()}</span>
-                              <button type="button" onClick={() => handleDeleteVisit(v.id)} title="Delete" className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>
-                            </div>
-                          </div>
-
-                          {(svcNames.length > 0 || pkg) && (
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {pkg && <span className="inline-flex items-center gap-1 text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: '#f3e8ff', color: '#7c3aed' }}><Package size={10} /> {pkg.name}</span>}
-                              {svcNames.map((n, idx) => (
-                                <span key={idx} className="text-[10px] font-600 px-2 py-0.5 rounded-md" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{n}</span>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-2 flex-wrap mt-2">
-                            {v.misc_cost ? <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Misc: ₹{Number(v.misc_cost).toLocaleString()}</span> : null}
-                            {v.next_visit_date && (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-600 px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#b45309' }}>
-                                <Calendar size={11} /> Next visit: {format(new Date(v.next_visit_date), 'MMM d, yyyy')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
+            {visits.length === 0 ? (
+              <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><Activity size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No visits recorded yet. Click “Add Visit” to add a row.</p></div>
+            ) : (
+              <div className="-mx-3 -mb-3">
+                <VisitsTable
+                  visits={visits}
+                  services={services}
+                  packages={packages}
+                  doctors={doctors}
+                  sort={visitSort}
+                  onField={handleVisitField}
+                  onDelete={handleDeleteVisit}
+                />
+              </div>
             )}
           </div>
         </Card>
@@ -1178,63 +924,58 @@ export default function PatientDetailPage({ params }) {
         })}
 
         <Card className="border-(--color-border) overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            <div className="flex items-center gap-2.5">
-              <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
-              <div className="flex items-center gap-0.5">
-                {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id: vid, Icon, title }) => (
-                  <button key={vid} type="button" title={title} onClick={() => setFuView(vid)}
-                    className="p-1.5 rounded-md transition-all"
-                    style={fuView === vid ? { background: 'var(--color-brand)', color: 'white' } : { color: 'var(--color-text-muted)' }}>
-                    <Icon size={14} />
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {fuView === 'table' && (
-                <div className="relative">
-                  <button type="button" title="Sort" onClick={() => setFuSortOpen(o => !o)}
-                    className="p-1.5 rounded-md border border-(--color-border) hover:bg-(--color-surface)" style={{ color: 'var(--color-text-muted)' }}>
-                    <ArrowUpDown size={14} />
-                  </button>
-                  {fuSortOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setFuSortOpen(false)} />
-                      <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-(--color-border) py-1" style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
-                        {[{ id: 'added', label: 'Date added' }, { id: 'modified_desc', label: 'Last modified — newest first' }, { id: 'modified_asc', label: 'Last modified — oldest first' }].map(o => (
-                          <button key={o.id} type="button" onClick={() => { setFuSort(o.id); setFuSortOpen(false) }}
-                            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-primary)' }}>
-                            {o.label}{fuSort === o.id && <Check size={13} style={{ color: 'var(--color-brand)' }} />}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-              {!showFuForm && fuView === 'regular' && <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add</Button>}
-            </div>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><PhoneCall size={13} /> Follow-ups</p>
+            <Button size="sm" onClick={handleAddBlankFollowup}><Plus size={14} /> Add Follow-up</Button>
           </div>
           <div className="p-3 space-y-3">
-            {fuView === 'table' ? (
+            {followups.length === 0 ? (
+              <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups yet. Click “Add Follow-up” to add a row.</p></div>
+            ) : (
               <div className="-mx-3 -mb-3 max-h-150 overflow-y-auto">
                 <FollowupTable
                   followups={followups}
                   staff={org?.settings?.staff_members || []}
                   onField={handleFollowupField}
                   onCreate={handleCreateFollowupInline}
+                  onDelete={handleDeleteFollowup}
                   statusStyle={FU_STATUS_STYLE}
                   typeStyle={TYPE_COLOR}
                   types={FOLLOWUP_TYPES}
                   outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
                   sort={fuSort}
+                  onSortToggle={() => setFuSort(s => s === 'scheduled_desc' ? 'scheduled_asc' : 'scheduled_desc')}
+                  showDraftRow={false}
                 />
               </div>
-            ) : (<>
-            {showFuForm && <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><div className="space-y-1.5"><label className="block text-xs font-500">Type</label><div className="flex flex-wrap gap-1.5">{FOLLOWUP_TYPES.map(t => <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))} className="px-3 py-1.5 rounded-full text-[11px] font-600 border" style={newFu.type === t ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)' }}>{t}</button>)}</div></div><Select label="Status *" value={newFu.status_detail} onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))} options={[{ value: '', label: 'Select status' }, ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s }))]} /><CustomDateTimePicker value={newFu.scheduled_at || new Date().toISOString()} onChange={v => setNewFu(f => ({ ...f, scheduled_at: v }))} /><Textarea label="Response" value={newFu.response} onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setShowFuForm(false)}>Cancel</Button><Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>Save</Button></div></form>}
-            {followups.length === 0 ? <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><PhoneCall size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No follow-ups found.</p></div> : <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 max-h-150 overflow-y-auto border-t border-(--color-border)">{[...followups].sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)).map(f => <FollowupCard key={f.id} f={f} onComplete={handleCompleteFollowup} onMiss={handleMissFollowup} onReschedule={handleRescheduleFollowup} />)}</div>}
-            </>)}
+            )}
+          </div>
+        </Card>
+
+        {/* ── Notes (synced with the linked lead) ── */}
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Notes</p>
+            {!notesEditing && (
+              <Button size="sm" onClick={() => { setNotesDraft(notesValue || ''); setNotesEditing(true) }}>
+                <Edit2 size={13} /> {notesValue ? 'Edit' : 'Add note'}
+              </Button>
+            )}
+          </div>
+          <div className="p-4">
+            {notesEditing ? (
+              <div className="space-y-3">
+                <Textarea placeholder="Write a note about this patient…" value={notesDraft} onChange={e => setNotesDraft(e.target.value)} rows={5} />
+                <div className="flex gap-2 justify-end">
+                  <Button variant="secondary" size="sm" type="button" onClick={() => setNotesEditing(false)}>Cancel</Button>
+                  <Button size="sm" type="button" onClick={handleSaveNotes} disabled={notesSaving}>{notesSaving ? 'Saving…' : 'Save'}</Button>
+                </div>
+              </div>
+            ) : notesValue ? (
+              <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-text-secondary)' }}>{notesValue}</p>
+            ) : (
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No notes yet. Click “Add note” to write one.</p>
+            )}
           </div>
         </Card>
       </div>

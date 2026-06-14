@@ -3,6 +3,7 @@ import { useEffect, useState, use } from 'react'
 import { ArrowLeft, Edit2, Trash2, Mail, Phone, Building2, TrendingUp, Plus } from 'lucide-react'
 import { Button, Badge, Card, Avatar, Tag, Spinner, Input, Select, Textarea, TagsInput, Modal } from '@/components/ui'
 import { getContact, updateContact, deleteContact, getActivities, createActivity } from '@/lib/supabase/queries'
+import { showConfirm } from '@/lib/confirm'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -40,7 +41,8 @@ export default function ContactDetailPage({ params }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this contact?')) return
+    const ok = await showConfirm({ title: 'Delete this contact?', message: 'This cannot be undone.', confirmLabel: 'Delete contact' })
+    if (!ok) return
     await deleteContact(id)
     router.push('/contacts')
   }

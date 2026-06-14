@@ -12,6 +12,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import clsx from 'clsx'
 
 const TYPE_OPTIONS = ['Patient', 'Lead']
@@ -410,7 +412,12 @@ export default function ConsultationPage() {
 
   // ── Bulk delete ──
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selected.size} record${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    const ok = await showConfirm({
+      title: `Delete ${selected.size} record${selected.size !== 1 ? 's' : ''}?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
     setDeleting(true)
     try {
       await Promise.all([...selected].map(key => {
@@ -419,7 +426,7 @@ export default function ConsultationPage() {
       }))
       setRows(prev => prev.filter(r => !selected.has(rowKey(r))))
       clearSelection()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setDeleting(false) }
   }
 

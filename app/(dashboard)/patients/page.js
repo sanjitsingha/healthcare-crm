@@ -4,6 +4,8 @@ import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, Download, Togg
 import { Card, Spinner } from '@/components/ui'
 import { getPatients, deletePatient, updatePatient, getTags } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import { getPref, setPref } from '@/lib/prefs'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
@@ -303,7 +305,7 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
 
 // ── Main Page ──────────────────────────────────────────────────
 export default function PatientsPage() {
-  const { orgId, org } = useOrg()
+  const { orgId, org, hasPermission } = useOrg()
   const router = useRouter()
 
   const [patients, setPatients] = useState([])
@@ -414,12 +416,18 @@ export default function PatientsPage() {
 
   // ── Bulk actions ──
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selected.size} patient${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    const ok = await showConfirm({
+      title: `Delete ${selected.size} patient${selected.size !== 1 ? 's' : ''}?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
     try {
       await Promise.all([...selected].map(id => deletePatient(id)))
       setPatients(prev => prev.filter(p => !selected.has(p.id)))
       clearSel()
-    } catch (err) { alert(err.message) }
+      toast({ type: 'success', title: 'Deleted', message: `${selected.size} patient${selected.size !== 1 ? 's' : ''} deleted` })
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleBulkStatus = async (status) => {
@@ -427,7 +435,7 @@ export default function PatientsPage() {
       await Promise.all([...selected].map(id => updatePatient(id, { status })))
       setPatients(prev => prev.map(p => selected.has(p.id) ? { ...p, status } : p))
       clearSel()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleExport = () => {
@@ -497,11 +505,13 @@ export default function PatientsPage() {
             style={{ color: 'var(--color-text-muted)' }}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-          <Link href="/patients/new">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90" style={{ background: 'var(--color-brand)' }}>
-              <Plus size={16} /> New Patient
-            </button>
-          </Link>
+          {hasPermission('patients.create') && (
+            <Link href="/patients/new">
+              <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90" style={{ background: 'var(--color-brand)' }}>
+                <Plus size={16} /> New Patient
+              </button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -595,9 +605,11 @@ export default function PatientsPage() {
           <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) bg-white hover:bg-gray-50 transition-colors" style={{ color: 'var(--color-text-secondary)' }}>
             <Download size={14} /> Export
           </button>
-          <button onClick={handleBulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors">
-            <Trash2 size={14} /> Delete
-          </button>
+          {hasPermission('patients.delete') && (
+            <button onClick={handleBulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors">
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       )}
 

@@ -22,6 +22,7 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import { logAudit, AUDIT } from '@/lib/audit'
 import { matchingRules, ruleActions } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, subDays, addDays } from 'date-fns'
@@ -274,7 +275,7 @@ function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
     try {
       await onComplete(f.id, outcome, scheduleNext ? { type: nextType, scheduled_at: nextDate } : null)
       setCompleting(false)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
@@ -284,7 +285,7 @@ function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
     try {
       await onReschedule(f.id, nextDate, nextType)
       setRescheduling(false)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
@@ -438,7 +439,7 @@ function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
 export default function LeadDetailPage({ params }) {
   const { id }         = use(params)
   const router         = useRouter()
-  const { orgId, org } = useOrg()
+  const { orgId, org, hasPermission } = useOrg()
 
   const [lead,       setLead]       = useState(null)
   const [activities, setActivities] = useState([])
@@ -539,7 +540,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       logAudit({ action: AUDIT.TAG_ADD, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Tag "${tag?.name || tagId}" added to lead` })
       await applyRules('tag_added')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleRemoveTag = async (tagId) => {
@@ -551,7 +552,7 @@ export default function LeadDetailPage({ params }) {
       await logActivity('tag', `Tag "${tag?.name || 'tag'}" removed`)
       await refreshActivities()
       logAudit({ action: AUDIT.TAG_REMOVE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Tag "${tag?.name || tagId}" removed from lead` })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const openTagMenu = () => {
@@ -592,7 +593,7 @@ export default function LeadDetailPage({ params }) {
       setProfileEditing(false)
       logAudit({ action: AUDIT.LEAD_EDIT, entityType: 'lead', entityId: id, entityName: lead?.title, description: 'Lead profile updated' })
       await applyRules('lead_updated', { ...before, ...updated })
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) }
     finally { setProfileSaving(false) }
   }
 
@@ -615,13 +616,19 @@ export default function LeadDetailPage({ params }) {
       await applyRules('lead_updated', fresh)
       if (updated.source !== before?.source)     await applyRules('source_changed', fresh)
       if (updated.priority !== before?.priority) await applyRules('priority_changed', fresh)
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) }
     finally { setInfoSaving(false) }
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this lead? This cannot be undone.')) return
-    await deleteLead(id); router.push('/leads')
+    const ok = await showConfirm({
+      title: 'Delete this lead?',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete lead',
+    })
+    if (!ok) return
+    await deleteLead(id)
+    router.push('/leads')
   }
 
   const handleAssignLead = async (memberId) => {
@@ -638,7 +645,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       logAudit({ action: AUDIT.LEAD_ASSIGN, entityType: 'lead', entityId: id, entityName: lead?.title, description: memberId ? `Assigned to ${member?.name || memberId}` : 'Lead unassigned', before: { assigned_to: prevMember?.name || lead.assigned_to }, after: { assigned_to: member?.name || memberId || null } })
       await applyRules(memberId ? 'lead_assigned' : 'lead_unassigned', { ...lead, assigned_to: updated.assigned_to })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     setAssigningLead(false)
   }
 
@@ -653,7 +660,7 @@ export default function LeadDetailPage({ params }) {
       setChangingStage(false)
       logAudit({ action: AUDIT.LEAD_STAGE_CHANGE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Stage changed: ${prevStage} → ${stage}`, before: { stage: prevStage }, after: { stage } })
       await applyRules('stage_changed', { ...lead, stage: updated.stage })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // Apply configured automation rules (Settings → Rules) for a lead event.
@@ -735,7 +742,8 @@ export default function LeadDetailPage({ params }) {
 
   const handleConvertToPatient = async () => {
     if (lead.patient_id) { router.push(`/patients/${lead.patient_id}`); return }
-    if (!confirm('Create a Patient record from this lead?')) return
+    const ok = await showConfirm({ title: 'Convert to Patient?', message: 'Creates a Patient record from this lead.', confirmLabel: 'Convert', variant: 'info' })
+    if (!ok) return
     try {
       const pat = await createPatient({
         first_name: lead.first_name || lead.title, last_name: lead.last_name || null,
@@ -754,7 +762,7 @@ export default function LeadDetailPage({ params }) {
       logAudit({ action: AUDIT.LEAD_CONVERT, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Lead converted to patient: ${displayName}`, after: { patient_id: pat.id, stage: 'Converted' } })
       toast({ type: 'patient_created', title: 'Converted to Patient', message: `${displayName} is now a patient.` })
       await applyRules('converted_to_patient', { ...lead, patient_id: pat.id, stage: 'Converted' })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // ── Task handlers ──
@@ -771,7 +779,7 @@ export default function LeadDetailPage({ params }) {
       logAudit({ action: AUDIT.TASK_CREATE, entityType: 'lead', entityId: id, entityName: lead?.title, description: `Task created: "${t.title}"`, metadata: { task_id: t.id, priority: t.priority, due_date: t.due_date } })
       toast({ type: 'task', title: 'Task Added', message: `${displayName}: ${t.title}` })
       await applyRules('task_added')
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) }
   }
 
   const handleTaskToggle = async (task) => {
@@ -812,7 +820,7 @@ export default function LeadDetailPage({ params }) {
       toast({ type: 'followup', title: `${f.type} logged`, message: `${displayName}${f.outcome ? ` — ${f.outcome}` : ''}` })
       // Event-based automation (configured in Settings → Rules)
       await applyRules('followup_logged')
-    } catch (e) { alert(e.message) }
+    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) }
   }
 
   const handleCompleteFollowup = async (fuId, outcome, next) => {
@@ -874,7 +882,7 @@ export default function LeadDetailPage({ params }) {
       setFollowups(list => list.map(f => f.id === fuId ? updated : f))
     } catch (err) {
       setFollowups(list => list.map(f => f.id === fuId ? prev : f)) // rollback
-      alert(err.message)
+      toast({ type: 'error', title: 'Error', message: err.message })
     }
   }
 
@@ -901,7 +909,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       toast({ type: 'followup', title: `${f.type} logged`, message: `${displayName}${f.outcome ? ` — ${f.outcome}` : ''}` })
       await applyRules('followup_logged')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleSaveNotes = async () => {
@@ -914,7 +922,7 @@ export default function LeadDetailPage({ params }) {
       setNotesEditing(false)
       logAudit({ action: AUDIT.NOTE_ADD, entityType: 'lead', entityId: id, entityName: lead?.title, description: 'Lead notes updated' })
       await applyRules('note_updated', { ...lead, description: updated.description })
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setNotesSaving(false) }
   }
 
@@ -928,7 +936,7 @@ export default function LeadDetailPage({ params }) {
       await refreshActivities()
       setReschedulingId(null)
       setRescheduleDate('')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setRescheduleSaving(false) }
   }
 
@@ -987,7 +995,7 @@ export default function LeadDetailPage({ params }) {
       setNewAppt({ date: '', name: '', phone: '', notes: '', doctor_id: '' })
       // Event-based automation (configured in Settings → Rules)
       await applyRules('appointment_booked')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setBookingSaving(false) }
   }
 
@@ -1139,9 +1147,11 @@ export default function LeadDetailPage({ params }) {
             )}
           </div>
 
-          <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border) hover:bg-red-50 hover:border-red-200 transition-colors">
-            <Trash2 size={15} className="text-red-500" />
-          </button>
+          {hasPermission('leads.delete') && (
+            <button onClick={handleDelete} className="p-2 rounded-lg border border-(--color-border) hover:bg-red-50 hover:border-red-200 transition-colors">
+              <Trash2 size={15} className="text-red-500" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1326,8 +1336,8 @@ export default function LeadDetailPage({ params }) {
                       { icon: User,    label: displayDOB ? `DOB: ${format(new Date(displayDOB), 'MMM d, yyyy')}` : 'DOB: —' },
                       { icon: MapPin,  label: displayAddr || '—' },
                       { icon: Tag,     label: lead.custom_data?.blood_group ? `Blood: ${lead.custom_data.blood_group}` : 'Blood: —' },
-                    ].map(({ icon: Icon, label }) => (
-                      <div key={label} className="flex items-center gap-2">
+                    ].map(({ icon: Icon, label }, i) => (
+                      <div key={i} className="flex items-center gap-2">
                         <Icon size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                         <span className="text-xs truncate" style={{ color: label.endsWith('—') ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>{label}</span>
                       </div>

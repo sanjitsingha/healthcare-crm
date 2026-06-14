@@ -7,6 +7,8 @@ import {
 import { Button, Card, Input, Spinner } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization, getTags, createTag, deleteTag } from '@/lib/supabase/queries'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 
 const DEFAULT_LEAD_STAGES = [
   { name: 'New',        color: '#6366f1' },
@@ -53,7 +55,7 @@ export default function TagsPage() {
     try {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), lead_stages: updated } })
       setStages(updated)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSavingStages(false) }
   }
 
@@ -67,7 +69,8 @@ export default function TagsPage() {
   }
 
   const handleDeleteStage = async (stageName) => {
-    if (!confirm(`Remove "${stageName}" stage? Leads currently in this stage will keep it until manually changed.`)) return
+    const ok = await showConfirm({ title: `Remove "${stageName}" stage?`, message: 'Leads in this stage will keep it until manually changed.', confirmLabel: 'Remove' })
+    if (!ok) return
     await persistStages(stages.filter(s => s.name !== stageName))
   }
 
@@ -90,16 +93,17 @@ export default function TagsPage() {
       await createTag({ ...newTag, organization_id: orgId })
       await loadTags()
       resetForm()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this tag? It will be removed from all patients.')) return
+    const ok = await showConfirm({ title: 'Delete this tag?', message: 'It will be removed from all patients.', confirmLabel: 'Delete' })
+    if (!ok) return
     try {
       await deleteTag(id)
       setTags(prev => prev.filter(t => t.id !== id))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   return (

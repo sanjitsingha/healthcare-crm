@@ -5,6 +5,8 @@ import { Button, Card, Input, Textarea, Avatar, Select } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const defaultSchedule = () => DAYS.reduce((acc, d) => ({ ...acc, [d]: { enabled: false, start: '09:00', end: '17:00' } }), {})
@@ -73,19 +75,20 @@ export default function DoctorsPage() {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), doctors: updated } })
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `${editingId ? 'Updated' : 'Added'} doctor: ${payload.name}`, metadata: { name: payload.name, department: payload.department, fee: payload.fee } })
       setDoctors(updated); resetForm()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Remove this doctor?')) return
+    const ok = await showConfirm({ title: 'Remove this doctor?', confirmLabel: 'Remove' })
+    if (!ok) return
     const doc = doctors.find(d => d.id === id)
     const updated = doctors.filter(d => d.id !== id)
     try {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), doctors: updated } })
       logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `Doctor removed: ${doc?.name || id}`, metadata: { name: doc?.name } })
       setDoctors(updated)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   return (

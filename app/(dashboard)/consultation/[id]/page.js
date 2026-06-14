@@ -6,7 +6,7 @@ import {
   ArrowLeft, Stethoscope, Plus, Calendar, Clock, CheckSquare, History,
   Phone, Mail, User, UserRound, TrendingUp, ChevronDown, Check, X,
   MessageSquare, Edit2, Tag, Bell, FileText,
-  List, Table2, ArrowUpDown, RotateCcw, PhoneCall,
+  List, Table2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, PhoneCall,
 } from 'lucide-react'
 import { Button, Card, Spinner, Avatar, Input, Select, Textarea, Modal } from '@/components/ui'
 import {
@@ -14,10 +14,12 @@ import {
   getAppointments, createAppointment, updateAppointment,
   getTasks, createTask, updateTask,
   getPersonTimeline, createActivity,
-  getFollowups, createFollowup, updateFollowup,
+  getFollowups, createFollowup, updateFollowup, deleteFollowup,
 } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import Timeline from '@/components/crm/Timeline'
 import FollowupTable from '@/components/crm/FollowupTable'
 import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
@@ -79,438 +81,9 @@ const FU_STATUS_STYLE = {
   Rescheduled: { bg: '#f3f4f6', color: '#6b7280' },
 }
 
-// ── Visit details — Excel-style table ─────────────────────────
-function VisitDetailsTable({ rows }) {
-  if (!rows?.length) return null
-  return (
-    <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ fontFamily: 'ui-monospace, monospace' }}>
-      <div className="grid border-b border-(--color-border)"
-        style={{ gridTemplateColumns: '1fr 1.5fr', background: 'var(--color-surface-2)' }}>
-        <span className="px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Detail</span>
-        <span className="px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider border-l border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>Value</span>
-      </div>
-      {rows.map((r, i) => (
-        <div key={i} className="grid border-b border-(--color-border) last:border-0"
-          style={{ gridTemplateColumns: '1fr 1.5fr', background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-2)' }}>
-          <span className="px-3 py-2 text-xs font-600" style={{ color: 'var(--color-text-secondary)' }}>{r.label || '—'}</span>
-          <span className="px-3 py-2 text-xs border-l border-(--color-border)" style={{ color: 'var(--color-text-primary)' }}>{r.value || '—'}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Single consultation record (expandable) ────────────────────
-function ConsultationRecord({ c, doctors }) {
-  const [open, setOpen] = useState(false)
-  const t = TYPE_STYLE[c.consultation_type]   || TYPE_STYLE.Routine
-  const s = C_STATUS_STYLE[c.status]          || C_STATUS_STYLE.Completed
-  const doctor = c.doctor_id ? doctors.find(d => d.id === c.doctor_id) : null
-
-  const fields = [
-    ['Chief Complaint', c.chief_complaint],
-    ['Diagnosis', c.diagnosis],
-    ['Clinical Notes', c.clinical_notes],
-    ['Treatment Plan', c.treatment_plan],
-    ['Prescription', c.prescription],
-  ].filter(([, v]) => v)
-
-  return (
-    <div className="rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-      {/* Row */}
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-(--color-surface-2) transition-colors">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
-          <Stethoscope size={14} style={{ color: 'var(--color-brand)' }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>
-              {format(new Date(c.consulted_at), 'EEE, MMM d yyyy · h:mm a')}
-            </span>
-            <span className="text-[10px] font-700 px-2 py-0.5 rounded-full" style={{ background: t.bg, color: t.color }}>{c.consultation_type}</span>
-            <span className="text-[10px] font-700 px-2 py-0.5 rounded-full" style={{ background: s.bg, color: s.color }}>{c.status}</span>
-          </div>
-          <div className="flex items-center gap-3 mt-0.5 text-[11px] flex-wrap" style={{ color: 'var(--color-text-muted)' }}>
-            {doctor && <span className="flex items-center gap-1"><User size={11} />{doctor.name}</span>}
-            {c.chief_complaint && <span className="truncate max-w-xs">{c.chief_complaint}</span>}
-          </div>
-        </div>
-        <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: 'var(--color-text-muted)', flexShrink: 0 }} />
-      </button>
-
-      {/* Expanded detail */}
-      {open && (
-        <div className="border-t border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-          {/* Clinical fields */}
-          {fields.length > 0 && (
-            <div className="grid grid-cols-2 gap-4 p-4 pb-3">
-              {fields.map(([label, v]) => (
-                <div key={label}>
-                  <p className="text-[10px] font-700 uppercase tracking-wide mb-1" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
-                  <p className="text-xs leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-text-secondary)' }}>{v}</p>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Visit details — Excel table */}
-          {Array.isArray(c.visit_details) && c.visit_details.length > 0 && (
-            <div className={clsx('px-4', fields.length > 0 ? 'pb-4' : 'py-4')}>
-              <p className="text-[10px] font-700 uppercase tracking-wide mb-2" style={{ color: 'var(--color-text-muted)' }}>Visit Details</p>
-              <VisitDetailsTable rows={c.visit_details} />
-            </div>
-          )}
-          {fields.length === 0 && (!c.visit_details?.length) && (
-            <p className="px-4 py-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>No details recorded.</p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Inline "Log Consultation" modal ───────────────────────────
-function LogConsultationModal({ open, onClose, entity, orgId, doctors, onCreated }) {
-  const blank = () => ({
-    consultation_type: 'Initial', status: 'Completed',
-    consulted_at_date: format(new Date(), 'yyyy-MM-dd'),
-    consulted_at_time: format(new Date(), 'HH:mm'),
-    doctor_id: '',
-    chief_complaint: '', clinical_notes: '', diagnosis: '',
-    treatment_plan: '', prescription: '',
-    visit_details: [],
-    follow_up_required: false, follow_up_date: '',
-  })
-  const [form, setForm] = useState(blank())
-  const [saving, setSaving] = useState(false)
-  const set = k => v => setForm(f => ({ ...f, [k]: v }))
-
-  const addRow = () => setForm(f => ({ ...f, visit_details: [...f.visit_details, { label: '', value: '' }] }))
-  const setRow = (i, k, v) => setForm(f => ({ ...f, visit_details: f.visit_details.map((r, idx) => idx === i ? { ...r, [k]: v } : r) }))
-  const delRow = i  => setForm(f => ({ ...f, visit_details: f.visit_details.filter((_, idx) => idx !== i) }))
-
-  const submit = async e => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      const at = new Date(`${form.consulted_at_date}T${form.consulted_at_time || '10:00'}:00`)
-      const row = await createConsultation({
-        organization_id: orgId,
-        patient_id: entity.type === 'patient' ? entity.id : null,
-        lead_id:    entity.type === 'lead'    ? entity.id : null,
-        doctor_id: form.doctor_id || null,
-        consultation_type: form.consultation_type,
-        status: form.status,
-        consulted_at: at.toISOString(),
-        chief_complaint:  form.chief_complaint  || null,
-        clinical_notes:   form.clinical_notes   || null,
-        diagnosis:        form.diagnosis        || null,
-        treatment_plan:   form.treatment_plan   || null,
-        prescription:     form.prescription     || null,
-        visit_details: form.visit_details.filter(r => (r.label || r.value).trim()),
-        follow_up_required: form.follow_up_required,
-        follow_up_date: form.follow_up_required && form.follow_up_date ? form.follow_up_date : null,
-      })
-      onCreated(row)
-      setForm(blank())
-      onClose()
-    } catch (err) { alert(err.message) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Log Consultation" size="lg">
-      <form onSubmit={submit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
-        <div className="grid grid-cols-2 gap-3">
-          <Select label="Type" value={form.consultation_type} onChange={e => set('consultation_type')(e.target.value)}
-            options={CONSULTATION_TYPES.map(t => ({ value: t, label: t }))} />
-          <Select label="Status" value={form.status} onChange={e => set('status')(e.target.value)}
-            options={STATUSES.map(s => ({ value: s, label: s }))} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Date *</label>
-            <input type="date" required value={form.consulted_at_date} onChange={e => set('consulted_at_date')(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
-              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Time</label>
-            <input type="time" value={form.consulted_at_time} onChange={e => set('consulted_at_time')(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
-              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-          </div>
-        </div>
-        {doctors.length > 0 && (
-          <Select label="Doctor" value={form.doctor_id} onChange={e => set('doctor_id')(e.target.value)}
-            options={[{ value: '', label: '— No doctor —' }, ...doctors.map(d => ({ value: d.id, label: d.name }))]} />
-        )}
-        <Input label="Chief Complaint" value={form.chief_complaint} onChange={e => set('chief_complaint')(e.target.value)} placeholder="Main reason for visit" />
-        <Textarea label="Clinical Notes" value={form.clinical_notes} onChange={e => set('clinical_notes')(e.target.value)} rows={3} />
-        <Input label="Diagnosis" value={form.diagnosis} onChange={e => set('diagnosis')(e.target.value)} />
-        <Textarea label="Treatment Plan" value={form.treatment_plan} onChange={e => set('treatment_plan')(e.target.value)} rows={2} />
-        <Input label="Prescription" value={form.prescription} onChange={e => set('prescription')(e.target.value)} />
-
-        {/* Visit details - Excel table inline */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-600" style={{ color: 'var(--color-text-secondary)' }}>Visit Details</label>
-            <button type="button" onClick={addRow} className="text-xs font-600 hover:opacity-70" style={{ color: 'var(--color-brand)' }}>+ Add Row</button>
-          </div>
-          {form.visit_details.length > 0 && (
-            <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ fontFamily: 'ui-monospace, monospace' }}>
-              <div className="grid border-b border-(--color-border)" style={{ gridTemplateColumns: '1fr 1.5fr 32px', background: 'var(--color-surface-2)' }}>
-                <span className="px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Detail</span>
-                <span className="px-3 py-1.5 text-[10px] font-700 uppercase tracking-wider border-l border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>Value</span>
-                <span />
-              </div>
-              {form.visit_details.map((r, i) => (
-                <div key={i} className="grid border-b border-(--color-border) last:border-0"
-                  style={{ gridTemplateColumns: '1fr 1.5fr 32px', background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-2)' }}>
-                  <input value={r.label} onChange={e => setRow(i, 'label', e.target.value)} placeholder="e.g. BP"
-                    className="px-3 py-2 text-xs border-r border-(--color-border) outline-none bg-transparent"
-                    style={{ color: 'var(--color-text-secondary)' }} />
-                  <input value={r.value} onChange={e => setRow(i, 'value', e.target.value)} placeholder="e.g. 120/80"
-                    className="px-3 py-2 text-xs outline-none bg-transparent"
-                    style={{ color: 'var(--color-text-primary)' }} />
-                  <button type="button" onClick={() => delRow(i)}
-                    className="flex items-center justify-center border-l border-(--color-border) hover:bg-red-50 transition-colors"
-                    style={{ color: 'var(--color-text-muted)' }}>
-                    <X size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Follow-up required */}
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.follow_up_required} onChange={e => set('follow_up_required')(e.target.checked)}
-              className="w-4 h-4" style={{ accentColor: 'var(--color-brand)' }} />
-            <span className="text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Follow-up required</span>
-          </label>
-          {form.follow_up_required && (
-            <input type="date" value={form.follow_up_date} onChange={e => set('follow_up_date')(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border text-sm outline-none"
-              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={saving || !form.consulted_at_date}>{saving ? 'Saving…' : 'Log Consultation'}</Button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
-// ── Follow-ups tab panel ──────────────────────────────────────
-function FollowupCard({ f, onComplete, onMiss, onReschedule }) {
-  const [completing,   setCompleting]   = useState(false)
-  const [rescheduling, setRescheduling] = useState(false)
-  const [outcome,      setOutcome]      = useState('')
-  const [nextType,     setNextType]     = useState('Call')
-  const [nextDate,     setNextDate]     = useState('')
-  const [scheduleNext, setScheduleNext] = useState(false)
-  const [saving,       setSaving]       = useState(false)
-
-  const Icon  = FU_TYPE_ICON[f.type]  || Bell
-  const typeC = FU_TYPE_COLOR[f.type] || FU_TYPE_COLOR.Other
-  const statC = FU_STATUS_STYLE[f.status] || FU_STATUS_STYLE.Scheduled
-  const overdue = f.status === 'Scheduled' && isPast(new Date(f.scheduled_at))
-
-  const handleComplete = async () => {
-    setSaving(true)
-    try {
-      await onComplete(f.id, outcome, scheduleNext ? { type: nextType, scheduled_at: nextDate } : null)
-      setCompleting(false)
-    } catch (err) { alert(err.message) }
-    finally { setSaving(false) }
-  }
-
-  const handleReschedule = async () => {
-    if (!nextDate) return
-    setSaving(true)
-    try {
-      await onReschedule(f.id, nextDate, nextType)
-      setRescheduling(false)
-    } catch (err) { alert(err.message) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-      <div className="flex items-start gap-3 p-4">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: typeC.bg }}>
-          <Icon size={16} style={{ color: typeC.color }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{f.type}</span>
-            <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statC.bg, color: statC.color }}>{f.status}</span>
-            {overdue && f.status === 'Scheduled' && (
-              <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#b91c1c' }}>Overdue</span>
-            )}
-          </div>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {format(new Date(f.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}
-          </p>
-          {f.caller_name && (
-            <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
-              <User size={11} /> {f.caller_name}
-            </p>
-          )}
-          {f.notes && <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{f.notes}</p>}
-          {f.outcome && (
-            <div className="mt-2 p-2.5 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-              <p className="text-[10px] font-600 uppercase mb-1" style={{ color: 'var(--color-text-muted)' }}>Response / Outcome</p>
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{f.outcome}</p>
-            </div>
-          )}
-        </div>
-        {!completing && !rescheduling && (
-          <div className="flex gap-1.5 shrink-0">
-            {f.status === 'Scheduled' && (
-              <>
-                <button onClick={() => setCompleting(true)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
-                  style={{ background: '#dcfce7', color: '#15803d' }}>
-                  <Check size={12} /> Done
-                </button>
-                <button onClick={() => { setRescheduling(true); setNextType(f.type); setNextDate('') }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
-                  style={{ color: 'var(--color-text-muted)' }}>
-                  <RotateCcw size={11} /> Reschedule
-                </button>
-                <button onClick={() => onMiss(f.id)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-red-50"
-                  style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
-                  <X size={11} /> Missed
-                </button>
-              </>
-            )}
-            {f.status === 'Missed' && (
-              <button onClick={() => { setRescheduling(true); setNextType(f.type); setNextDate('') }}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
-                style={{ color: 'var(--color-text-muted)' }}>
-                <RotateCcw size={11} /> Reschedule
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {completing && (
-        <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}>
-          <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>What happened?</p>
-          <textarea rows={3} className="w-full px-3 py-2.5 text-sm rounded-lg border border-(--color-border) outline-none resize-none"
-            style={{ background: 'var(--color-surface)' }}
-            placeholder="Patient's response, what was discussed, next steps..."
-            value={outcome} onChange={e => setOutcome(e.target.value)} />
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setScheduleNext(s => !s)}
-              className="flex items-center gap-2 text-xs font-500 px-3 py-1.5 rounded-lg border transition-all"
-              style={scheduleNext
-                ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
-                : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}>
-              <Plus size={12} /> Schedule next follow-up
-            </button>
-          </div>
-          {scheduleNext && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Type</label>
-                <select className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)' }}
-                  value={nextType} onChange={e => setNextType(e.target.value)}>
-                  {FOLLOWUP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <Input label="Date & Time" type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} />
-            </div>
-          )}
-          <div className="flex gap-2 justify-end">
-            <Button variant="secondary" size="sm" type="button" onClick={() => setCompleting(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleComplete} disabled={saving}>
-              {saving ? 'Saving...' : <><Check size={13} /> Mark Complete</>}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {rescheduling && (
-        <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}>
-          <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Reschedule to</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Type</label>
-              <select className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)' }}
-                value={nextType} onChange={e => setNextType(e.target.value)}>
-                {FOLLOWUP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <Input label="New Date & Time *" type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} />
-          </div>
-          <div className="flex gap-2 justify-end">
-            <Button variant="secondary" size="sm" type="button" onClick={() => setRescheduling(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleReschedule} disabled={saving || !nextDate}>
-              {saving ? 'Saving...' : <><RotateCcw size={13} /> Reschedule</>}
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-// ── Timeline with inline note ─────────────────────────────────
-function TimelinePanel({ activities, setActivities, entity, orgId }) {
-  const [adding, setAdding] = useState(false)
-  const [note, setNote]     = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const submit = async e => {
-    e.preventDefault()
-    if (!note.trim() || !entity) return
-    setSaving(true)
-    try {
-      const row = await createActivity({
-        organization_id: orgId,
-        entity_type: entity.type,
-        entity_id:   entity.id,
-        type: 'note',
-        content: note.trim(),
-        source_page: 'consultation',
-      })
-      setActivities(prev => [row, ...prev])
-      setNote('')
-      setAdding(false)
-    } catch (err) { alert(err.message) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="space-y-3">
-      {!adding && (
-        <div className="flex justify-end">
-          <Button size="sm" type="button" onClick={() => setAdding(true)}><Plus size={14} /> Add Note</Button>
-        </div>
-      )}
-      {adding && (
-        <form onSubmit={submit} className="space-y-2">
-          <Textarea placeholder="Write a note…" rows={3} value={note} onChange={e => setNote(e.target.value)} />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" type="button" onClick={() => { setAdding(false); setNote('') }}>Cancel</Button>
-            <Button size="sm" type="submit" disabled={saving || !note.trim()}>{saving ? 'Saving…' : 'Save Note'}</Button>
-          </div>
-        </form>
-      )}
-      <Timeline activities={activities} maxHeight="22rem" emptyText="No activity yet." />
-    </div>
-  )
+// ── Timeline (read-only activity feed) ────────────────────────
+function TimelinePanel({ activities }) {
+  return <Timeline activities={activities} maxHeight="22rem" emptyText="No activity yet." />
 }
 
 // ── Main page ─────────────────────────────────────────────────
@@ -531,7 +104,6 @@ export default function ConsultationDetailPage({ params }) {
   const [rightTab, setRightTab]     = useState('tasks')
 
   // modals / inline forms
-  const [logConsultOpen, setLogConsultOpen] = useState(false)
   const [addingTask, setAddingTask] = useState(false)
   const [taskForm, setTaskForm]     = useState({ title: '', priority: 'Medium', due_date: '' })
   const [savingTask, setSavingTask] = useState(false)
@@ -539,11 +111,12 @@ export default function ConsultationDetailPage({ params }) {
   const [apptForm, setApptForm]     = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
   const [savingAppt, setSavingAppt] = useState(false)
 
-  const [fuView,     setFuView]     = useState('regular')
-  const [fuSort,     setFuSort]     = useState('added')
-  const [fuSortOpen, setFuSortOpen] = useState(false)
-  const [showFuForm, setShowFuForm] = useState(false)
-  const [newFu,      setNewFu]      = useState({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
+  const [fuSort, setFuSort] = useState('scheduled_desc') // 'scheduled_desc' | 'scheduled_asc'
+
+  // Notes
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [savingNotes,  setSavingNotes]  = useState(false)
+  const [notesText,    setNotesText]    = useState('')
 
   useEffect(() => {
     if (!orgId || !id) return
@@ -586,6 +159,14 @@ export default function ConsultationDetailPage({ params }) {
         setFollowups([...(ownFups || []), ...leadFupsList.flat()]
           .reduce((acc, f) => acc.some(x => x.id === f.id) ? acc : [...acc, f], [])
           .sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)))
+
+        // Seed notes text after entity resolves
+        if (ent.type === 'lead') {
+          setNotesText(l?.description || '')
+        } else {
+          const linkedDesc = (p?.leads || [])[0]?.description
+          setNotesText(linkedDesc ?? p?.custom_data?.notes ?? '')
+        }
       } catch { /* ignore */ }
       finally { if (active) setLoading(false) }
     })()
@@ -614,13 +195,13 @@ export default function ConsultationDetailPage({ params }) {
       const t = await createTask({ ...taskForm, organization_id: orgId, entity_type: entity.type, entity_id: id, status: 'Pending' })
       setTasks(prev => [t, ...prev]); setTaskForm({ title: '', priority: 'Medium', due_date: '' }); setAddingTask(false)
       await addActivity('note', `Task added: ${t.title}`)
-    } catch (err) { alert(err.message) } finally { setSavingTask(false) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) } finally { setSavingTask(false) }
   }
   const handleToggleTask = async task => {
     try {
       const u = await updateTask(task.id, { status: task.status === 'Completed' ? 'Pending' : 'Completed' })
       setTasks(prev => prev.map(t => t.id === task.id ? u : t))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
   const handleBookAppt = async e => {
     e.preventDefault()
@@ -639,66 +220,38 @@ export default function ConsultationDetailPage({ params }) {
       })
       setAppointments(prev => [appt, ...prev]); setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
       await addActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
-    } catch (err) { alert(err.message) } finally { setSavingAppt(false) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) } finally { setSavingAppt(false) }
   }
   const handleApptStatus = async (aid, status) => {
     try {
       const u = await updateAppointment(aid, { status })
       setAppointments(prev => prev.map(a => a.id === aid ? { ...a, status: u.status } : a))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
-  const handleScheduleFollowup = async (e) => {
-    e.preventDefault()
-    if (!newFu.scheduled_at || !newFu.status_detail || !orgId) return
+  // Add Follow-up inserts a blank row; values are filled inline in the table.
+  const handleAddBlankFollowup = async () => {
+    if (!orgId || !entity) return
     try {
-      const isFut = new Date(newFu.scheduled_at).getTime() > Date.now()
       const f = await createFollowup({
-        type: newFu.type,
-        scheduled_at: new Date(newFu.scheduled_at).toISOString(),
-        notes: newFu.response || null,
-        outcome: newFu.status_detail,
-        caller_name: newFu.caller || null,
-        status: isFut ? 'Scheduled' : 'Completed',
+        type: 'Call', scheduled_at: new Date().toISOString(),
+        notes: null, outcome: null, caller_name: null, status: 'Scheduled',
         organization_id: orgId,
         lead_id:    entity.type === 'lead'    ? id : null,
         patient_id: entity.type === 'patient' ? id : null,
       })
       setFollowups(prev => [f, ...prev])
-      setShowFuForm(false)
-      setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' })
-      await addActivity('note', `Follow-up ${isFut ? 'scheduled' : 'logged'}: ${f.type}${f.outcome ? ` — ${f.outcome}` : ''}`)
-    } catch (err) { alert(err.message) }
+      await addActivity('note', 'Follow-up added')
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
-  const handleCompleteFollowup = async (fuId, outcome, next) => {
-    try {
-      const updated = await updateFollowup(fuId, { status: 'Completed', outcome: outcome || null })
-      setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
-      if (next?.scheduled_at) {
-        const nf = await createFollowup({
-          type: next.type, scheduled_at: next.scheduled_at, organization_id: orgId,
-          status: 'Scheduled',
-          lead_id:    entity.type === 'lead'    ? id : null,
-          patient_id: entity.type === 'patient' ? id : null,
-        })
-        setFollowups(prev => [nf, ...prev])
-      }
-    } catch (err) { alert(err.message) }
-  }
-
-  const handleMissFollowup = async (fuId) => {
-    try {
-      const updated = await updateFollowup(fuId, { status: 'Missed' })
-      setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
-    } catch (err) { alert(err.message) }
-  }
-
-  const handleRescheduleFollowup = async (fuId, newDate, newType) => {
-    try {
-      const updated = await updateFollowup(fuId, { status: 'Rescheduled', scheduled_at: newDate, type: newType })
-      setFollowups(prev => prev.map(f => f.id === fuId ? updated : f))
-    } catch (err) { alert(err.message) }
+  const handleDeleteFollowup = async (fuId) => {
+    const ok = await showConfirm({ title: 'Delete this follow-up?', confirmLabel: 'Delete' })
+    if (!ok) return
+    const prev = followups
+    setFollowups(list => list.filter(f => f.id !== fuId))
+    try { await deleteFollowup(fuId) }
+    catch (err) { setFollowups(prev); toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleFollowupField = async (fuId, patch) => {
@@ -709,8 +262,36 @@ export default function ConsultationDetailPage({ params }) {
       setFollowups(list => list.map(f => f.id === fuId ? updated : f))
     } catch (err) {
       setFollowups(list => list.map(f => f.id === fuId ? prev : f))
-      alert(err.message)
+      toast({ type: 'error', title: 'Error', message: err.message })
     }
+  }
+
+  const handleSaveNotes = async () => {
+    if (!entity) return
+    setSavingNotes(true)
+    try {
+      if (entity.type === 'lead') {
+        await updateLead(id, { description: notesText })
+        setEntity(prev => ({ ...prev, data: { ...prev.data, description: notesText } }))
+      } else {
+        const linkedLead = (entity.data.leads || [])[0]
+        if (linkedLead) {
+          await updateLead(linkedLead.id, { description: notesText })
+          setEntity(prev => ({
+            ...prev,
+            data: {
+              ...prev.data,
+              leads: prev.data.leads.map(l => l.id === linkedLead.id ? { ...l, description: notesText } : l),
+            },
+          }))
+        } else {
+          const updated = await updatePatient(id, { custom_data: { ...(entity.data.custom_data || {}), notes: notesText } })
+          setEntity(prev => ({ ...prev, data: { ...prev.data, custom_data: updated.custom_data } }))
+        }
+      }
+      setEditingNotes(false)
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setSavingNotes(false) }
   }
 
   const handleCreateFollowupInline = async (patch) => {
@@ -730,7 +311,8 @@ export default function ConsultationDetailPage({ params }) {
         patient_id: entity.type === 'patient' ? id : null,
       })
       setFollowups(prev => [f, ...prev])
-    } catch (err) { alert(err.message) }
+      await addActivity('note', `${f.type} logged${f.outcome ? `: ${f.outcome}` : ''}`)
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   if (loading) return <div className="flex items-center justify-center py-32"><Spinner size={32} /></div>
@@ -762,7 +344,6 @@ export default function ConsultationDetailPage({ params }) {
           <span style={{ color: 'var(--color-border)' }}>/</span>
           <span className="text-sm font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{name}</span>
         </div>
-        <Button size="sm" onClick={() => setLogConsultOpen(true)}><Plus size={14} /> Log Consultation</Button>
       </div>
 
       <div className="p-5">
@@ -795,219 +376,48 @@ export default function ConsultationDetailPage({ params }) {
               </div>
             </Card>
 
-            {/* Consultations */}
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1.5">
-                  <Stethoscope size={13} style={{ color: 'var(--color-brand)' }} />
-                  <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
-                    Consultations <span style={{ color: 'var(--color-text-primary)' }}>({consultations.length})</span>
-                  </p>
-                </div>
-                <Button size="sm" type="button" onClick={() => setLogConsultOpen(true)}><Plus size={14} /> New</Button>
-              </div>
-              {consultations.length === 0 ? (
-                <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
-                  <Stethoscope size={24} className="mx-auto mb-2 opacity-30" />
-                  <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No consultations logged yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-150 overflow-y-auto pr-1">
-                  {consultations.map(c => <ConsultationRecord key={c.id} c={c} doctors={doctors} />)}
-                </div>
-              )}
-            </Card>
-
             {/* Follow-ups */}
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                <div className="flex items-center gap-2.5">
-                  <p className="text-xs font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Follow-ups</p>
-                  <div className="flex items-center gap-0.5">
-                    {[{ id: 'regular', Icon: List, title: 'Regular view' }, { id: 'table', Icon: Table2, title: 'Table view' }].map(({ id: vId, Icon, title }) => (
-                      <button key={vId} type="button" title={title} onClick={() => setFuView(vId)}
-                        className="p-1.5 rounded-md transition-all"
-                        style={fuView === vId
-                          ? { background: 'var(--color-brand)', color: 'white' }
-                          : { color: 'var(--color-text-muted)' }}>
-                        <Icon size={14} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {fuView === 'table' && (
-                    <div className="relative">
-                      <button type="button" title="Sort" onClick={() => setFuSortOpen(o => !o)}
-                        className="p-1.5 rounded-md border border-(--color-border) transition-colors hover:bg-(--color-surface)"
-                        style={{ color: 'var(--color-text-muted)' }}>
-                        <ArrowUpDown size={14} />
-                      </button>
-                      {fuSortOpen && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setFuSortOpen(false)} />
-                          <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-(--color-border) py-1"
-                            style={{ background: 'var(--color-surface)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
-                            {[
-                              { id: 'added',         label: 'Date added' },
-                              { id: 'modified_desc', label: 'Last modified — newest first' },
-                              { id: 'modified_asc',  label: 'Last modified — oldest first' },
-                            ].map(o => (
-                              <button key={o.id} type="button" onClick={() => { setFuSort(o.id); setFuSortOpen(false) }}
-                                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left transition-colors hover:bg-(--color-surface-2)"
-                                style={{ color: 'var(--color-text-primary)' }}>
-                                {o.label}
-                                {fuSort === o.id && <Check size={13} style={{ color: 'var(--color-brand)' }} />}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {!showFuForm && fuView === 'regular' && (
-                    <Button size="sm" onClick={() => setShowFuForm(true)}><Plus size={14} /> Add Follow-up</Button>
-                  )}
-                </div>
+                <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><PhoneCall size={13} /> Follow-ups</p>
+                <Button size="sm" onClick={handleAddBlankFollowup}><Plus size={14} /> Add Follow-up</Button>
               </div>
               <div className="p-3 space-y-3">
-                {showFuForm && fuView === 'regular' && (
-                  <form onSubmit={handleScheduleFollowup} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
-                    <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Add Follow-up</p>
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Type</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {FOLLOWUP_TYPES.map(t => (
-                          <button key={t} type="button" onClick={() => setNewFu(f => ({ ...f, type: t, status_detail: '' }))}
-                            className="px-3 py-1.5 rounded-full text-[11px] font-600 border transition-all"
-                            style={newFu.type === t
-                              ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
-                              : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}>
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <Select
-                      label="Status *"
-                      value={newFu.status_detail}
-                      onChange={e => setNewFu(f => ({ ...f, status_detail: e.target.value }))}
-                      options={[
-                        { value: '', label: 'Select status' },
-                        ...(FOLLOWUP_STATUS_OPTIONS[newFu.type] || []).map(s => ({ value: s, label: s })),
-                      ]}
-                    />
-                    <div className="grid grid-cols-2 gap-3 items-start">
-                      <Input label="Date & Time *" type="datetime-local" value={newFu.scheduled_at}
-                        onChange={e => setNewFu(f => ({ ...f, scheduled_at: e.target.value }))} />
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>
-                          Called By <span className="font-400" style={{ color: 'var(--color-text-muted)' }}>(optional)</span>
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
-                          style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
-                          value={newFu.caller} onChange={e => setNewFu(f => ({ ...f, caller: e.target.value }))}>
-                          <option value="">— Select —</option>
-                          {(org?.settings?.staff_members || []).map(m => (
-                            <option key={m.id} value={m.name}>{m.name}{m.designation ? ` (${m.designation})` : ''}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <Textarea label="Response" placeholder="Patient/customer response..." value={newFu.response}
-                      onChange={e => setNewFu(f => ({ ...f, response: e.target.value }))} rows={2} />
-                    <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
-                      <Button variant="secondary" size="sm" type="button"
-                        onClick={() => { setShowFuForm(false); setNewFu({ type: 'Call', status_detail: '', scheduled_at: '', response: '', caller: '' }) }}>
-                        Cancel
-                      </Button>
-                      <Button size="sm" type="submit" disabled={!newFu.scheduled_at || !newFu.status_detail}>
-                        <Bell size={13} /> Save
-                      </Button>
-                    </div>
-                  </form>
-                )}
-                {fuView === 'table' ? (
+                {followups.length === 0 ? (
+                  <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)">
+                    <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups yet. Click “Add Follow-up” to add a row.</p>
+                  </div>
+                ) : (
                   <div className="-mx-3 -mb-3 max-h-150 overflow-y-auto">
                     <FollowupTable
                       followups={followups}
                       staff={org?.settings?.staff_members || []}
                       onField={handleFollowupField}
                       onCreate={handleCreateFollowupInline}
+                      onDelete={handleDeleteFollowup}
                       statusStyle={FU_STATUS_STYLE}
                       typeStyle={FU_TYPE_COLOR}
                       types={FOLLOWUP_TYPES}
                       outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
                       sort={fuSort}
+                      onSortToggle={() => setFuSort(s => s === 'scheduled_desc' ? 'scheduled_asc' : 'scheduled_desc')}
+                      showDraftRow={false}
                     />
-                  </div>
-                ) : followups.length === 0 ? (
-                  <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)">
-                    <PhoneCall size={28} className="mx-auto mb-2 opacity-30" />
-                    <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No follow-ups scheduled yet.</p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Schedule a call, WhatsApp, or email to keep this moving.</p>
-                  </div>
-                ) : (
-                  <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 max-h-150 overflow-y-auto border-t border-(--color-border)">
-                    {[...followups].sort((a, b) => {
-                      const order = { Scheduled: 0, Missed: 1, Rescheduled: 2, Completed: 3 }
-                      return (order[a.status] ?? 9) - (order[b.status] ?? 9)
-                    }).map(f => (
-                      <FollowupCard
-                        key={f.id}
-                        f={f}
-                        onComplete={handleCompleteFollowup}
-                        onMiss={handleMissFollowup}
-                        onReschedule={handleRescheduleFollowup}
-                      />
-                    ))}
                   </div>
                 )}
               </div>
             </Card>
 
-            {/* Medical History — patients only */}
-            {isPatient && (
-              <Card className="p-4">
-                <div className="flex items-center gap-1.5 mb-3">
-                  <History size={13} style={{ color: 'var(--color-brand)' }} />
-                  <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Medical History</p>
-                </div>
-                {history.length === 0 ? (
-                  <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
-                    <History size={24} className="mx-auto mb-2 opacity-30" />
-                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                    {history.map((rec, i) => (
-                      <div key={i} className="p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                        <p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>
-                          {rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}
-                        </p>
-                        <p className="text-sm font-700" style={{ color: 'var(--color-text-primary)' }}>{rec.diagnosis}</p>
-                        {rec.treatment && <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>{rec.treatment}</p>}
-                        {rec.notes    && <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{rec.notes}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            )}
-
             {/* Appointments */}
             <Card className="overflow-hidden p-0">
               <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                <div className="flex items-center gap-1.5">
-                  <Calendar size={13} style={{ color: 'var(--color-brand)' }} />
-                  <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>
-                    Appointments <span style={{ color: 'var(--color-text-primary)' }}>({appointments.length})</span>
-                  </p>
-                </div>
+                <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                  <Calendar size={13} style={{ color: 'var(--color-brand)' }} /> Appointments <span style={{ color: 'var(--color-text-primary)' }}>({appointments.length})</span>
+                </p>
                 {!addingAppt && <Button size="sm" type="button" onClick={() => setAddingAppt(true)}><Plus size={14} /> Book</Button>}
               </div>
-              <div className="p-3 space-y-2">
+              <div className="p-3 space-y-3">
                 {addingAppt && (
                   <form onSubmit={handleBookAppt} className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
                     <div className="grid grid-cols-2 gap-2">
@@ -1104,41 +514,75 @@ export default function ConsultationDetailPage({ params }) {
                 ? <CustomModuleTable key={m.id} module={m} data={moduleData} onSave={handleModuleSave} />
                 : <CustomModuleCard  key={m.id} module={m} data={moduleData} onSave={handleModuleSave} />
             })}
+
+            {/* Notes */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                  <FileText size={13} /> Notes
+                </p>
+                {!editingNotes && (
+                  <Button size="sm" onClick={() => setEditingNotes(true)}>
+                    <Edit2 size={13} /> Edit
+                  </Button>
+                )}
+              </div>
+              {editingNotes ? (
+                <div className="space-y-2">
+                  <Textarea
+                    rows={5}
+                    value={notesText}
+                    onChange={e => setNotesText(e.target.value)}
+                    placeholder="Add notes about this consultation…"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => setEditingNotes(false)}>Cancel</Button>
+                    <Button size="sm" disabled={savingNotes} onClick={handleSaveNotes}>
+                      {savingNotes ? 'Saving…' : 'Save'}
+                    </Button>
+                  </div>
+                </div>
+              ) : notesText ? (
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--color-text-secondary)' }}>{notesText}</p>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No notes yet. Click Edit to add notes.</p>
+              )}
+            </Card>
           </div>
 
           {/* ── RIGHT ── */}
           <div className="space-y-4 sticky top-16">
             <Card className="border-(--color-border) overflow-hidden">
               {/* Tab bar */}
-              <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                {RIGHT_TABS.map(tab => (
-                  <button key={tab.id} type="button" onClick={() => setRightTab(tab.id)}
-                    className={clsx('flex items-center gap-1.5 px-4 py-3 text-xs font-600 border-b-2 flex-1 justify-center transition-colors',
-                      rightTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent hover:bg-(--color-brand-50)')}
-                    style={rightTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}>
-                    <tab.icon size={13} />
-                    {tab.label}
-                    {tab.count > 0 && (
-                      <span className="text-[9px] font-700 px-1.5 py-0.5 rounded-full"
-                        style={rightTab === tab.id
-                          ? { background: 'var(--color-brand)', color: 'white' }
-                          : { background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                        {tab.count}
-                      </span>
-                    )}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex">
+                  {RIGHT_TABS.map(tab => (
+                    <button key={tab.id} type="button" onClick={() => setRightTab(tab.id)}
+                      className={clsx('flex items-center gap-1.5 px-4 py-3 text-xs font-600 border-b-2 transition-colors',
+                        rightTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent hover:bg-(--color-brand-50)')}
+                      style={rightTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}>
+                      <tab.icon size={13} />
+                      {tab.label}
+                      {tab.count > 0 && (
+                        <span className="text-[9px] font-700 px-1.5 py-0.5 rounded-full"
+                          style={rightTab === tab.id
+                            ? { background: 'var(--color-brand)', color: 'white' }
+                            : { background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {rightTab === 'tasks' && !addingTask && (
+                  <Button size="sm" type="button" className="mr-3 shrink-0" onClick={() => setAddingTask(true)}><Plus size={14} /> New Task</Button>
+                )}
               </div>
 
-              <div className="p-4">
+              <div className="p-3">
                 {/* Tasks */}
                 {rightTab === 'tasks' && (
                   <div className="space-y-3">
-                    {!addingTask && (
-                      <div className="flex justify-end">
-                        <Button size="sm" type="button" onClick={() => setAddingTask(true)}><Plus size={14} /> New Task</Button>
-                      </div>
-                    )}
                     {addingTask && (
                       <form onSubmit={handleAddTask} className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
                         <Input label="Task *" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))} required />
@@ -1177,7 +621,7 @@ export default function ConsultationDetailPage({ params }) {
 
                 {/* Timeline */}
                 {rightTab === 'timeline' && (
-                  <TimelinePanel activities={activities} setActivities={setActivities} entity={entity} orgId={orgId} />
+                  <TimelinePanel activities={activities} />
                 )}
               </div>
             </Card>
@@ -1186,19 +630,6 @@ export default function ConsultationDetailPage({ params }) {
         </div>
       </div>
 
-      {/* Inline Log Consultation modal */}
-      <LogConsultationModal
-        open={logConsultOpen}
-        onClose={() => setLogConsultOpen(false)}
-        entity={entity}
-        orgId={orgId}
-        doctors={doctors}
-        onCreated={row => {
-          setConsultations(prev => [row, ...prev])
-          addActivity('note', `Consultation logged: ${row.consultation_type || 'Visit'}${row.diagnosis ? ` — ${row.diagnosis}` : ''}`)
-          logAudit({ action: AUDIT.CONSULTATION_CREATE, entityType: 'patient', entityId: id, description: `${row.consultation_type || 'Visit'} consultation logged${row.chief_complaint ? `: ${row.chief_complaint}` : ''}${row.diagnosis ? ` — ${row.diagnosis}` : ''}`, metadata: { consultation_id: row.id, type: row.consultation_type, status: row.status, doctor_id: row.doctor_id } })
-        }}
-      />
     </div>
   )
 }

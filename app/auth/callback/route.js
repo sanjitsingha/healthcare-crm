@@ -4,6 +4,30 @@ import { parseDevice } from '@/lib/device'
 
 export async function GET(request) {
   const { searchParams, origin } = new URL(request.url)
+
+  // ── Invite acceptance ───────────────────────────────────────────
+  const tokenHash = searchParams.get('token_hash')
+  const inviteType = searchParams.get('type')
+  if (tokenHash && inviteType === 'invite') {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'invite' })
+    if (!error) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const orgId = user.user_metadata?.org_id
+        if (orgId) {
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            organization_id: orgId,
+            full_name: user.user_metadata?.name || user.email,
+          })
+        }
+      }
+      return NextResponse.redirect(`${origin}/auth/set-password`)
+    }
+    return NextResponse.redirect(`${origin}/login?error=invite_failed`)
+  }
+
   const code = searchParams.get('code')
 
   if (code) {

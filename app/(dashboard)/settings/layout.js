@@ -1,25 +1,36 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText, ClipboardList, Stethoscope, Network } from 'lucide-react'
+import {
+  Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText,
+  ClipboardList, Stethoscope, Network, ShieldCheck,
+} from 'lucide-react'
 import clsx from 'clsx'
+import { useOrg } from '@/lib/context/OrgContext'
 
+// permission: null = always visible (own account page)
 const NAV_ITEMS = [
-  { href: '/settings/account',       label: 'Account',       icon: UserRound },
-  { href: '/settings/organization',  label: 'Organization',  icon: Building2 },
-  { href: '/settings/users',         label: 'Users',         icon: Users },
-  { href: '/settings/doctors',       label: 'Doctors',       icon: Stethoscope },
-  { href: '/settings/departments',   label: 'Departments',   icon: Network },
-  { href: '/settings/tags',          label: 'Tags',          icon: Tags },
-  { href: '/settings/modules',       label: 'Modules',       icon: LayoutGrid },
-  { href: '/settings/services',      label: 'Services',      icon: ClipboardList },
-  { href: '/settings/rules',         label: 'Rules',         icon: Workflow },
-  { href: '/settings/configuration', label: 'Configuration', icon: Plug },
-  { href: '/settings/logs',          label: 'Logs',          icon: ScrollText },
+  { href: '/settings/account',       label: 'Account',       icon: UserRound,    permission: null },
+  { href: '/settings/organization',  label: 'Organization',  icon: Building2,    permission: 'settings.organization' },
+  { href: '/settings/users',         label: 'Users',         icon: Users,        permission: 'settings.users' },
+  { href: '/settings/roles',         label: 'Roles',         icon: ShieldCheck,  permission: 'settings.roles' },
+  { href: '/settings/doctors',       label: 'Doctors',       icon: Stethoscope,  permission: 'settings.doctors' },
+  { href: '/settings/departments',   label: 'Departments',   icon: Network,      permission: 'settings.departments' },
+  { href: '/settings/tags',          label: 'Tags',          icon: Tags,         permission: 'settings.tags' },
+  { href: '/settings/modules',       label: 'Modules',       icon: LayoutGrid,   permission: 'settings.modules' },
+  { href: '/settings/services',      label: 'Services',      icon: ClipboardList,permission: 'settings.services' },
+  { href: '/settings/rules',         label: 'Rules',         icon: Workflow,     permission: 'settings.rules' },
+  { href: '/settings/configuration', label: 'Configuration', icon: Plug,         permission: 'settings.configuration' },
+  { href: '/settings/logs',          label: 'Logs',          icon: ScrollText,   permission: 'settings.logs' },
 ]
 
 export default function SettingsLayout({ children }) {
   const pathname = usePathname()
+  const { hasPermission } = useOrg()
+
+  const visibleItems = NAV_ITEMS.filter(item =>
+    item.permission === null || hasPermission(item.permission)
+  )
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-bg)' }}>
@@ -32,8 +43,8 @@ export default function SettingsLayout({ children }) {
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Manage your workspace</p>
         </div>
 
-        <nav className="space-y-0.5 flex-1">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        <nav className="space-y-0.5 flex-1 overflow-y-auto">
+          {visibleItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href
             return (
               <Link

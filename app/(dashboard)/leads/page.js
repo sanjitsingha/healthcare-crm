@@ -9,6 +9,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { logAudit, AUDIT } from '@/lib/audit'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -356,7 +358,7 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
 
 // ── Main Page ──────────────────────────────────────────────────
 export default function LeadsPage() {
-  const { orgId, org } = useOrg()
+  const { orgId, org, hasPermission } = useOrg()
   const router = useRouter()
 
   const [leads,   setLeads]   = useState([])
@@ -454,21 +456,33 @@ export default function LeadsPage() {
 
   // ── Bulk actions ──
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selected.size} lead${selected.size !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    const ok = await showConfirm({
+      title: `Delete ${selected.size} lead${selected.size !== 1 ? 's' : ''}?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
     try {
       await Promise.all([...selected].map(id => deleteLead(id)))
       setLeads(prev => prev.filter(l => !selected.has(l.id)))
       clearSelection()
-    } catch (err) { alert(err.message) }
+      toast({ type: 'success', title: 'Deleted', message: `${selected.size} lead${selected.size !== 1 ? 's' : ''} deleted` })
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleMoveToPatient = async () => {
-    if (!confirm(`Mark ${selected.size} lead${selected.size !== 1 ? 's' : ''} as Converted?`)) return
+    const ok = await showConfirm({
+      title: `Convert ${selected.size} lead${selected.size !== 1 ? 's' : ''}?`,
+      message: 'Marks them as Converted in the pipeline.',
+      confirmLabel: 'Convert',
+      variant: 'info',
+    })
+    if (!ok) return
     try {
       await Promise.all([...selected].map(id => updateLead(id, { stage: 'Converted' })))
       setLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, stage: 'Converted' } : l))
       clearSelection()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   const handleExport = () => {
@@ -620,14 +634,16 @@ export default function LeadsPage() {
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-          <Link href="/leads/new">
-            <button
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--color-brand)' }}
-            >
-              <Plus size={16} /> New Lead
-            </button>
-          </Link>
+          {hasPermission('leads.create') && (
+            <Link href="/leads/new">
+              <button
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
+                style={{ background: 'var(--color-brand)' }}
+              >
+                <Plus size={16} /> New Lead
+              </button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -761,12 +777,14 @@ export default function LeadsPage() {
           >
             <Download size={14} /> Export
           </button>
-          <button
-            onClick={handleBulkDelete}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors"
-          >
-            <Trash2 size={14} /> Delete
-          </button>
+          {hasPermission('leads.delete') && (
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       )}
 

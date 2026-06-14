@@ -3,6 +3,8 @@ import { useRef, useState } from 'react'
 import { LayoutGrid, Plus, Trash2, X, Save, GripVertical, Layers, List, Table2 } from 'lucide-react'
 import { Button, Card, Input, Select, Switch } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
 
@@ -254,7 +256,8 @@ export default function ModulesPage() {
     logAudit({ action: AUDIT.MODULE_CHANGE, description: `Module "${m?.name}" ${next ? 'activated' : 'deactivated'}`, metadata: { module_id: id, module_name: m?.name, active: next } })
   }
   const handleDelete = async id => {
-    if (!confirm("Delete this module? Saved data will remain but won't be shown.")) return
+    const ok = await showConfirm({ title: 'Delete this module?', message: "Saved data will remain but won't be shown.", confirmLabel: 'Delete' })
+    if (!ok) return
     const m = modules.find(mod => mod.id === id)
     await persist(modules.filter(mod => mod.id !== id))
     logAudit({ action: AUDIT.MODULE_CHANGE, description: `Deleted module "${m?.name}"`, metadata: { module_id: id, module_name: m?.name, page: m?.page } })

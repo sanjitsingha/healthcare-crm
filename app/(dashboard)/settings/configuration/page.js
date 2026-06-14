@@ -8,6 +8,8 @@ import { Button, Card, Input, Switch } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
 import { useOrg } from '@/lib/context/OrgContext'
 import { updateOrganization, getOrganization } from '@/lib/supabase/queries'
+import { toast } from '@/lib/toast'
+import { showConfirm } from '@/lib/confirm'
 
 // ── Provider catalog ───────────────────────────────────────────
 // Each provider defines the config fields it needs.
@@ -192,7 +194,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const saveMap = async () => {
     setSavingMap(true)
     try { await onSave(integration.id, { field_map: mapRows.filter(r => r.form_field && r.lead_field) }) }
-    catch (err) { alert(err.message) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSavingMap(false) }
   }
   // Pull the latest detected form fields from the DB (no full page reload).
@@ -202,7 +204,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
       const o = await getOrganization(orgId)
       const integ = (o?.settings?.integrations || []).find(i => i.id === integration.id)
       setLiveDetected(integ?.config?.detected_fields || [])
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setRefreshing(false) }
   }
 
@@ -220,7 +222,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const handleSave = async () => {
     setSaving(true)
     try { await onSave(integration.id, values); setEditing(false) }
-    catch (err) { alert(err.message) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSaving(false) }
   }
 
@@ -397,7 +399,7 @@ export default function ConfigurationPage() {
     try {
       await updateOrganization(orgId, { settings: { ...(org?.settings || {}), integrations: updated } })
       setIntegrations(updated)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setBusy(false) }
   }
 
@@ -430,7 +432,8 @@ export default function ConfigurationPage() {
   }
 
   const handleRemove = async (id) => {
-    if (!confirm('Remove this integration? The webhook URL will stop working.')) return
+    const ok = await showConfirm({ title: 'Remove this integration?', message: 'The webhook URL will stop working.', confirmLabel: 'Remove' })
+    if (!ok) return
     await persist(integrations.filter(i => i.id !== id))
   }
 

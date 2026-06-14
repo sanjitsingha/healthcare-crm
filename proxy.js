@@ -29,15 +29,16 @@ export async function proxy(request) {
 
   const isAuthRoute = pathname === '/login' || pathname.startsWith('/auth/')
   const isSetupRoute = pathname === '/setup'
-  // Inbound webhooks are called by external services with no session cookie —
-  // they must never be redirected to login.
-  const isWebhookRoute = pathname.startsWith('/api/webhooks/')
+  // API routes handle their own auth — never redirect them to /login (would return HTML, not JSON).
+  const isWebhookRoute = pathname.startsWith('/api/')
   // Public docs — readable by anyone, no auth.
   const isDocsRoute = pathname === '/docs' || pathname.startsWith('/docs/')
+  // Public status page — readable by anyone, no auth.
+  const isStatusRoute = pathname === '/status' || pathname.startsWith('/status/')
   // Public legal / marketing pages — readable by anyone, no auth.
   const LEGAL_ROUTES = ['/privacy', '/terms', '/cookies', '/security', '/data-retention', '/contact']
   const isLegalRoute = LEGAL_ROUTES.includes(pathname)
-  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute || isLegalRoute
+  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute || isStatusRoute || isLegalRoute
   const isProtectedRoute = !isPublicRoute && !isSetupRoute
 
   // Unauthenticated + protected → login

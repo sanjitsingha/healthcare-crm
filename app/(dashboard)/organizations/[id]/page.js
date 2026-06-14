@@ -3,6 +3,7 @@ import { useEffect, useState, use } from 'react'
 import { ArrowLeft, Edit2, Trash2, Building2, Users, TrendingUp, Globe, Phone, Mail, MapPin } from 'lucide-react'
 import { Button, Badge, Card, Avatar, Tag, Spinner, Input, Select, Textarea, TagsInput, Modal } from '@/components/ui'
 import { getOrganization, updateOrganization, deleteOrganization, getActivities, createActivity } from '@/lib/supabase/queries'
+import { showConfirm } from '@/lib/confirm'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -40,8 +41,10 @@ export default function OrgDetailPage({ params }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this organization?')) return
-    await deleteOrganization(id); router.push('/organizations')
+    const ok = await showConfirm({ title: 'Delete this organization?', message: 'This cannot be undone.', confirmLabel: 'Delete' })
+    if (!ok) return
+    await deleteOrganization(id)
+    router.push('/organizations')
   }
 
   if (loading) return <div className="flex justify-center py-20"><Spinner size={28} /></div>
