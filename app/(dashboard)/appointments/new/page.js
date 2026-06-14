@@ -164,7 +164,7 @@ export default function NewAppointmentPage() {
         doctor_id:                 form.doctor_id || null,
         scheduled_at:              scheduledAt.toISOString(),
         notes:                     form.notes.trim() || null,
-        status:                    'booked',
+        status:                    'confirmed',
         // billing
         consultation_fee:          cFee,
         consultation_fee_status:   cFee != null ? (cPaidNow ? 'paid' : 'due') : null,
