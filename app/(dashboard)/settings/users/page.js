@@ -25,6 +25,7 @@ export default function UsersPage() {
 
   // Track which member's role dropdown is open
   const [roleChanging, setRoleChanging] = useState({}) // { [memberId]: 'saving' | 'done' | undefined }
+  const [resending, setResending] = useState({}) // { [memberId]: true }
 
   const resetForm = () => {
     setShowForm(false)
@@ -88,6 +89,37 @@ export default function UsersPage() {
       setForm(EMPTY_FORM)
     } catch (err) { setError(err.message) }
     finally { setSending(false) }
+  }
+
+  const handleResendInvite = async (member) => {
+    setResending(prev => ({ ...prev, [member.id]: true }))
+    try {
+      const res = await fetch('/api/admin/resend-invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: member.email,
+          authUserId: member.auth_user_id || null,
+          memberId: member.id,
+          name: member.name,
+          designation: member.designation || '',
+          roleId: member.role_id || null,
+          orgId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to resend')
+      if (data.newAuthUserId) {
+        setStaff(prev => prev.map(m =>
+          m.id === member.id ? { ...m, auth_user_id: data.newAuthUserId } : m
+        ))
+      }
+      toast({ type: 'success', title: 'Invitation resent', message: `Fresh invite email sent to ${member.email}` })
+    } catch (err) {
+      toast({ type: 'error', title: 'Resend failed', message: err.message })
+    } finally {
+      setResending(prev => { const n = { ...prev }; delete n[member.id]; return n })
+    }
   }
 
   const handleRoleChange = async (member, newRoleId) => {
@@ -249,9 +281,21 @@ export default function UsersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{m.name}</p>
                       {m.has_login && m.status === 'invited' && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-600 px-1.5 py-0.5 rounded-full" style={{ background: '#fef9c3', color: '#a16207' }}>
-                          <Clock size={9} /> Invite pending
-                        </span>
+                        <>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-600 px-1.5 py-0.5 rounded-full" style={{ background: '#fef9c3', color: '#a16207' }}>
+                            <Clock size={9} /> Invite pending
+                          </span>
+                          <button
+                            type="button"
+                            disabled={resending[m.id]}
+                            onClick={() => handleResendInvite(m)}
+                            className="inline-flex items-center gap-1 text-[10px] font-600 px-1.5 py-0.5 rounded-full transition-opacity hover:opacity-80 disabled:opacity-50"
+                            style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                          >
+                            <Send size={9} />
+                            {resending[m.id] ? 'Sending…' : 'Resend'}
+                          </button>
+                        </>
                       )}
                       {m.has_login && m.status !== 'invited' && (
                         <span className="inline-flex items-center gap-1 text-[10px] font-600 px-1.5 py-0.5 rounded-full" style={{ background: '#dcfce7', color: '#15803d' }}>
