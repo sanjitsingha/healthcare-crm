@@ -2,119 +2,101 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import {
-  Heart, Users, Calendar, CreditCard, TrendingUp, CheckSquare,
-  BarChart2, ArrowRight, Menu, X, Shield, UserCheck, Bell, Settings,
-  Star, Plug, Workflow, PhoneCall, Tag, Stethoscope, Check,
-  Lock, Activity, LayoutDashboard, ChevronRight, Sparkles,
-  Building2, FileText, Zap,
+  Heart, ArrowRight, Check, Star, Shield, Lock, Activity, LayoutDashboard,
+  TrendingUp, Users, Calendar, CreditCard, Workflow, Stethoscope, Settings,
+  Plug, BarChart2, Zap, KeyRound, Database, RefreshCw, FileText, ChevronDown,
+  ImageIcon, Kanban, UserRound, GitBranch,
 } from 'lucide-react'
 
+// ── Design tokens ─────────────────────────────────────────────
 const B = {
   brand:   '#21297E',
-  light:   '#3a43b5',
-  lighter: '#5b66d8',
-  bg50:    '#eceef8',
-  bg100:   '#d0d4f0',
+  brand2:  '#3a43b5',
+  ink:     '#0b0d1a',
+  body:    '#3d4466',
+  muted:   '#646b8c',
+  faint:   '#9aa0bf',
+  line:    '#e8eaf2',
   surface: '#ffffff',
-  surf2:   '#f5f7fc',
-  border:  '#e2e4ef',
-  text:    '#0d0f1c',
-  muted:   '#56608a',
-  faint:   '#9499bb',
-  dark:    '#08091a',
-  dark2:   '#0d1030',
+  tint:    '#f6f7fb',
+  tint2:   '#eceef7',
+  dark:    '#090a18',
 }
 const RGB = '33,41,126'
 
-// ── Enhanced app preview ──────────────────────────────────────
+// ── Enhanced app preview (kept, refined frame) ────────────────
 function AppPreview() {
   const kpis = [
-    { label: 'Total Leads',      val: '2,847', diff: '+12%', up: true },
-    { label: 'Active Patients',  val: '1,429', diff: '+8%',  up: true },
-    { label: 'Appts Today',      val: '34',    diff: '↑ 4 vs yesterday', up: true },
-    { label: 'Conversion',       val: '42%',   diff: '+5pp', up: true },
+    { label: 'Total Leads',     val: '2,847', diff: '+12%' },
+    { label: 'Active Patients', val: '1,429', diff: '+8%' },
+    { label: 'Appts Today',     val: '34',    diff: '+4' },
+    { label: 'Conversion',      val: '42%',   diff: '+5pp' },
   ]
   const rows = [
-    { name: 'Ramesh Kumar',  stage: 'Interested', sc: '#f59e0b', pr: 'High',   dot: '#ef4444' },
-    { name: 'Priya Sharma',  stage: 'Contacted',  sc: '#0ea5e9', pr: 'Medium', dot: '#f59e0b' },
-    { name: 'Deepa Nair',    stage: 'Follow-up',  sc: '#8b5cf6', pr: 'Urgent', dot: '#7c3aed' },
-    { name: 'Vikram Singh',  stage: 'Converted',  sc: '#10b981', pr: 'Low',    dot: '#10b981' },
+    { name: 'Ramesh Kumar', stage: 'Interested', sc: '#f59e0b', pr: 'High',   dot: '#ef4444' },
+    { name: 'Priya Sharma', stage: 'Contacted',  sc: '#0ea5e9', pr: 'Medium', dot: '#f59e0b' },
+    { name: 'Deepa Nair',   stage: 'Follow-up',  sc: '#8b5cf6', pr: 'Urgent', dot: '#7c3aed' },
+    { name: 'Vikram Singh', stage: 'Converted',  sc: '#10b981', pr: 'Low',    dot: '#10b981' },
   ]
-
   return (
-    <div style={{ position: 'relative', maxWidth: 760, margin: '0 auto' }}>
-      {/* glow halo */}
-      <div style={{ position: 'absolute', inset: '-40px', background: `radial-gradient(ellipse at center, rgba(${RGB},0.4) 0%, transparent 65%)`, filter: 'blur(48px)', zIndex: 0 }} />
-
-      {/* browser chrome */}
-      <div style={{ position: 'relative', zIndex: 1, borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)' }}>
+    <div style={{ position: 'relative', maxWidth: 980, margin: '0 auto' }}>
+      <div style={{ position: 'relative', zIndex: 1, borderRadius: 14, overflow: 'hidden', border: `1px solid ${B.line}`, boxShadow: '0 30px 80px rgba(11,13,26,0.14), 0 4px 14px rgba(11,13,26,0.06)' }}>
         {/* title bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#13172e', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#fbfbfe', borderBottom: `1px solid ${B.line}` }}>
           <div style={{ display: 'flex', gap: 5 }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff5f57' }} />
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#febc2e' }} />
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28c840' }} />
+            {['#e2645a', '#e6b94e', '#5cbf6a'].map(c => (
+              <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: 0.85 }} />
+            ))}
           </div>
-          <div style={{ flex: 1, margin: '0 14px' }}>
-            <div style={{ padding: '3px 10px', borderRadius: 5, background: '#0a0d1f', border: '1px solid rgba(255,255,255,0.07)', fontSize: 10.5, color: 'rgba(255,255,255,0.28)' }}>
+          <div style={{ flex: 1, maxWidth: 340, margin: '0 auto' }}>
+            <div style={{ padding: '4px 12px', borderRadius: 6, background: B.tint, border: `1px solid ${B.line}`, fontSize: 11, color: B.faint, textAlign: 'center' }}>
               app.healthcrm.in/dashboard
             </div>
           </div>
         </div>
 
         {/* layout */}
-        <div style={{ display: 'flex', height: 350, background: B.surf2 }}>
+        <div style={{ display: 'flex', height: 358, background: B.tint }}>
           {/* sidebar */}
-          <div style={{ width: 46, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0', gap: 3, background: '#fff', borderRight: `1px solid ${B.border}` }}>
+          <div style={{ width: 48, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0', gap: 3, background: '#fff', borderRight: `1px solid ${B.line}` }}>
             <div style={{ width: 30, height: 30, borderRadius: 9, background: B.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
               <Heart size={13} color="#fff" />
             </div>
-            {[BarChart2, TrendingUp, Users, Calendar, CreditCard, CheckSquare, Bell].map((Icon, i) => (
-              <div key={i} style={{ width: 34, height: 34, borderRadius: 8, background: i === 0 ? B.bg50 : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {[BarChart2, TrendingUp, Users, Calendar, CreditCard, Workflow].map((Icon, i) => (
+              <div key={i} style={{ width: 34, height: 34, borderRadius: 8, background: i === 0 ? B.tint2 : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={13} style={{ color: i === 0 ? B.brand : B.faint }} />
               </div>
             ))}
-            <div style={{ marginTop: 'auto' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Settings size={13} style={{ color: B.faint }} />
-              </div>
-            </div>
           </div>
-
           {/* main */}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {/* topbar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: '#fff', borderBottom: `1px solid ${B.border}` }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: B.text }}>Dashboard</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', background: '#fff', borderBottom: `1px solid ${B.line}` }}>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: B.ink }}>Dashboard</span>
               <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-                <div style={{ padding: '4px 10px', background: B.brand, borderRadius: 6, fontSize: 8.5, color: '#fff', fontWeight: 700 }}>+ New Lead</div>
-                <div style={{ width: 22, height: 22, borderRadius: 11, background: B.bg50, border: `1.5px solid ${B.bg100}` }} />
+                <div style={{ padding: '5px 11px', background: B.brand, borderRadius: 6, fontSize: 9, color: '#fff', fontWeight: 700 }}>+ New Lead</div>
+                <div style={{ width: 22, height: 22, borderRadius: 11, background: B.tint2 }} />
               </div>
             </div>
-
-            {/* kpi row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '10px 12px 8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 9, padding: '12px 14px 9px' }}>
               {kpis.map((k, i) => (
-                <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '8px 10px', border: `1px solid ${B.border}` }}>
-                  <div style={{ fontSize: 6.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: B.faint, marginBottom: 4 }}>{k.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 900, color: B.text, letterSpacing: '-0.5px', lineHeight: 1 }}>{k.val}</div>
-                  <div style={{ fontSize: 7, marginTop: 3, color: k.up ? '#16a34a' : B.faint, fontWeight: 600 }}>{k.diff}</div>
+                <div key={i} style={{ background: '#fff', borderRadius: 9, padding: '9px 11px', border: `1px solid ${B.line}` }}>
+                  <div style={{ fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: B.faint, marginBottom: 5 }}>{k.label}</div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: B.ink, letterSpacing: '-0.5px', lineHeight: 1 }}>{k.val}</div>
+                  <div style={{ fontSize: 7.5, marginTop: 3, color: '#16a34a', fontWeight: 700 }}>{k.diff}</div>
                 </div>
               ))}
             </div>
-
-            {/* table */}
-            <div style={{ margin: '0 12px 12px', flex: 1, borderRadius: 10, overflow: 'hidden', border: `1px solid ${B.border}`, background: '#fff' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 80px', padding: '7px 12px', background: B.surf2, borderBottom: `1px solid ${B.border}` }}>
+            <div style={{ margin: '0 14px 14px', flex: 1, borderRadius: 9, overflow: 'hidden', border: `1px solid ${B.line}`, background: '#fff' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 80px', padding: '8px 13px', background: B.tint, borderBottom: `1px solid ${B.line}` }}>
                 {['Name', 'Stage', 'Priority', 'Action'].map(h => (
                   <span key={h} style={{ fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: B.faint }}>{h}</span>
                 ))}
               </div>
               {rows.map((r, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 80px', padding: '8px 12px', alignItems: 'center', borderBottom: i < rows.length - 1 ? `1px solid ${B.border}` : 'none', background: i % 2 === 0 ? '#fff' : B.surf2 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 10, background: r.sc + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, color: r.sc }}>{r.name[0]}</div>
-                    <span style={{ fontSize: 9.5, fontWeight: 600, color: B.text }}>{r.name}</span>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 80px', padding: '9px 13px', alignItems: 'center', borderBottom: i < rows.length - 1 ? `1px solid ${B.line}` : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 10, background: r.sc + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7.5, fontWeight: 700, color: r.sc }}>{r.name[0]}</div>
+                    <span style={{ fontSize: 9.5, fontWeight: 600, color: B.ink }}>{r.name}</span>
                   </div>
                   <span style={{ fontSize: 7.5, fontWeight: 600, padding: '2px 7px', borderRadius: 99, width: 'fit-content', background: r.sc + '18', color: r.sc }}>{r.stage}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -122,8 +104,7 @@ function AppPreview() {
                     <span style={{ fontSize: 8, color: B.muted }}>{r.pr}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <div style={{ padding: '2px 6px', borderRadius: 4, background: B.bg50, fontSize: 7, color: B.brand, fontWeight: 600 }}>Call</div>
-                    <div style={{ padding: '2px 6px', borderRadius: 4, background: '#dcfce7', fontSize: 7, color: '#15803d', fontWeight: 600 }}>Done</div>
+                    <div style={{ padding: '2px 7px', borderRadius: 4, background: B.tint2, fontSize: 7, color: B.brand, fontWeight: 700 }}>Call</div>
                   </div>
                 </div>
               ))}
@@ -135,384 +116,444 @@ function AppPreview() {
   )
 }
 
-// ── Data ──────────────────────────────────────────────────────
-const MINI_NAV = [
-  { icon: LayoutDashboard, label: 'Overview',     href: '#hero' },
-  { icon: TrendingUp,      label: 'Lead CRM',     href: '#features' },
-  { icon: Users,           label: 'Patients',     href: '#features' },
-  { icon: Calendar,        label: 'Appointments', href: '#features' },
-  { icon: Workflow,        label: 'Automation',   href: '#features' },
-  { icon: BarChart2,       label: 'Analytics',    href: '#features' },
-  { icon: CreditCard,      label: 'Billing',      href: '#features' },
-]
+// ── Image placeholder ─────────────────────────────────────────
+function Placeholder({ label, icon: Icon = ImageIcon, height = 340, accent = false }) {
+  return (
+    <div style={{
+      position: 'relative', height, borderRadius: 16, overflow: 'hidden',
+      border: `1px solid ${accent ? 'rgba(255,255,255,.12)' : B.line}`,
+      background: accent
+        ? 'linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02))'
+        : `linear-gradient(135deg, ${B.tint}, ${B.tint2})`,
+    }}>
+      {/* faint grid pattern to read as a placeholder */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        backgroundImage: `linear-gradient(${accent ? 'rgba(255,255,255,.05)' : 'rgba(33,41,126,.05)'} 1px, transparent 1px), linear-gradient(90deg, ${accent ? 'rgba(255,255,255,.05)' : 'rgba(33,41,126,.05)'} 1px, transparent 1px)`,
+        backgroundSize: '28px 28px', pointerEvents: 'none',
+      }} />
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: accent ? 'rgba(255,255,255,.08)' : B.surface, border: `1px solid ${accent ? 'rgba(255,255,255,.12)' : B.line}`,
+        }}>
+          <Icon size={24} style={{ color: accent ? '#a5b0ff' : B.brand }} />
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: accent ? 'rgba(255,255,255,.4)' : B.faint, letterSpacing: '.2px' }}>{label}</span>
+      </div>
+    </div>
+  )
+}
 
-const STATS = [
-  { value: '500+',  label: 'Clinics & hospitals' },
-  { value: '2.4M+', label: 'Patient interactions' },
-  { value: '40%',   label: 'Avg conversion lift' },
-  { value: '∞',     label: 'Free to start' },
+// ── Content ───────────────────────────────────────────────────
+const NAV = [
+  { label: 'Features', href: '#features' },
+  { label: 'Security', href: '#security' },
+  { label: 'Pricing',  href: '#pricing' },
+  { label: 'FAQ',      href: '#faq' },
 ]
 
 const FEATURES = [
-  { icon: TrendingUp,  title: 'Lead Pipeline',          desc: 'Custom stages, priority scoring, and one-click contact logging. Move every inquiry from first call to conversion without a single lead falling through.', color: '#6366f1' },
-  { icon: Plug,        title: 'Automatic Lead Capture',  desc: 'Pull leads from Google Forms, Meta Ads, WhatsApp, WordPress, and Zapier — directly into your pipeline with smart field mapping. Zero manual entry.', color: '#0ea5e9', badge: 'New' },
-  { icon: Workflow,    title: 'Automation Rules',        desc: 'Trigger stage changes, task creation, and team notifications when events happen. Set it once — let the system run the follow-up loop for you.', color: '#f59e0b', badge: 'New' },
-  { icon: PhoneCall,   title: 'Follow-up Tracking',      desc: 'Schedule calls and WhatsApp messages, log every outcome, and automatically create the next touchpoint. No lead goes cold, ever.', color: '#10b981' },
-  { icon: Users,       title: 'Patient Records',         desc: 'Complete profiles with demographics, medical history, insurance, and your own custom fields — all searchable, filterable, and linked to the timeline.', color: '#8b5cf6' },
-  { icon: Calendar,    title: 'Appointment Scheduling',  desc: 'Book, confirm, and manage appointments per doctor. Daily schedule views, status tracking, and cancellation handling — all in one place.', color: '#ec4899' },
-  { icon: Stethoscope, title: 'Clinical Consultations',  desc: 'Structured visit records with diagnosis, prescription, treatment plans, and visit details. Linked directly to the patient profile and timeline.', color: '#14b8a6', badge: 'New' },
-  { icon: CreditCard,  title: 'Billing & Invoices',      desc: 'Generate professional invoices, record payments, and track outstanding balances. Your finance dashboard without the spreadsheet.', color: '#f97316' },
-  { icon: Settings,    title: 'Custom Modules',          desc: 'Add fields and sections to leads or patients — vitals, insurance, referral source, emergency contacts — without writing a single line of code.', color: '#a855f7' },
+  { icon: TrendingUp,  title: 'Lead pipeline',        desc: 'Custom stages, priority scoring, and one-click contact logging — every inquiry tracked from first call to conversion.' },
+  { icon: Plug,        title: 'Automatic capture',     desc: 'Pull leads from Google Forms, Meta Ads, WhatsApp, WordPress, and webhooks straight into your pipeline. Zero manual entry.' },
+  { icon: Workflow,    title: 'Automation rules',      desc: 'Trigger stage changes, tasks, and notifications on the events you choose. Set it once and let the follow-up loop run itself.' },
+  { icon: Users,       title: 'Patient records',       desc: 'Complete profiles with history, insurance, and custom fields — searchable, filterable, and linked to the full timeline.' },
+  { icon: Calendar,    title: 'Appointments',          desc: 'Book, manage, and bill appointments per doctor, with consultation fees and payment collection built in.' },
+  { icon: Stethoscope, title: 'Clinical consultations', desc: 'Structured visit records — diagnosis, prescription, and treatment plans — linked directly to each patient.' },
+  { icon: CreditCard,  title: 'Billing & invoices',    desc: 'Generate invoices, record payments, and track outstanding balances. Your finance view without the spreadsheet.' },
+  { icon: Settings,    title: 'No-code modules',       desc: 'Add fields and sections to leads or patients — vitals, referral source, emergency contacts — without writing code.' },
 ]
 
 const STEPS = [
-  { n: '01', title: 'Set up in 5 minutes',  desc: 'Add your clinic details, invite your team, and configure the modules you need. Zero onboarding calls. No implementation consultants.', icon: Zap },
-  { n: '02', title: 'Connect your lead sources', desc: 'Link your intake forms, Meta ads, or website contact form. Every new inquiry lands in your pipeline automatically, tagged and ready to act on.', icon: Plug },
-  { n: '03', title: 'Convert and retain', desc: 'Turn inquiries into patients, schedule appointments, log consultations, and track payments — all from one screen, without switching tools.', icon: TrendingUp },
+  { n: '01', title: 'Set up in minutes',      desc: 'Add your clinic details, invite your team, and switch on the modules you need. No onboarding calls, no consultants.' },
+  { n: '02', title: 'Connect your sources',   desc: 'Link your forms, ad accounts, or website. Every new inquiry lands in your pipeline automatically, tagged and ready.' },
+  { n: '03', title: 'Convert and retain',     desc: 'Turn inquiries into patients, schedule visits, log consultations, and track payments — all from one screen.' },
+]
+
+const SHOWCASE = [
+  {
+    eyebrow: 'Lead pipeline', icon: Kanban, ph: 'Pipeline board preview',
+    title: 'A pipeline you can actually see',
+    desc: 'Drag leads through your own stages, score by priority, and log every call without leaving the board. Notes and tasks surface right on the card.',
+    points: ['Custom stages & colours', 'Priority scoring', 'Inline call & note logging'],
+  },
+  {
+    eyebrow: 'Patient 360', icon: UserRound, ph: 'Patient profile preview',
+    title: 'Every patient, on one screen',
+    desc: 'Demographics, medical history, appointments, consultations, invoices, and custom modules — all linked to a single timeline you can search and filter.',
+    points: ['Full visit & billing history', 'Custom fields & modules', 'Searchable timeline'],
+  },
+  {
+    eyebrow: 'Automation', icon: GitBranch, ph: 'Automation builder preview',
+    title: 'Set the follow-up loop once',
+    desc: 'Build rules that trigger stage changes, create tasks, and notify your team the moment something happens — so no lead ever goes cold.',
+    points: ['Event-based triggers', 'Auto-assign & notify', 'Zero manual follow-up'],
+  },
+]
+
+const SECURITY = [
+  { icon: Lock,     title: 'Encryption in transit & at rest', desc: 'All data is encrypted with TLS in transit and AES-256 at rest.' },
+  { icon: KeyRound, title: 'Role-based access control',       desc: 'Granular permissions per role — staff only see what they should.' },
+  { icon: FileText, title: 'Full audit logging',              desc: 'Every create, edit, and delete is recorded with who and when.' },
+  { icon: Database, title: 'Automated backups',               desc: 'Continuous backups with point-in-time recovery on managed Postgres.' },
+  { icon: Shield,   title: 'Built for health data',           desc: 'Privacy-first architecture designed for sensitive patient records.' },
+  { icon: RefreshCw,title: '99.9% uptime',                    desc: 'Resilient infrastructure with a public status page and live health checks.' },
+]
+
+const PLANS = [
+  {
+    name: 'Starter', price: '₹0', period: 'forever',
+    desc: 'For solo practitioners getting organised.',
+    features: ['Up to 2 users', 'Lead & patient records', 'Appointments', 'Core dashboard', 'Community support'],
+    cta: 'Start free', highlight: false,
+  },
+  {
+    name: 'Professional', price: '₹2,999', period: 'per month',
+    desc: 'For growing clinics that run on automation.',
+    features: ['Up to 15 users', 'Everything in Starter', 'Automation rules', 'Lead integrations', 'Billing & invoices', 'Priority support'],
+    cta: 'Start free trial', highlight: true,
+  },
+  {
+    name: 'Enterprise', price: 'Custom', period: 'let’s talk',
+    desc: 'For hospital groups with advanced needs.',
+    features: ['Unlimited users', 'Everything in Professional', 'SSO & advanced roles', 'Audit log exports', 'Dedicated manager', '99.9% uptime SLA'],
+    cta: 'Contact sales', highlight: false,
+  },
 ]
 
 const TESTIMONIALS = [
-  {
-    name: 'Dr. Rajesh Patel',
-    role: 'Director, Patel Diagnostics Centre, Ahmedabad',
-    quote: 'Before HealthCRM, we tracked leads through WhatsApp groups and Excel. Now every inquiry is captured, followed up, and converted faster than I thought possible. Our conversion rate doubled in 3 months.',
-    rating: 5,
-    stat: '2× conversion',
-  },
-  {
-    name: 'Priya Krishnamurthy',
-    role: 'Owner, SkinSense Aesthetic Clinic, Bengaluru',
-    quote: 'The custom modules feature is incredible. We built a full skin consultation tracker without any technical help. The entire team was onboarded in a single afternoon.',
-    rating: 5,
-    stat: '1-day onboarding',
-  },
-  {
-    name: 'Dr. Anand Mehta',
-    role: 'Senior Orthopedic Surgeon, MedLine Hospital, Mumbai',
-    quote: 'What impressed me most is the automation. When a follow-up is logged, the next one is already scheduled. We haven\'t lost a single lead to poor follow-up since we switched.',
-    rating: 5,
-    stat: '0 missed leads',
-  },
+  { name: 'Dr. Rajesh Patel',       role: 'Director, Patel Diagnostics, Ahmedabad',     quote: 'We used to track leads in WhatsApp groups and Excel. Now every inquiry is captured and followed up — our conversion rate doubled in three months.', stat: '2× conversion' },
+  { name: 'Priya Krishnamurthy',    role: 'Owner, SkinSense Clinic, Bengaluru',         quote: 'We built a full skin-consultation tracker with the custom modules — no technical help needed. The whole team was onboarded in an afternoon.',       stat: '1-day onboarding' },
+  { name: 'Dr. Anand Mehta',        role: 'Orthopedic Surgeon, MedLine, Mumbai',        quote: 'The automation is what sold me. When a follow-up is logged, the next is already scheduled. We haven’t lost a lead to poor follow-up since.',          stat: '0 missed leads' },
 ]
 
-const INTEGRATIONS = [
-  { name: 'Google Forms', emoji: '📋' },
-  { name: 'Meta Lead Ads', emoji: '📘' },
-  { name: 'WhatsApp', emoji: '💬' },
-  { name: 'Zapier', emoji: '⚡' },
-  { name: 'WordPress', emoji: '🌐' },
-  { name: 'Webhooks API', emoji: '🔗' },
+const FAQS = [
+  { q: 'Is my patient data secure?',                a: 'Yes. Data is encrypted in transit (TLS) and at rest (AES-256), access is governed by role-based permissions, and every change is audit-logged. Backups run continuously with point-in-time recovery.' },
+  { q: 'Can I import my existing patients and leads?', a: 'Absolutely. You can bring in existing records, and connect intake forms, Meta Lead Ads, WhatsApp, WordPress, or custom webhooks so new inquiries flow in automatically.' },
+  { q: 'Is there really a free plan?',              a: 'Yes — the Starter plan is free forever for up to two users and covers the core CRM, patient records, and appointments. No credit card required to begin.' },
+  { q: 'Can I customise fields and modules?',       a: 'You can add your own fields and entire sections to leads and patients — vitals, insurance, referral source, and more — without writing a single line of code.' },
+  { q: 'Do you charge a setup fee?',                a: 'No setup fees and no implementation consultants. Most clinics are up and running the same day they sign up.' },
 ]
+
+// ── FAQ accordion item ────────────────────────────────────────
+function FaqItem({ q, a, open, onToggle }) {
+  return (
+    <div style={{ borderBottom: `1px solid ${B.line}` }}>
+      <button onClick={onToggle} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '22px 4px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: B.ink }}>{q}</span>
+        <ChevronDown size={18} style={{ color: B.muted, flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+      </button>
+      {open && (
+        <p style={{ fontSize: 14.5, color: B.muted, lineHeight: 1.75, padding: '0 4px 24px', maxWidth: 680 }}>{a}</p>
+      )}
+    </div>
+  )
+}
 
 // ── Page ──────────────────────────────────────────────────────
 export default function LandingPage({ loggedIn = false, homeHref = '/dashboard' }) {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [activeMini, setActiveMini] = useState('Overview')
-
   const dest = homeHref || '/dashboard'
+  const [openFaq, setOpenFaq] = useState(0)
+
+  const eyebrow = (text) => (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: B.brand, marginBottom: 18 }}>
+      <span style={{ width: 18, height: 1.5, background: B.brand, display: 'inline-block' }} />
+      {text}
+    </div>
+  )
 
   return (
-    <div style={{ fontFamily: "'Inter', 'DM Sans', system-ui, sans-serif", color: B.text, background: B.surface }}>
+    <div className="lp-root" style={{ fontFamily: "'Inter','DM Sans',system-ui,sans-serif", color: B.ink, background: B.surface }}>
       <style>{`
-        *, *::before, *::after { box-sizing: border-box; }
+        *,*::before,*::after { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
-        @keyframes float {
-          0%,100% { transform: translateY(0); }
-          50%      { transform: translateY(-14px); }
+        .lp-root {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+          font-feature-settings: 'cv11','ss01';
         }
-        .float { animation: float 9s ease-in-out infinite; }
-        .btn-main {
-          display: inline-flex; align-items: center; gap: 8px;
-          background: ${B.brand}; color: #fff; text-decoration: none;
-          font-weight: 700; border-radius: 11px;
-          transition: background .18s, transform .18s, box-shadow .18s;
-        }
-        .btn-main:hover { background: ${B.light}; transform: translateY(-2px); box-shadow: 0 12px 36px rgba(${RGB},.4); }
-        .btn-ghost {
-          display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-          border: 1.5px solid rgba(255,255,255,.14); color: rgba(255,255,255,.65);
-          border-radius: 11px; font-weight: 500;
-          background: rgba(255,255,255,.04);
-          transition: background .15s, border-color .15s, color .15s;
-        }
-        .btn-ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.24); color: #fff; }
-        .feat-card { transition: all .22s; }
-        .feat-card:hover { transform: translateY(-5px); box-shadow: 0 20px 56px rgba(${RGB},.1); }
-        .mini-tab { transition: all .14s; text-decoration: none; }
-        .mini-tab:hover { background: ${B.bg50} !important; color: ${B.text} !important; }
-        .nav-link { transition: all .14s; text-decoration: none; }
-        .nav-link:hover { background: ${B.surf2} !important; color: ${B.text} !important; }
+        .lp-root h1, .lp-root h2 { letter-spacing: -0.035em; }
+        .lp-root h3 { letter-spacing: -0.015em; }
+        @keyframes floaty { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
+        .floaty { animation: floaty 8s ease-in-out infinite; }
+        .lp-primary { display:inline-flex; align-items:center; gap:8px; background:${B.brand}; color:#fff; text-decoration:none; font-weight:600; border-radius:10px; box-shadow: 0 1px 2px rgba(11,13,26,.12), 0 4px 14px rgba(${RGB},.18); transition:transform .15s, box-shadow .15s; }
+        .lp-primary:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(11,13,26,.14), 0 10px 26px rgba(${RGB},.28); }
+        .lp-ghost { display:inline-flex; align-items:center; gap:8px; text-decoration:none; border:1px solid ${B.line}; color:${B.ink}; border-radius:10px; font-weight:600; background:#fff; box-shadow: 0 1px 2px rgba(11,13,26,.04); transition:background .15s, border-color .15s; }
+        .lp-ghost:hover { background:${B.tint}; border-color:#d6d9e8; }
+        .lp-navlink { font-size:14px; color:${B.muted}; text-decoration:none; font-weight:500; transition:color .14s; }
+        .lp-navlink:hover { color:${B.ink}; }
+        .lp-card { transition: border-color .18s, transform .18s, box-shadow .18s; }
+        .lp-card:hover { transform: translateY(-3px); border-color:#d6d9e8; box-shadow: 0 16px 40px rgba(11,13,26,.06); }
         @media (max-width: 860px) {
-          .desk-only { display: none !important; }
-          .mob-btn   { display: flex !important; }
-          .footer-grid { grid-template-columns: 1fr 1fr !important; }
-          .stats-grid  { grid-template-columns: repeat(2,1fr) !important; }
-          .trust-row   { gap: 18px !important; }
-        }
-        @media (max-width: 540px) {
-          .footer-grid { grid-template-columns: 1fr !important; }
-          .stats-grid  { grid-template-columns: 1fr 1fr !important; }
+          .lp-desk { display:none !important; }
+          .lp-grid-2 { grid-template-columns:1fr !important; }
+          .lp-foot { grid-template-columns:1fr 1fr !important; }
         }
       `}</style>
 
-      {/* ── Announcement bar ── */}
-      <div style={{ background: `linear-gradient(90deg, ${B.brand} 0%, ${B.lighter} 100%)`, padding: '9px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'rgba(255,255,255,.88)', fontWeight: 500 }}>
-          <Sparkles size={13} color="#fbbf24" />
-          New: Automation Rules, Clinical Consultations &amp; Lead Integrations are live
-        </span>
-        <a href="#features" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, color: 'rgba(255,255,255,.6)', textDecoration: 'none', fontWeight: 600, padding: '2px 9px', borderRadius: 99, border: '1px solid rgba(255,255,255,.22)', transition: 'all .14s' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.15)'; e.currentTarget.style.color = '#fff' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,.6)' }}
-        >
-          Explore <ChevronRight size={11} />
-        </a>
-      </div>
-
-      {/* ── Sticky header (main nav + mini nav) ── */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: `1px solid ${B.border}` }}>
-
-        {/* Main nav */}
-        <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 11, background: B.brand, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Heart size={17} color="#fff" />
+      {/* ── Nav ── */}
+      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: `1px solid ${B.line}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 28px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', flexShrink: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: B.brand, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Heart size={16} color="#fff" />
             </div>
-            <span style={{ fontWeight: 900, fontSize: 17, letterSpacing: '-0.5px', color: B.text }}>HealthCRM</span>
-          </div>
+            <span style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.5px', color: B.ink }}>HealthCRM</span>
+          </Link>
 
-          {/* Desktop nav */}
-          <nav className="desk-only" style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            {['Features', 'Solutions', 'Pricing', 'Resources'].map(item => (
-              <a key={item} href="#" className="nav-link" style={{ fontSize: 13.5, color: B.muted, padding: '7px 14px', borderRadius: 8, background: 'transparent' }}>
-                {item}
-              </a>
-            ))}
+          <nav className="lp-desk" style={{ display: 'flex', gap: 30, alignItems: 'center' }}>
+            {NAV.map(n => <a key={n.label} href={n.href} className="lp-navlink">{n.label}</a>)}
           </nav>
 
-          {/* Desktop CTAs */}
-          <div className="desk-only" style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
             {loggedIn ? (
-              <Link href={dest} className="btn-main" style={{ fontSize: 13.5, padding: '8px 20px' }}>
-                <LayoutDashboard size={14} /> Dashboard
-              </Link>
+              <Link href={dest} className="lp-primary" style={{ fontSize: 14, padding: '8px 18px' }}>Dashboard</Link>
             ) : (
               <>
-                <Link href="/login" className="nav-link" style={{ fontSize: 13.5, color: B.muted, padding: '7px 16px', borderRadius: 8, background: 'transparent' }}>
-                  Log in
-                </Link>
-                <Link href="/login" className="btn-main" style={{ fontSize: 13.5, padding: '8px 20px' }}>
-                  Get started free <ArrowRight size={14} />
+                <Link href="/login" className="lp-navlink lp-desk" style={{ fontWeight: 600 }}>Log in</Link>
+                <Link href="/login" className="lp-primary" style={{ fontSize: 14, padding: '8px 18px' }}>
+                  Get started <ArrowRight size={14} />
                 </Link>
               </>
             )}
-          </div>
-
-          {/* Mobile hamburger */}
-          <button className="mob-btn" onClick={() => setMobileOpen(o => !o)}
-            style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', color: B.muted, padding: 4, alignItems: 'center' }}>
-            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-        </div>
-
-        {/* Mobile menu */}
-        {mobileOpen && (
-          <div style={{ padding: '16px 24px 20px', borderTop: `1px solid ${B.border}`, background: B.surface, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {['Features', 'Solutions', 'Pricing', 'Resources'].map(item => (
-              <a key={item} href="#" style={{ fontSize: 14, color: B.muted, textDecoration: 'none', padding: '10px 8px', borderRadius: 8 }}>{item}</a>
-            ))}
-            <div style={{ borderTop: `1px solid ${B.border}`, marginTop: 8, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {loggedIn ? (
-                <Link href={dest} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, fontWeight: 700, textDecoration: 'none', textAlign: 'center', padding: '11px', borderRadius: 10, background: B.brand, color: '#fff' }}>
-                  <LayoutDashboard size={15} /> Dashboard
-                </Link>
-              ) : (
-                <>
-                  <Link href="/login" style={{ fontSize: 14, color: B.muted, textDecoration: 'none', textAlign: 'center', padding: '11px', border: `1px solid ${B.border}`, borderRadius: 10 }}>Log in</Link>
-                  <Link href="/login" style={{ fontSize: 14, fontWeight: 700, textDecoration: 'none', textAlign: 'center', padding: '11px', borderRadius: 10, background: B.brand, color: '#fff' }}>Get started free</Link>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Mini nav (product modules) ── */}
-        <div style={{ borderTop: `1px solid ${B.border}`, background: B.surf2, overflowX: 'auto', scrollbarWidth: 'none' }}>
-          <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 2, height: 44, minWidth: 'max-content' }}>
-            {MINI_NAV.map(({ icon: Icon, label, href }) => {
-              const active = activeMini === label
-              return (
-                <a key={label} href={href} className="mini-tab"
-                  onClick={() => setActiveMini(label)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '5px 13px', borderRadius: 8, whiteSpace: 'nowrap',
-                    fontSize: 12.5, fontWeight: active ? 700 : 500,
-                    color: active ? B.brand : B.muted,
-                    background: active ? B.bg50 : 'transparent',
-                    borderBottom: `2px solid ${active ? B.brand : 'transparent'}`,
-                  }}
-                >
-                  <Icon size={13} />
-                  {label}
-                </a>
-              )
-            })}
           </div>
         </div>
       </header>
 
       {/* ── Hero ── */}
-      <section id="hero" style={{ background: B.dark, padding: '96px 24px 0', overflow: 'hidden', position: 'relative' }}>
-        {/* Gradient blobs */}
-        <div style={{ position: 'absolute', top: '-80px', left: '50%', transform: 'translateX(-50%)', width: 900, height: 700, background: `radial-gradient(ellipse at center, rgba(${RGB},.28) 0%, transparent 65%)`, zIndex: 0, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: 120, left: '8%', width: 340, height: 340, background: 'radial-gradient(ellipse at center, rgba(91,102,216,.14) 0%, transparent 70%)', zIndex: 0, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: 220, right: '6%', width: 280, height: 280, background: 'radial-gradient(ellipse at center, rgba(16,185,129,.08) 0%, transparent 70%)', zIndex: 0, pointerEvents: 'none' }} />
+      <section style={{ position: 'relative', background: B.surface, padding: '92px 28px 0', overflow: 'hidden' }}>
+        {/* faint grid that fades out */}
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none',
+          backgroundImage: 'linear-gradient(rgba(33,41,126,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(33,41,126,.045) 1px, transparent 1px)',
+          backgroundSize: '46px 46px',
+          maskImage: 'radial-gradient(ellipse 80% 55% at 50% 30%, #000 0%, transparent 75%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 80% 55% at 50% 30%, #000 0%, transparent 75%)',
+        }} />
+        {/* soft colour mesh */}
+        <div style={{ position: 'absolute', top: -160, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 640, background: `radial-gradient(ellipse at center, rgba(${RGB},.10) 0%, transparent 68%)`, pointerEvents: 'none', zIndex: 0 }} />
+        <div style={{ position: 'absolute', top: 40, left: '12%', width: 360, height: 360, background: 'radial-gradient(circle, rgba(91,102,216,.10) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0, filter: 'blur(8px)' }} />
+        <div style={{ position: 'absolute', top: 90, right: '12%', width: 320, height: 320, background: 'radial-gradient(circle, rgba(56,189,248,.08) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0, filter: 'blur(8px)' }} />
+        <div style={{ maxWidth: 880, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          <Link href={loggedIn ? dest : '/login'} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 8px', borderRadius: 99, background: B.tint, border: `1px solid ${B.line}`, fontSize: 12.5, fontWeight: 600, color: B.muted, textDecoration: 'none', marginBottom: 30 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px', borderRadius: 99, background: B.brand, color: '#fff', fontSize: 11, fontWeight: 700 }}>New</span>
+            Automation, consultations & integrations are live
+            <ArrowRight size={13} style={{ color: B.faint }} />
+          </Link>
 
-        <div style={{ maxWidth: 840, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-          {/* Badge */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 99, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.11)', fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,.7)', marginBottom: 30 }}>
-            <Activity size={12} color="#10b981" />
-            Healthcare CRM Platform
-            <span style={{ display: 'inline-block', width: 1, height: 12, background: 'rgba(255,255,255,.15)' }} />
-            <span style={{ color: '#34d399', fontWeight: 700 }}>500+ clinics trust us</span>
-          </div>
-
-          {/* Headline */}
-          <h1 style={{ fontSize: 'clamp(38px,6.5vw,70px)', fontWeight: 900, lineHeight: 1.04, letterSpacing: '-2.5px', color: '#fff', marginBottom: 24 }}>
-            Run your clinic smarter,
-            <br />
-            <span style={{ background: 'linear-gradient(135deg, #818cf8 0%, #a78bfa 45%, #60a5fa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              not harder.
-            </span>
+          <h1 style={{ fontSize: 'clamp(40px,6.5vw,68px)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-2.5px', color: B.ink, marginBottom: 24 }}>
+            The operating system<br />for modern clinics
           </h1>
-
-          {/* Sub */}
-          <p style={{ fontSize: 18, color: 'rgba(255,255,255,.55)', lineHeight: 1.7, maxWidth: 560, margin: '0 auto 20px', fontWeight: 400 }}>
-            One platform for leads, patients, appointments, and billing — with intelligent automation that turns more inquiries into loyal, long-term patients.
+          <p style={{ fontSize: 19, color: B.muted, lineHeight: 1.65, maxWidth: 580, margin: '0 auto 36px' }}>
+            One platform for leads, patients, appointments, and billing — with the automation that turns more inquiries into long-term patients.
           </p>
 
-          {/* Social proof line */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 40 }}>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 26 }}>
+            <Link href={loggedIn ? dest : '/login'} className="lp-primary" style={{ fontSize: 15.5, padding: '14px 28px' }}>
+              {loggedIn ? <>Go to dashboard <LayoutDashboard size={16} /></> : <>Start for free <ArrowRight size={16} /></>}
+            </Link>
+            <a href="#features" className="lp-ghost" style={{ fontSize: 15.5, padding: '14px 26px' }}>See features</a>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 64, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex' }}>
               {['#6366f1','#8b5cf6','#ec4899','#0ea5e9','#10b981'].map((c, i) => (
-                <div key={i} style={{ width: 28, height: 28, borderRadius: 14, border: '2px solid rgba(255,255,255,.15)', background: c, marginLeft: i > 0 ? -8 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 700 }}>
-                  {['R','P','D','V','A'][i]}
-                </div>
+                <div key={i} style={{ width: 26, height: 26, borderRadius: 13, border: '2px solid #fff', background: c, marginLeft: i > 0 ? -7 : 0 }} />
               ))}
             </div>
             <div style={{ display: 'flex', gap: 2 }}>
-              {[...Array(5)].map((_, i) => <Star key={i} size={12} fill="#fbbf24" color="#fbbf24" />)}
+              {[...Array(5)].map((_, i) => <Star key={i} size={13} fill="#f59e0b" color="#f59e0b" />)}
             </div>
-            <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,.45)', fontWeight: 500 }}>Rated 4.9/5 by 200+ clinic teams</span>
-          </div>
-
-          {/* CTAs */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 80 }}>
-            <Link href={loggedIn ? dest : '/login'} className="btn-main" style={{ fontSize: 15.5, padding: '14px 32px', boxShadow: `0 8px 32px rgba(${RGB},.55)` }}>
-              {loggedIn ? <>Go to Dashboard <LayoutDashboard size={16} /></> : <>Start for free <ArrowRight size={16} /></>}
-            </Link>
-            <a href="#how" className="btn-ghost" style={{ fontSize: 15.5, padding: '14px 28px' }}>
-              See how it works
-            </a>
+            <span style={{ fontSize: 13, color: B.muted, fontWeight: 500 }}>Trusted by 500+ clinics across India</span>
           </div>
         </div>
 
-        {/* App preview */}
-        <div style={{ maxWidth: 1040, margin: '0 auto', position: 'relative', zIndex: 1 }} className="float">
+        <div style={{ maxWidth: 1040, margin: '0 auto', position: 'relative', zIndex: 1 }} className="floaty">
           <AppPreview />
         </div>
       </section>
 
-      {/* ── Stats ── */}
-      <div style={{ background: B.surface, borderBottom: `1px solid ${B.border}` }}>
-        <div className="stats-grid" style={{ maxWidth: 960, margin: '0 auto', padding: '44px 24px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, textAlign: 'center' }}>
-          {STATS.map(({ value, label }) => (
-            <div key={label} style={{ padding: '16px 8px' }}>
-              <div style={{ fontSize: 38, fontWeight: 900, color: B.brand, letterSpacing: '-1.5px', lineHeight: 1 }}>{value}</div>
-              <div style={{ fontSize: 13.5, color: B.muted, marginTop: 6, fontWeight: 500 }}>{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Trust bar ── */}
-      <div style={{ background: B.surf2, borderBottom: `1px solid ${B.border}`, padding: '18px 24px' }}>
-        <div className="trust-row" style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 36, flexWrap: 'wrap' }}>
-          {[
-            { icon: Shield,    text: 'Data Security & Privacy' },
-            { icon: Lock,      text: 'Role-based Access Control' },
-            { icon: Plug,      text: '6+ Native Integrations' },
-            { icon: Activity,  text: '99.9% Uptime SLA' },
-            { icon: Settings,  text: 'No-code Customisation' },
-          ].map(({ icon: Icon, text }) => (
-            <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: B.muted, fontWeight: 500 }}>
-              <Icon size={14} color={B.brand} />
-              {text}
+      {/* ── Stats strip ── */}
+      <div style={{ background: B.surface, borderTop: `1px solid ${B.line}`, borderBottom: `1px solid ${B.line}`, marginTop: 72 }}>
+        <div className="lp-foot" style={{ maxWidth: 1000, margin: '0 auto', padding: '40px 28px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, textAlign: 'center' }}>
+          {[['500+','Clinics & hospitals'],['2.4M+','Patient interactions'],['40%','Avg. conversion lift'],['99.9%','Uptime']].map(([v, l]) => (
+            <div key={l}>
+              <div style={{ fontSize: 34, fontWeight: 800, color: B.ink, letterSpacing: '-1.5px', lineHeight: 1 }}>{v}</div>
+              <div style={{ fontSize: 13, color: B.muted, marginTop: 7 }}>{l}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* ── Features ── */}
-      <section id="features" style={{ background: B.surface, padding: '108px 24px' }}>
-        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 68 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 99, background: B.bg50, border: `1px solid ${B.border}`, fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: B.brand, marginBottom: 16 }}>
-              Platform Features
-            </div>
-            <h2 style={{ fontSize: 'clamp(30px,4.5vw,48px)', fontWeight: 900, letterSpacing: '-1.2px', color: B.text, marginBottom: 16 }}>
-              Everything your clinic needs
+      <section id="features" style={{ background: B.surface, padding: '110px 28px' }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ maxWidth: 620, marginBottom: 60 }}>
+            {eyebrow('Platform')}
+            <h2 style={{ fontSize: 'clamp(30px,4.2vw,46px)', fontWeight: 800, letterSpacing: '-1.4px', color: B.ink, marginBottom: 18, lineHeight: 1.1 }}>
+              Everything your clinic runs on, in one place
             </h2>
-            <p style={{ fontSize: 17, color: B.muted, maxWidth: 520, margin: '0 auto', lineHeight: 1.7 }}>
-              From first inquiry to final invoice — HealthCRM covers every touchpoint so nothing slips through the cracks.
+            <p style={{ fontSize: 17, color: B.muted, lineHeight: 1.7 }}>
+              From the first inquiry to the final invoice — every touchpoint covered, so nothing slips through the cracks.
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px,1fr))', gap: 20 }}>
-            {FEATURES.map(({ icon: Icon, title, desc, badge, color }) => (
-              <div key={title} className="feat-card" style={{ position: 'relative', padding: '28px', borderRadius: 18, border: `1.5px solid ${B.border}`, background: B.surface, overflow: 'hidden', cursor: 'default' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${color}, ${color}88)`, borderRadius: '18px 18px 0 0' }} />
-                {badge && (
-                  <span style={{ position: 'absolute', top: 20, right: 20, fontSize: 10, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '3px 9px', borderRadius: 99, background: B.bg50, color: B.brand }}>{badge}</span>
-                )}
-                <div style={{ width: 46, height: 46, borderRadius: 14, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
-                  <Icon size={21} color={color} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px,1fr))', gap: 1, background: B.line, border: `1px solid ${B.line}`, borderRadius: 16, overflow: 'hidden' }}>
+            {FEATURES.map(({ icon: Icon, title, desc }) => (
+              <div key={title} style={{ background: B.surface, padding: '30px 28px' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: B.tint, border: `1px solid ${B.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+                  <Icon size={18} color={B.brand} />
                 </div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: B.text, marginBottom: 9 }}>{title}</h3>
-                <p style={{ fontSize: 14, color: B.muted, lineHeight: 1.75 }}>{desc}</p>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: B.ink, marginBottom: 8 }}>{title}</h3>
+                <p style={{ fontSize: 13.5, color: B.muted, lineHeight: 1.7 }}>{desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
+      {/* ── Showcase (alternating image rows) ── */}
+      <section style={{ background: B.tint, padding: '110px 28px', borderTop: `1px solid ${B.line}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 96 }}>
+          {SHOWCASE.map((s, i) => {
+            const flip = i % 2 === 1
+            return (
+              <div key={s.title} className="lp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }}>
+                {/* Text */}
+                <div style={{ order: flip ? 2 : 1 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11.5, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: B.brand, marginBottom: 16 }}>
+                    <s.icon size={15} /> {s.eyebrow}
+                  </div>
+                  <h3 style={{ fontSize: 'clamp(26px,3.2vw,36px)', fontWeight: 800, letterSpacing: '-1.2px', color: B.ink, marginBottom: 16, lineHeight: 1.15 }}>{s.title}</h3>
+                  <p style={{ fontSize: 16.5, color: B.muted, lineHeight: 1.75, marginBottom: 24 }}>{s.desc}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {s.points.map(p => (
+                      <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14.5, fontWeight: 500, color: B.body }}>
+                        <span style={{ width: 20, height: 20, borderRadius: 99, background: B.tint2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Check size={12} style={{ color: B.brand }} />
+                        </span>
+                        {p}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Image placeholder */}
+                <div style={{ order: flip ? 1 : 2 }}>
+                  <Placeholder label={s.ph} icon={s.icon} height={360} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
       {/* ── How it works ── */}
-      <section id="how" style={{ background: B.dark2, padding: '108px 24px', borderTop: `1px solid rgba(255,255,255,.06)` }}>
-        <div style={{ maxWidth: 1060, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 68 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 99, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)', marginBottom: 16 }}>
-              How it works
-            </div>
-            <h2 style={{ fontSize: 'clamp(30px,4.5vw,48px)', fontWeight: 900, letterSpacing: '-1.2px', color: '#fff' }}>
-              Up and running in minutes
+      <section style={{ background: B.surface, padding: '110px 28px', borderTop: `1px solid ${B.line}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 64 }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>{eyebrow('How it works')}</div>
+            <h2 style={{ fontSize: 'clamp(30px,4.2vw,46px)', fontWeight: 800, letterSpacing: '-1.4px', color: B.ink, lineHeight: 1.1 }}>
+              Live in a day, not a quarter
             </h2>
-            <p style={{ fontSize: 17, color: 'rgba(255,255,255,.4)', maxWidth: 480, margin: '16px auto 0', lineHeight: 1.7 }}>
-              No implementation partner. No 6-week onboarding. Just a system that works from day one.
+          </div>
+          <div className="lp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24 }}>
+            {STEPS.map(({ n, title, desc }) => (
+              <div key={n} style={{ background: B.surface, border: `1px solid ${B.line}`, borderRadius: 16, overflow: 'hidden' }}>
+                <Placeholder label={`Step ${n}`} height={150} />
+                <div style={{ padding: '26px 28px 30px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: B.brand, letterSpacing: '1px', marginBottom: 14 }}>{n}</div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: B.ink, marginBottom: 10 }}>{title}</h3>
+                  <p style={{ fontSize: 14.5, color: B.muted, lineHeight: 1.75 }}>{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Security ── */}
+      <section id="security" style={{ background: B.dark, padding: '110px 28px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translateX(-50%)', width: 900, height: 500, background: `radial-gradient(ellipse, rgba(${RGB},.25) 0%, transparent 70%)`, pointerEvents: 'none' }} />
+        <div style={{ maxWidth: 1180, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+          <div style={{ maxWidth: 620, marginBottom: 56 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 700, letterSpacing: '1.2px', textTransform: 'uppercase', color: '#818cf8', marginBottom: 18 }}>
+              <span style={{ width: 18, height: 1.5, background: '#818cf8', display: 'inline-block' }} /> Security & compliance
+            </div>
+            <h2 style={{ fontSize: 'clamp(30px,4.2vw,46px)', fontWeight: 800, letterSpacing: '-1.4px', color: '#fff', marginBottom: 18, lineHeight: 1.1 }}>
+              Patient data, protected by design
+            </h2>
+            <p style={{ fontSize: 17, color: 'rgba(255,255,255,.55)', lineHeight: 1.7 }}>
+              Healthcare records demand more than a login screen. Security is built into every layer of the platform.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 18 }}>
+            {SECURITY.map(({ icon: Icon, title, desc }) => (
+              <div key={title} style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.09)', borderRadius: 14, padding: '26px 24px' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: `rgba(${RGB},.45)`, border: `1px solid rgba(${RGB},.6)`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                  <Icon size={18} color="#a5b0ff" />
+                </div>
+                <h3 style={{ fontSize: 15.5, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{title}</h3>
+                <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,.45)', lineHeight: 1.7 }}>{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Pricing ── */}
+      <section id="pricing" style={{ background: B.surface, padding: '110px 28px' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>{eyebrow('Pricing')}</div>
+            <h2 style={{ fontSize: 'clamp(30px,4.2vw,46px)', fontWeight: 800, letterSpacing: '-1.4px', color: B.ink, marginBottom: 16, lineHeight: 1.1 }}>
+              Simple, transparent pricing
+            </h2>
+            <p style={{ fontSize: 17, color: B.muted, lineHeight: 1.7, maxWidth: 480, margin: '0 auto' }}>
+              Start free and upgrade as you grow. No setup fees, cancel anytime.
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 20 }}>
-            {STEPS.map(({ n, title, desc, icon: Icon }, idx) => (
-              <div key={n} style={{ position: 'relative', padding: '36px 30px', borderRadius: 20, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: -8, right: 12, fontSize: 88, fontWeight: 900, color: 'rgba(255,255,255,.03)', lineHeight: 1, letterSpacing: '-4px', userSelect: 'none' }}>{n}</div>
-                <div style={{ width: 44, height: 44, borderRadius: 13, background: `rgba(${RGB},.5)`, border: `1px solid rgba(${RGB},.6)`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 22 }}>
-                  <Icon size={20} color="#818cf8" />
+          <div className="lp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 22, alignItems: 'start' }}>
+            {PLANS.map(p => (
+              <div key={p.name} style={{
+                position: 'relative',
+                background: p.highlight ? B.ink : B.surface,
+                border: `1px solid ${p.highlight ? B.ink : B.line}`,
+                borderRadius: 18, padding: '34px 30px',
+                boxShadow: p.highlight ? '0 24px 60px rgba(11,13,26,.18)' : 'none',
+                transform: p.highlight ? 'translateY(-8px)' : 'none',
+              }}>
+                {p.highlight && (
+                  <span style={{ position: 'absolute', top: 22, right: 24, fontSize: 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,.12)', color: '#fff' }}>
+                    Most popular
+                  </span>
+                )}
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: p.highlight ? '#fff' : B.ink, marginBottom: 6 }}>{p.name}</h3>
+                <p style={{ fontSize: 13, color: p.highlight ? 'rgba(255,255,255,.5)' : B.muted, marginBottom: 22, minHeight: 36, lineHeight: 1.5 }}>{p.desc}</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 26 }}>
+                  <span style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-1.5px', color: p.highlight ? '#fff' : B.ink }}>{p.price}</span>
+                  <span style={{ fontSize: 13, color: p.highlight ? 'rgba(255,255,255,.5)' : B.faint }}>{p.period}</span>
                 </div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#818cf8', marginBottom: 10 }}>Step {idx + 1}</div>
-                <h3 style={{ fontSize: 16.5, fontWeight: 700, color: '#fff', marginBottom: 10 }}>{title}</h3>
-                <p style={{ fontSize: 14, color: 'rgba(255,255,255,.45)', lineHeight: 1.75 }}>{desc}</p>
+                <Link href={p.name === 'Enterprise' ? '/contact' : '/login'}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 9, textDecoration: 'none', marginBottom: 26,
+                    background: p.highlight ? '#fff' : B.brand, color: p.highlight ? B.ink : '#fff',
+                    transition: 'opacity .15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '.9'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                  {p.cta} <ArrowRight size={14} />
+                </Link>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {p.features.map(f => (
+                    <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: p.highlight ? 'rgba(255,255,255,.8)' : B.body }}>
+                      <Check size={15} style={{ color: p.highlight ? '#7dd3a8' : '#16a34a', flexShrink: 0 }} />
+                      {f}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -520,33 +561,28 @@ export default function LandingPage({ loggedIn = false, homeHref = '/dashboard' 
       </section>
 
       {/* ── Testimonials ── */}
-      <section style={{ background: B.surf2, padding: '108px 24px', borderTop: `1px solid ${B.border}` }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 64 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 99, background: B.bg50, border: `1px solid ${B.border}`, fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: B.brand, marginBottom: 16 }}>
-              Customer stories
-            </div>
-            <h2 style={{ fontSize: 'clamp(28px,4vw,44px)', fontWeight: 900, letterSpacing: '-1.2px', color: B.text }}>
+      <section style={{ background: B.tint, padding: '110px 28px', borderTop: `1px solid ${B.line}` }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>{eyebrow('Customers')}</div>
+            <h2 style={{ fontSize: 'clamp(30px,4.2vw,46px)', fontWeight: 800, letterSpacing: '-1.4px', color: B.ink, lineHeight: 1.1 }}>
               Loved by healthcare teams
             </h2>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px,1fr))', gap: 22 }}>
-            {TESTIMONIALS.map(({ name, role, quote, rating, stat }) => (
-              <div key={name} style={{ padding: '30px', borderRadius: 20, border: `1.5px solid ${B.border}`, background: B.surface, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="lp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 22 }}>
+            {TESTIMONIALS.map(({ name, role, quote, stat }) => (
+              <div key={name} style={{ background: B.surface, border: `1px solid ${B.line}`, borderRadius: 18, padding: '30px', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', gap: 2 }}>
-                    {[...Array(rating)].map((_, i) => <Star key={i} size={14} fill="#f59e0b" color="#f59e0b" />)}
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: B.brand, background: B.bg50, padding: '4px 10px', borderRadius: 99 }}>{stat}</span>
+                  <div style={{ display: 'flex', gap: 2 }}>{[...Array(5)].map((_, i) => <Star key={i} size={14} fill="#f59e0b" color="#f59e0b" />)}</div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: B.brand, background: B.tint2, padding: '4px 10px', borderRadius: 99 }}>{stat}</span>
                 </div>
-                <p style={{ fontSize: 14.5, color: B.muted, lineHeight: 1.8, fontStyle: 'italic', flex: 1 }}>"{quote}"</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 18, background: `linear-gradient(135deg, ${B.brand}, ${B.lighter})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff', fontWeight: 800, flexShrink: 0 }}>
+                <p style={{ fontSize: 14.5, color: B.body, lineHeight: 1.8, flex: 1 }}>“{quote}”</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11, borderTop: `1px solid ${B.line}`, paddingTop: 18 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 18, background: B.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff', fontWeight: 700, flexShrink: 0 }}>
                     {name[0]}{name.split(' ')[1]?.[0]}
                   </div>
                   <div>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: B.text }}>{name}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: B.ink }}>{name}</div>
                     <div style={{ fontSize: 11.5, color: B.faint, marginTop: 1 }}>{role}</div>
                   </div>
                 </div>
@@ -556,145 +592,90 @@ export default function LandingPage({ loggedIn = false, homeHref = '/dashboard' 
         </div>
       </section>
 
-      {/* ── Integrations ── */}
-      <div style={{ background: B.surface, borderTop: `1px solid ${B.border}`, borderBottom: `1px solid ${B.border}`, padding: '52px 24px' }}>
-        <div style={{ maxWidth: 840, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: B.faint, marginBottom: 28 }}>
-            Connects with the tools you already use
-          </p>
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {INTEGRATIONS.map(({ name, emoji }) => (
-              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 11, background: B.surf2, border: `1.5px solid ${B.border}`, fontSize: 13, fontWeight: 600, color: B.muted, transition: 'all .15s', cursor: 'default' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = B.bg100; e.currentTarget.style.background = B.bg50; e.currentTarget.style.color = B.text }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = B.border; e.currentTarget.style.background = B.surf2; e.currentTarget.style.color = B.muted }}
-              >
-                <span style={{ fontSize: 17 }}>{emoji}</span>
-                {name}
-              </div>
-            ))}
+      {/* ── FAQ ── */}
+      <section id="faq" style={{ background: B.surface, padding: '110px 28px' }}>
+        <div style={{ maxWidth: 820, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 50 }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>{eyebrow('FAQ')}</div>
+            <h2 style={{ fontSize: 'clamp(30px,4.2vw,46px)', fontWeight: 800, letterSpacing: '-1.4px', color: B.ink, lineHeight: 1.1 }}>
+              Questions, answered
+            </h2>
           </div>
-        </div>
-      </div>
-
-      {/* ── Final CTA ── */}
-      <section style={{ background: B.dark, padding: '108px 24px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 50% 60%, rgba(${RGB},.3) 0%, transparent 65%)`, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: '20%', left: '15%', width: 300, height: 300, background: 'radial-gradient(ellipse, rgba(129,140,248,.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: '20%', right: '15%', width: 250, height: 250, background: 'radial-gradient(ellipse, rgba(16,185,129,.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
-
-        <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 99, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'rgba(255,255,255,.4)', marginBottom: 28 }}>
-            <Zap size={12} color="#fbbf24" />
-            No credit card required
-          </div>
-
-          <h2 style={{ fontSize: 'clamp(34px,5.5vw,58px)', fontWeight: 900, letterSpacing: '-2px', color: '#fff', marginBottom: 18, lineHeight: 1.08 }}>
-            Ready to transform<br />your practice?
-          </h2>
-          <p style={{ fontSize: 17, color: 'rgba(255,255,255,.45)', marginBottom: 52, lineHeight: 1.75, maxWidth: 460, margin: '0 auto 52px' }}>
-            Join 500+ healthcare teams who manage more patients with less effort — and grow their revenue without growing their workload.
-          </p>
-
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
-            <Link href={loggedIn ? dest : '/login'} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 700, padding: '14px 32px', borderRadius: 11, background: '#fff', color: B.brand, textDecoration: 'none', boxShadow: '0 8px 40px rgba(0,0,0,.35)', transition: 'all .15s' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 56px rgba(0,0,0,.45)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 40px rgba(0,0,0,.35)' }}
-            >
-              {loggedIn ? <>Go to Dashboard <LayoutDashboard size={16} /></> : <>Get started for free <ArrowRight size={16} /></>}
-            </Link>
-            {!loggedIn && (
-              <Link href="/login" className="btn-ghost" style={{ fontSize: 15.5, padding: '14px 28px' }}>
-                Log in to your account
-              </Link>
-            )}
-          </div>
-
-          {/* Trust pills */}
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {['Free forever plan', 'No setup fee', 'Cancel anytime'].map(t => (
-              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'rgba(255,255,255,.3)', fontWeight: 500 }}>
-                <Check size={12} color="#34d399" />
-                {t}
-              </div>
+          <div style={{ borderTop: `1px solid ${B.line}` }}>
+            {FAQS.map((f, i) => (
+              <FaqItem key={f.q} q={f.q} a={f.a} open={openFaq === i} onToggle={() => setOpenFaq(openFaq === i ? -1 : i)} />
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Footer ── */}
-      <footer style={{ background: '#05060f', padding: '72px 24px 40px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-          <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1fr', gap: 48, marginBottom: 64 }}>
-            {/* Brand col */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 11, background: B.brand, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Heart size={15} color="#fff" />
-                </div>
-                <span style={{ fontWeight: 900, fontSize: 17, color: '#fff', letterSpacing: '-0.5px' }}>HealthCRM</span>
-              </div>
-              <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,.38)', lineHeight: 1.8, maxWidth: 272, marginBottom: 24 }}>
-                The complete CRM platform for healthcare clinics, hospitals, and diagnostic centres. Built for teams who care about both patients and growth.
+      {/* ── Final CTA ── */}
+      <section style={{ background: B.surface, padding: '0 28px 110px' }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ position: 'relative', overflow: 'hidden', background: B.brand, borderRadius: 28, padding: '80px 40px', textAlign: 'center' }}>
+            <div style={{ position: 'absolute', top: '-30%', left: '50%', transform: 'translateX(-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(255,255,255,.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ position: 'relative', zIndex: 1, maxWidth: 600, margin: '0 auto' }}>
+              <h2 style={{ fontSize: 'clamp(32px,5vw,52px)', fontWeight: 800, letterSpacing: '-1.8px', color: '#fff', marginBottom: 18, lineHeight: 1.08 }}>
+                Ready to run your clinic smarter?
+              </h2>
+              <p style={{ fontSize: 17, color: 'rgba(255,255,255,.7)', marginBottom: 38, lineHeight: 1.7 }}>
+                Join 500+ healthcare teams managing more patients with less effort. Free to start, no card required.
               </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['🐦', '💼', '📺'].map((emoji, i) => (
-                  <a key={i} href="#" style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, textDecoration: 'none', transition: 'background .14s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,.12)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,.06)'}
-                  >{emoji}</a>
-                ))}
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Link href={loggedIn ? dest : '/login'} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 700, padding: '14px 30px', borderRadius: 10, background: '#fff', color: B.brand, textDecoration: 'none', transition: 'transform .15s' }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                  {loggedIn ? 'Go to dashboard' : 'Get started for free'} <ArrowRight size={16} />
+                </Link>
+                {!loggedIn && (
+                  <a href="#pricing" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, padding: '14px 28px', borderRadius: 10, border: '1px solid rgba(255,255,255,.25)', color: '#fff', textDecoration: 'none', background: 'rgba(255,255,255,.06)' }}>
+                    View pricing
+                  </a>
+                )}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
 
-            {/* Link cols */}
+      {/* ── Footer ── */}
+      <footer style={{ background: B.dark, padding: '64px 28px 36px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div className="lp-foot" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1fr', gap: 44, marginBottom: 56 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: B.brand, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Heart size={14} color="#fff" />
+                </div>
+                <span style={{ fontWeight: 800, fontSize: 16, color: '#fff', letterSpacing: '-0.5px' }}>HealthCRM</span>
+              </div>
+              <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,.38)', lineHeight: 1.8, maxWidth: 280 }}>
+                The complete CRM platform for clinics, hospitals, and diagnostic centres — built for teams who care about patients and growth alike.
+              </p>
+            </div>
             {[
-              { heading: 'Product',  links: ['Features', 'Integrations', 'Pricing', "What's new", 'Roadmap'] },
-              { heading: 'Company',  links: ['About us', 'Blog', 'Careers', 'Press', 'Contact'] },
-              { heading: 'Legal', links: [
-                  { label: 'Privacy Policy',    href: '/privacy' },
-                  { label: 'Terms & Conditions', href: '/terms' },
-                  { label: 'Cookie Policy',     href: '/cookies' },
-                  { label: 'Security Policy',   href: '/security' },
-                  { label: 'Data Retention',    href: '/data-retention' },
-                  { label: 'Contact Us',        href: '/contact' },
-              ]},
+              { heading: 'Product', links: [['Features', '#features'], ['Security', '#security'], ['Pricing', '#pricing'], ['Status', '/status']] },
+              { heading: 'Company', links: [['About', '#'], ['Blog', '#'], ['Careers', '#'], ['Contact', '/contact']] },
+              { heading: 'Legal',   links: [['Privacy', '/privacy'], ['Terms', '/terms'], ['Cookies', '/cookies'], ['Security', '/security']] },
             ].map(({ heading, links }) => (
               <div key={heading}>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.9px', textTransform: 'uppercase', color: 'rgba(255,255,255,.25)', marginBottom: 18 }}>{heading}</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-                  {links.map(l => {
-                    const label = typeof l === 'string' ? l : l.label
-                    const href  = typeof l === 'string' ? '#' : l.href
-                    return (
-                      <Link key={label} href={href} style={{ fontSize: 13.5, color: 'rgba(255,255,255,.42)', textDecoration: 'none', transition: 'color .14s' }}
-                        onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,.82)'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.42)'}
-                      >{label}</Link>
-                    )
-                  })}
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.9px', textTransform: 'uppercase', color: 'rgba(255,255,255,.28)', marginBottom: 18 }}>{heading}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {links.map(([label, href]) => (
+                    <Link key={label} href={href} style={{ fontSize: 13.5, color: 'rgba(255,255,255,.45)', textDecoration: 'none', transition: 'color .14s', width: 'fit-content' }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,.85)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.45)'}>
+                      {label}
+                    </Link>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
-
-          {/* Bottom bar */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,.05)', paddingTop: 30, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,.18)' }}>
-              © 2026 HealthCRM Technologies Pvt. Ltd. All rights reserved. Built for healthcare professionals.
-            </p>
-            <div style={{ display: 'flex', gap: 22 }}>
-              {[
-                { label: 'Privacy',   href: '/privacy' },
-                { label: 'Terms',     href: '/terms' },
-                { label: 'Cookies',   href: '/cookies' },
-                { label: 'Security',  href: '/security' },
-                { label: 'Contact',   href: '/contact' },
-              ].map(({ label, href }) => (
-                <Link key={label} href={href} style={{ fontSize: 12, color: 'rgba(255,255,255,.22)', textDecoration: 'none', transition: 'color .14s' }}
-                  onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,.55)'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,.22)'}
-                >{label}</Link>
-              ))}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+            <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,.3)' }}>© 2026 HealthCRM Technologies Pvt. Ltd. All rights reserved.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'rgba(255,255,255,.3)' }}>
+              <Activity size={13} color="#34d399" /> All systems operational
             </div>
           </div>
         </div>
