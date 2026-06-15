@@ -767,8 +767,8 @@ export default function PatientDetailPage({ params }) {
                       { icon: Calendar, label: patient.date_of_birth ? `DOB: ${format(new Date(patient.date_of_birth), 'MMM d, yyyy')}` : 'DOB: —' },
                       { icon: MapPin,   label: patient.address || '—' },
                       { icon: Tag,      label: patient.custom_data?.blood_group ? `Blood: ${patient.custom_data.blood_group}` : 'Blood: —' },
-                    ].map(({ icon: Icon, label }) => (
-                      <div key={label} className="flex items-center gap-2">
+                    ].map(({ icon: Icon, label }, i) => (
+                      <div key={i} className="flex items-center gap-2">
                         <Icon size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                         <span className="text-xs truncate" style={{ color: label.endsWith('—') ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>{label}</span>
                       </div>

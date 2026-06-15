@@ -15,6 +15,7 @@ const ROUTE_PERMISSIONS = [
   { pattern: '/consultation',   permission: 'consultations' },
   { pattern: '/tasks',          permission: 'tasks' },
   { pattern: '/billing',        permission: 'billing' },
+  { pattern: '/pharmacy',       permission: 'pharmacy' },
   { pattern: '/automation',     permission: 'automation' },
   { pattern: '/reports',        permission: 'reports' },
   { pattern: '/notifications',  permission: 'notifications' },

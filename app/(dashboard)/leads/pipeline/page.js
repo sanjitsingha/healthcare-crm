@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Plus, Phone, Kanban, List, ChevronDown } from 'lucide-react'
-import { getLeads, updateLead } from '@/lib/supabase/queries'
+import { Plus, Phone, Kanban, List, ChevronDown, FileText, ClipboardList, Hash, CheckCheck } from 'lucide-react'
+import { getLeads, getTasks, updateLead } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -24,12 +24,54 @@ const PRIORITY_COLOR = {
   Urgent: { bg: '#f3e8ff', color: '#7c3aed' },
 }
 
+// ── Hover icon with tooltip popover ────────────────────────────
+function HoverIcon({ icon: Icon, count, tooltip, color }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <span
+        className="inline-flex items-center gap-0.5 rounded-full cursor-default transition-opacity hover:opacity-80"
+        style={{
+          background: color,
+          padding: count != null ? '3px 6px 3px 4px' : '4px',
+        }}
+      >
+        <Icon size={11} color="white" strokeWidth={2.5} />
+        {count != null && (
+          <span className="text-[9px] font-700 leading-none" style={{ color: 'white' }}>{count}</span>
+        )}
+      </span>
+      {hover && (
+        <span
+          className="pointer-events-none absolute right-0 bottom-full mb-2 z-50 w-52 p-2.5 rounded-xl text-[11px] leading-relaxed"
+          style={{
+            background: color,
+            color: 'rgba(255,255,255,0.93)',
+            boxShadow: '0 8px 28px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.14)',
+          }}
+        >
+          {tooltip}
+        </span>
+      )}
+    </span>
+  )
+}
+
 // ── Kanban card ────────────────────────────────────────────────
-function LeadCard({ lead, onDragStart, staffMembers }) {
+function LeadCard({ lead, onDragStart, staffMembers, tasks = [] }) {
   const displayName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.title
   const pri = PRIORITY_COLOR[lead.priority] || PRIORITY_COLOR.Medium
   const assignee = lead.assigned_to ? staffMembers.find(m => m.id === lead.assigned_to) : null
   const phone = lead.phone || lead.patients?.phone || lead.contacts?.phone
+
+  const patientCode = lead.patients?.patient_code
+  const isPatient = !!lead.patients?.id
+  const note = (lead.description || '').trim()
+  const openTasks = tasks.filter(t => t.status !== 'Completed')
 
   return (
     <div
@@ -58,33 +100,76 @@ function LeadCard({ lead, onDragStart, staffMembers }) {
           </div>
         )}
 
-        {lead.source && (
-          <span
-            className="inline-block text-[9px] font-600 px-1.5 py-0.5 rounded-full mb-2"
-            style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
-          >
-            {lead.source}
-          </span>
-        )}
-
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-(--color-border)">
-          <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-            {format(new Date(lead.created_at), 'MMM d')}
-          </span>
-          {lead.value > 0 && (
-            <span className="text-[10px] font-600" style={{ color: 'var(--color-text-secondary)' }}>
-              ₹{Number(lead.value).toLocaleString('en-IN')}
-            </span>
-          )}
-          {assignee && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+          {lead.source && (
             <span
-              className="w-5 h-5 rounded-full text-[9px] font-700 flex items-center justify-center shrink-0"
+              className="inline-block text-[9px] font-600 px-1.5 py-0.5 rounded-full"
               style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
-              title={assignee.name}
             >
-              {assignee.name[0].toUpperCase()}
+              {lead.source}
             </span>
           )}
+          {isPatient && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[9px] font-700 px-1.5 py-0.5 rounded-full"
+              style={{ background: '#dcfce7', color: '#15803d' }}
+              title={patientCode ? `Patient ID: ${patientCode}` : 'Linked patient'}
+            >
+              <Hash size={9} />
+              {patientCode || 'Patient'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-(--color-border)">
+          <div className="flex items-center gap-1.5">
+            {assignee && (
+              <span
+                className="w-5 h-5 rounded-full text-[9px] font-700 flex items-center justify-center shrink-0"
+                style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}
+                title={assignee.name}
+              >
+                {assignee.name[0].toUpperCase()}
+              </span>
+            )}
+            <span className="text-[10px] shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+              {format(new Date(lead.created_at), 'MMM d')}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-0.5">
+            {note && (
+              <HoverIcon
+                icon={FileText}
+                color="var(--color-brand)"
+                tooltip={note.length > 160 ? note.slice(0, 160) + '…' : note}
+              />
+            )}
+            {tasks.length > 0 && (
+              <HoverIcon
+                icon={ClipboardList}
+                color="#16a34a"
+                tooltip={
+                  <span className="flex flex-col gap-1">
+                    {tasks.slice(0, 5).map(t => (
+                      <span key={t.id} className="flex items-start gap-1">
+                        {t.status === 'Completed'
+                          ? <CheckCheck size={11} className="mt-0.5 shrink-0" style={{ opacity: 0.75 }} />
+                          : <span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: 'white', opacity: 0.7 }} />}
+                        <span className={t.status === 'Completed' ? 'line-through opacity-55' : ''}>{t.title}</span>
+                      </span>
+                    ))}
+                    {tasks.length > 5 && <span className="opacity-55">+{tasks.length - 5} more</span>}
+                  </span>
+                }
+              />
+            )}
+            {lead.value > 0 && (
+              <span className="text-[10px] font-600 ml-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                ₹{Number(lead.value).toLocaleString('en-IN')}
+              </span>
+            )}
+          </div>
         </div>
       </Link>
     </div>
@@ -92,7 +177,7 @@ function LeadCard({ lead, onDragStart, staffMembers }) {
 }
 
 // ── List view — grouped by stage ───────────────────────────────
-function ListView({ leads, stages, stageNames, staffMembers }) {
+function ListView({ leads, stages, stageNames, staffMembers, leadTasks }) {
   const [collapsed, setCollapsed] = useState({})
   const toggle = (name) => setCollapsed(p => ({ ...p, [name]: !p[name] }))
 
@@ -112,12 +197,12 @@ function ListView({ leads, stages, stageNames, staffMembers }) {
         const totalValue = rows.reduce((s, l) => s + (Number(l.value) || 0), 0)
 
         return (
-          <div key={stage.name} className="rounded-2xl border border-(--color-border) overflow-hidden">
+          <div key={stage.name} className="rounded-2xl border border-(--color-border)">
             {/* Stage header */}
             <button
               type="button"
               onClick={() => toggle(stage.name)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-(--color-surface-2)"
+              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-(--color-surface-2) rounded-t-2xl"
               style={{ background: 'var(--color-surface-2)', borderLeftWidth: 3, borderLeftStyle: 'solid', borderLeftColor: stage.color }}
             >
               <span className="text-xs font-700 flex-1" style={{ color: 'var(--color-text-primary)' }}>
@@ -151,17 +236,19 @@ function ListView({ leads, stages, stageNames, staffMembers }) {
                   No leads in this stage.
                 </p>
               ) : (
-                <div>
+                <div className="rounded-b-2xl overflow-hidden">
                   {/* Table header */}
                   <div
                     className="grid px-4 py-2 text-[10px] font-600 uppercase tracking-wide border-b border-(--color-border)"
-                    style={{ gridTemplateColumns: '1fr 120px 80px 80px 100px 80px 80px', color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}
+                    style={{ gridTemplateColumns: '1fr 120px 80px 80px 100px 56px 56px 80px 80px', color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}
                   >
                     <span>Name</span>
                     <span>Phone</span>
                     <span>Priority</span>
                     <span>Source</span>
                     <span>Value</span>
+                    <span>Note</span>
+                    <span>Tasks</span>
                     <span>Assigned</span>
                     <span>Created</span>
                   </div>
@@ -170,20 +257,22 @@ function ListView({ leads, stages, stageNames, staffMembers }) {
                     const phone = lead.phone || lead.patients?.phone || lead.contacts?.phone
                     const pri = PRIORITY_COLOR[lead.priority] || PRIORITY_COLOR.Medium
                     const assignee = lead.assigned_to ? staffMembers.find(m => m.id === lead.assigned_to) : null
+                    const note = (lead.description || '').trim()
+                    const tasks = leadTasks?.[lead.id] || []
+                    const openTasks = tasks.filter(t => t.status !== 'Completed')
 
                     return (
-                      <Link
+                      <div
                         key={lead.id}
-                        href={`/leads/${lead.id}`}
                         className={clsx(
                           'grid px-4 py-3 text-xs items-center border-b border-(--color-border) transition-colors hover:bg-(--color-surface-2)',
                           i === rows.length - 1 && 'border-b-0'
                         )}
-                        style={{ gridTemplateColumns: '1fr 120px 80px 80px 100px 80px 80px', background: 'var(--color-surface)' }}
+                        style={{ gridTemplateColumns: '1fr 120px 80px 80px 100px 56px 56px 80px 80px', background: 'var(--color-surface)' }}
                       >
-                        <span className="font-500 truncate pr-3" style={{ color: 'var(--color-text-primary)' }}>
+                        <Link href={`/leads/${lead.id}`} className="font-500 truncate pr-3" style={{ color: 'var(--color-text-primary)' }}>
                           {displayName}
-                        </span>
+                        </Link>
                         <span className="truncate" style={{ color: 'var(--color-text-muted)' }}>
                           {phone || '—'}
                         </span>
@@ -200,6 +289,32 @@ function ListView({ leads, stages, stageNames, staffMembers }) {
                         </span>
                         <span className="font-500" style={{ color: 'var(--color-text-secondary)' }}>
                           {lead.value > 0 ? `₹${Number(lead.value).toLocaleString('en-IN')}` : '—'}
+                        </span>
+                        <span>
+                          {note
+                            ? <HoverIcon icon={FileText} color="var(--color-brand)" tooltip={note.length > 160 ? note.slice(0, 160) + '…' : note} />
+                            : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                        </span>
+                        <span>
+                          {tasks.length > 0
+                            ? <HoverIcon
+                                icon={ClipboardList}
+                                color="#16a34a"
+                                tooltip={
+                                  <span className="flex flex-col gap-1">
+                                    {tasks.slice(0, 5).map(t => (
+                                      <span key={t.id} className="flex items-start gap-1">
+                                        {t.status === 'Completed'
+                                          ? <CheckCheck size={11} className="mt-0.5 shrink-0" style={{ opacity: 0.75 }} />
+                                          : <span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: 'white', opacity: 0.7 }} />}
+                                        <span className={t.status === 'Completed' ? 'line-through opacity-55' : ''}>{t.title}</span>
+                                      </span>
+                                    ))}
+                                    {tasks.length > 5 && <span className="opacity-55">+{tasks.length - 5} more</span>}
+                                  </span>
+                                }
+                              />
+                            : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                         </span>
                         <span>
                           {assignee ? (
@@ -221,7 +336,7 @@ function ListView({ leads, stages, stageNames, staffMembers }) {
                         <span style={{ color: 'var(--color-text-muted)' }}>
                           {format(new Date(lead.created_at), 'MMM d')}
                         </span>
-                      </Link>
+                      </div>
                     )
                   })}
                 </div>
@@ -238,6 +353,7 @@ function ListView({ leads, stages, stageNames, staffMembers }) {
 export default function LeadPipelinePage() {
   const { org, orgId } = useOrg()
   const [leads, setLeads] = useState([])
+  const [leadTasks, setLeadTasks] = useState({})
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('board')
   const [draggingId, setDraggingId] = useState(null)
@@ -252,8 +368,17 @@ export default function LeadPipelinePage() {
 
   useEffect(() => {
     if (!orgId) return
-    getLeads({ orgId }).then(data => {
-      setLeads(data || [])
+    Promise.all([
+      getLeads({ orgId }),
+      getTasks({ entityType: 'lead', orgId }),
+    ]).then(([leadsData, tasksData]) => {
+      setLeads(leadsData || [])
+      const map = {}
+      for (const t of tasksData || []) {
+        if (!map[t.entity_id]) map[t.entity_id] = []
+        map[t.entity_id].push(t)
+      }
+      setLeadTasks(map)
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [orgId])
@@ -340,7 +465,7 @@ export default function LeadPipelinePage() {
               return (
                 <div
                   key={stage.name}
-                  className="flex flex-col w-64 rounded-2xl border border-(--color-border) overflow-hidden transition-all"
+                  className="flex flex-col w-64 rounded-2xl border border-(--color-border) transition-all"
                   style={{
                     background: isOver ? stage.color + '08' : 'var(--color-surface-2)',
                     borderColor: isOver ? stage.color + '60' : undefined,
@@ -351,7 +476,7 @@ export default function LeadPipelinePage() {
                   onDrop={() => handleDrop(stage.name)}
                 >
                   <div
-                    className="px-3 pt-3 pb-2.5 border-b border-(--color-border)"
+                    className="px-3 pt-3 pb-2.5 border-b border-(--color-border) rounded-t-2xl"
                     style={{ borderTopWidth: '3px', borderTopStyle: 'solid', borderTopColor: stage.color }}
                   >
                     <div className="flex items-center justify-between">
@@ -384,6 +509,7 @@ export default function LeadPipelinePage() {
                           key={lead.id}
                           lead={lead}
                           staffMembers={staffMembers}
+                          tasks={leadTasks[lead.id] || []}
                           onDragStart={() => { setDraggingId(lead.id); setDraggingStage(lead.stage) }}
                         />
                       ))
@@ -395,11 +521,11 @@ export default function LeadPipelinePage() {
 
             {otherLeads.length > 0 && (
               <div
-                className="flex flex-col w-64 rounded-2xl border border-(--color-border) overflow-hidden"
+                className="flex flex-col w-64 rounded-2xl border border-(--color-border)"
                 style={{ background: 'var(--color-surface-2)', minHeight: '200px' }}
               >
                 <div
-                  className="px-3 pt-3 pb-2.5 border-b border-(--color-border)"
+                  className="px-3 pt-3 pb-2.5 border-b border-(--color-border) rounded-t-2xl"
                   style={{ borderTopWidth: '3px', borderTopStyle: 'solid', borderTopColor: '#94a3b8' }}
                 >
                   <div className="flex items-center justify-between">
@@ -415,6 +541,7 @@ export default function LeadPipelinePage() {
                       key={lead.id}
                       lead={lead}
                       staffMembers={staffMembers}
+                      tasks={leadTasks[lead.id] || []}
                       onDragStart={() => { setDraggingId(lead.id); setDraggingStage(lead.stage) }}
                     />
                   ))}
@@ -432,6 +559,7 @@ export default function LeadPipelinePage() {
           stages={stages}
           stageNames={stageNames}
           staffMembers={staffMembers}
+          leadTasks={leadTasks}
         />
       )}
     </div>

@@ -25,6 +25,7 @@ import {
   Kanban,
   ListFilter,
   Stethoscope,
+  Pill,
   BarChart3,
   BellRing,
   LogOut,
@@ -68,8 +69,9 @@ const navGroups = [
   {
     label: "Operations",
     items: [
-      { href: "/tasks",   icon: CheckSquare, label: "Tasks",           permission: "tasks" },
-      { href: "/billing", icon: CreditCard,  label: "Billing & Finance", permission: "billing" },
+      { href: "/tasks",    icon: CheckSquare, label: "Tasks",             permission: "tasks" },
+      { href: "/billing",  icon: CreditCard,  label: "Billing & Finance", permission: "billing" },
+      { href: "/pharmacy", icon: Pill,        label: "Pharmacy",          permission: "pharmacy" },
     ],
   },
   {
