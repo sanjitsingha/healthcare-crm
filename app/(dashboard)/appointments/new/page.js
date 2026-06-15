@@ -150,8 +150,8 @@ export default function NewAppointmentPage() {
           email:           newPat.email.trim()      || null,
           gender:          newPat.gender            || null,
           date_of_birth:   newPat.date_of_birth     || null,
-          blood_group:     newPat.blood_group       || null,
           address:         newPat.address.trim()    || null,
+          custom_data:     newPat.blood_group ? { blood_group: newPat.blood_group } : {},
           organization_id: orgId,
         })
         patientId = created.id

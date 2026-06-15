@@ -32,7 +32,7 @@ const TABS = [
 ]
 
 // ── Calendar view ──────────────────────────────────────────────
-function CalendarView({ appointments, doctors, onStatusChange }) {
+function CalendarView({ appointments, doctors, onStatusChange, onPaymentUpdate }) {
   const [month, setMonth]       = useState(startOfMonth(new Date()))
   const [selected, setSelected] = useState(new Date())
 
@@ -205,7 +205,7 @@ function CalendarView({ appointments, doctors, onStatusChange }) {
               </div>
             ) : (
               <div className="space-y-3">
-                {selectedAppts.map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={onStatusChange} />)}
+                {selectedAppts.map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={onStatusChange} onPaymentUpdate={onPaymentUpdate} />)}
               </div>
             )}
           </div>
@@ -228,7 +228,7 @@ function CalendarView({ appointments, doctors, onStatusChange }) {
 }
 
 // ── Appointment card ───────────────────────────────────────────
-function ApptCard({ appt, doctors = [], onStatusChange }) {
+function ApptCard({ appt, doctors = [], onStatusChange, onPaymentUpdate }) {
   const st          = STATUS_STYLE[appt.status] || STATUS_STYLE.confirmed
   const date        = new Date(appt.scheduled_at)
   const patientName = [appt.patients?.first_name, appt.patients?.last_name].filter(Boolean).join(' ') || 'Unknown Patient'
@@ -362,19 +362,45 @@ function ApptCard({ appt, doctors = [], onStatusChange }) {
               )}
             </div>
 
-            {/* Action buttons — no Confirm step */}
+            {/* Action buttons */}
             {canAct && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button type="button" onClick={() => onStatusChange(appt.id, 'completed')}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
-                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
-                  <Check size={11} /> Complete
-                </button>
-                <button type="button" onClick={() => onStatusChange(appt.id, 'cancelled')}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-red-50"
-                  style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
-                  <X size={11} /> Cancel
-                </button>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                {/* Per-fee pay buttons — shown only when that fee is due */}
+                {cFee != null && !cPaid && (
+                  <button type="button"
+                    onClick={() => onPaymentUpdate(appt.id, { consultation_fee_status: 'paid' })}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
+                    style={{ background: '#fef9c3', color: '#854d0e' }}>
+                    <IndianRupee size={10} /> Mark consult paid
+                  </button>
+                )}
+                {rFee != null && !rPaid && (
+                  <button type="button"
+                    onClick={() => onPaymentUpdate(appt.id, { registration_fee_status: 'paid' })}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
+                    style={{ background: '#fef9c3', color: '#854d0e' }}>
+                    <IndianRupee size={10} /> Mark reg paid
+                  </button>
+                )}
+
+                <div className="flex items-center gap-1.5">
+                  {/* Complete — blocked until all dues cleared */}
+                  <button type="button"
+                    disabled={dueAmt > 0}
+                    onClick={() => dueAmt === 0 && onStatusChange(appt.id, 'completed')}
+                    title={dueAmt > 0 ? 'Clear all dues before completing' : 'Mark as completed'}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-all"
+                    style={dueAmt > 0
+                      ? { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', cursor: 'not-allowed', opacity: 0.6 }
+                      : { background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                    <Check size={11} /> Complete
+                  </button>
+                  <button type="button" onClick={() => onStatusChange(appt.id, 'cancelled')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-red-50"
+                    style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
+                    <X size={11} /> Cancel
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -419,6 +445,13 @@ export default function AppointmentsPage() {
     try {
       const updated = await updateAppointment(id, { status })
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: updated.status } : a))
+    } catch (e) { alert(e.message) }
+  }
+
+  const handlePaymentUpdate = async (id, patch) => {
+    try {
+      const updated = await updateAppointment(id, patch)
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...updated } : a))
     } catch (e) { alert(e.message) }
   }
 
@@ -506,7 +539,7 @@ export default function AppointmentsPage() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner size={28} /></div>
       ) : view === 'calendar' ? (
-        <CalendarView appointments={appointments} doctors={doctors} onStatusChange={handleStatusChange} />
+        <CalendarView appointments={appointments} doctors={doctors} onStatusChange={handleStatusChange} onPaymentUpdate={handlePaymentUpdate} />
       ) : (
         <>
           {/* Tabs */}
@@ -665,7 +698,7 @@ export default function AppointmentsPage() {
             <div className="space-y-3">
               {filtered
                 .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
-                .map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={handleStatusChange} />)}
+                .map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={handleStatusChange} onPaymentUpdate={handlePaymentUpdate} />)}
             </div>
           )}
         </>
