@@ -133,7 +133,7 @@ export function TextCell({ value, onCommit, placeholder = '—', type = 'text' }
   )
 }
 
-const FU_COLS = '140px 150px minmax(230px,1fr) 170px minmax(200px,1.2fr) 150px'
+const FU_COLS = '140px 150px minmax(230px,1fr) 170px minmax(200px,1.2fr) 150px 140px'
 const GRID = 'var(--color-border)'
 const cellBase = 'min-h-11 flex items-stretch'
 
@@ -142,8 +142,8 @@ export default function FollowupTable({
 }) {
   const showDelete = typeof onDelete === 'function'
   const cols = FU_COLS + (showDelete ? ' 44px' : '')
-  const minWidth = showDelete ? '1074px' : '1030px'
-  const head = ['Date', 'Type', 'Outcome', 'Called By', 'Response', 'Status', ...(showDelete ? [''] : [])]
+  const minWidth = showDelete ? '1214px' : '1170px'
+  const head = ['Date', 'Type', 'Outcome', 'Called By', 'Response', 'Status', 'Next Follow Up', ...(showDelete ? [''] : [])]
   const [draft, setDraft] = useState({})
   const [active, setActive] = useState(null)
   const wrapRef = useRef(null)
@@ -201,7 +201,8 @@ export default function FollowupTable({
             {cell(`${f.id}:outcome`, <ChipCell value={f.outcome} options={outcomeOptions(f.type)} placeholder="Set outcome" styleFor={outcomeStyle} onChange={(v) => onField(f.id, { outcome: v })} />)}
             {cell(`${f.id}:caller`,  <ChipCell value={f.caller_name} options={staff.map(m => m.name)} placeholder="—" onChange={(v) => onField(f.id, { caller_name: v })} />)}
             {cell(`${f.id}:notes`,   <TextCell value={f.notes} placeholder="Add response…" onCommit={(v) => onField(f.id, { notes: v || null })} />)}
-            {cell(`${f.id}:status`,  <ChipCell value={f.status} options={['Scheduled', 'Completed', 'Missed', 'Rescheduled']} styleFor={(v) => statusStyle[v]} onChange={(v) => onField(f.id, { status: v })} />)}
+            {cell(`${f.id}:status`,     <ChipCell value={f.status} options={['Scheduled', 'Completed', 'Missed', 'Rescheduled']} styleFor={(v) => statusStyle[v]} onChange={(v) => onField(f.id, { status: v })} />)}
+            {cell(`${f.id}:nextvisit`, <TextCell value={f.next_followup_date ? f.next_followup_date.slice(0, 10) : ''} type="date" onCommit={(v) => onField(f.id, { next_followup_date: v || null })} />)}
             {showDelete && cell(`${f.id}:del`, <button type="button" onClick={() => onDelete(f.id)} title="Delete" className="w-full h-full min-h-11 flex items-center justify-center hover:bg-red-50 transition-colors" style={{ color: '#b91c1c' }}><Trash2 size={13} /></button>)}
           </div>
         ))}
@@ -213,7 +214,8 @@ export default function FollowupTable({
             {cell('draft:outcome', <ChipCell value={draft.outcome} options={outcomeOptions(draft.type || 'Call')} placeholder="Set outcome" styleFor={outcomeStyle} onChange={(v) => touchDraft({ outcome: v })} />)}
             {cell('draft:caller',  <ChipCell value={draft.caller_name} options={staff.map(m => m.name)} placeholder="—" onChange={(v) => touchDraft({ caller_name: v })} />)}
             {cell('draft:notes',   <TextCell value={draft.notes || ''} placeholder="Add response…" onCommit={(v) => touchDraft({ notes: v || null })} />)}
-            {cell('draft:status',  <span className="px-2.5 py-2 text-[12px] self-center" style={{ color: 'var(--color-text-muted)' }}>new row</span>)}
+            {cell('draft:status',    <span className="px-2.5 py-2 text-[12px] self-center" style={{ color: 'var(--color-text-muted)' }}>new row</span>)}
+            {cell('draft:nextvisit', <TextCell value={draft.next_followup_date ? draft.next_followup_date.slice(0, 10) : ''} type="date" onCommit={(v) => touchDraft({ next_followup_date: v || null })} />)}
             {showDelete && cell('draft:del', <span className="w-full" />)}
           </div>
         )}
