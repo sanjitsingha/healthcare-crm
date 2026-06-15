@@ -100,7 +100,7 @@ function InventoryFormInner() {
   if (loading) return <div className="flex justify-center py-32"><Spinner size={32} /></div>
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5 pb-10">
+    <div className="w-full space-y-5 pb-10">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/pharmacy/inventory" className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors" style={{ color: 'var(--color-text-muted)' }}>

@@ -36,9 +36,11 @@ export async function proxy(request) {
   // Public status page — readable by anyone, no auth.
   const isStatusRoute = pathname === '/status' || pathname.startsWith('/status/')
   // Public legal / marketing pages — readable by anyone, no auth.
-  const LEGAL_ROUTES = ['/privacy', '/terms', '/cookies', '/security', '/data-retention', '/contact']
+  const LEGAL_ROUTES = ['/privacy', '/terms', '/cookies', '/security', '/data-retention', '/contact', '/newsletter']
   const isLegalRoute = LEGAL_ROUTES.includes(pathname)
-  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute || isStatusRoute || isLegalRoute
+  // Public blog — index and any future article slugs.
+  const isBlogRoute = pathname === '/blog' || pathname.startsWith('/blog/')
+  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute || isDocsRoute || isStatusRoute || isLegalRoute || isBlogRoute
   const isProtectedRoute = !isPublicRoute && !isSetupRoute
 
   // Unauthenticated + protected → login

@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'HealthCRM',
-  description: 'Healthcare CRM System',
+  title: 'Flowra by Nebkern — The clinic operating system',
+  description: 'Flowra is the clinic operating system by Nebkern Technologies — leads, patients, appointments, and billing in one clean workspace.',
 }
 
 export default function RootLayout({ children }) {

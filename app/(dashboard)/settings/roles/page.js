@@ -86,6 +86,7 @@ const PERMISSION_GROUPS = [
       { key: 'settings.departments',   label: 'Departments' },
       { key: 'settings.tags',          label: 'Tags' },
       { key: 'settings.modules',       label: 'Modules' },
+      { key: 'settings.templates',     label: 'Templates' },
       { key: 'settings.services',      label: 'Services' },
       { key: 'settings.rules',         label: 'Rules' },
       { key: 'settings.configuration', label: 'Configuration' },

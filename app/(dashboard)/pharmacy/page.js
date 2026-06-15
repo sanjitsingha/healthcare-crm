@@ -71,7 +71,7 @@ export default function PharmacyOverviewPage() {
           <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Inventory health at a glance</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/pharmacy/billing"
+          <Link href="/pharmacy/billing/new"
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-600 border border-(--color-border) hover:bg-(--color-surface-2) transition-colors"
             style={{ color: 'var(--color-text-secondary)' }}>
             <ShoppingCart size={15} /> New Sale
