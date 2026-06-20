@@ -68,7 +68,7 @@ import CustomDatePicker from "@/components/crm/CustomDatePicker";
 import { toast } from "@/lib/toast";
 import { showConfirm } from "@/lib/confirm";
 import { logAudit, AUDIT } from "@/lib/audit";
-import { matchingRules, ruleActions } from "@/lib/rulesEngine";
+import { triggerAutomation } from "@/lib/automations/trigger";
 import {
   format,
   formatDistanceToNow,
@@ -1028,154 +1028,26 @@ export default function LeadDetailPage({ params }) {
         before: { stage: prevStage },
         after: { stage },
       });
-      await applyRules("stage_changed", { ...lead, stage: updated.stage });
+      await applyRules("stage_changed", null, { stage: prevStage });
     } catch (err) {
       toast({ type: "error", title: "Error", message: err.message });
     }
   };
 
   // Apply configured automation rules (Settings → Rules) for a lead event.
-  const applyRules = async (eventKey, entityOverride) => {
-    const entity = entityOverride || lead;
-    if (!entity) return;
-    const rules = matchingRules(org?.settings?.rules || [], {
+  // Rules run server-side (single source of truth) so they behave identically
+  // whether triggered here, via the API, or via webhooks. We then reload to
+  // reflect any changes the rules made (stage, tags, tasks, follow-ups…).
+  const applyRules = async (eventKey, entityOverride, prev = null) => {
+    if (!orgId || !id) return;
+    const res = await triggerAutomation({
+      orgId,
       target: "lead",
       event: eventKey,
-      entity,
+      entityId: id,
+      prev,
     });
-    const orgStages = (org?.settings?.lead_stages || []).map((s) =>
-      typeof s === "string" ? s : s.name,
-    );
-    const staff = org?.settings?.staff_members || [];
-    let changed = false;
-    const by = (rule) => (rule.name ? ` by rule "${rule.name}"` : " by rule");
-    for (const rule of rules) {
-      for (const act of ruleActions(rule)) {
-        const { type, value } = act;
-        try {
-          if (type === "set_stage" && value) {
-            if (
-              orgStages.includes(value) &&
-              !["Converted", "Lost", value].includes(lead.stage)
-            ) {
-              const u = await updateLead(id, { stage: value });
-              setLead((p) => ({ ...p, stage: u.stage }));
-              await logActivity(
-                "status_change",
-                `Stage auto-updated to ${value}${by(rule)}`,
-              );
-              changed = true;
-            }
-          } else if (
-            type === "set_priority" &&
-            value &&
-            lead.priority !== value
-          ) {
-            const u = await updateLead(id, { priority: value });
-            setLead((p) => ({ ...p, priority: u.priority }));
-            await logActivity("note", `Priority set to ${value}${by(rule)}`);
-            changed = true;
-          } else if (type === "set_source" && value && lead.source !== value) {
-            const u = await updateLead(id, { source: value });
-            setLead((p) => ({ ...p, source: u.source }));
-            await logActivity("note", `Source set to ${value}${by(rule)}`);
-            changed = true;
-          } else if (type === "set_value" && value !== "" && value != null) {
-            const n = Number(value);
-            if (!Number.isNaN(n) && n !== Number(lead.value)) {
-              const u = await updateLead(id, { value: n });
-              setLead((p) => ({ ...p, value: u.value }));
-              await logActivity("note", `Deal value set to ${n}${by(rule)}`);
-              changed = true;
-            }
-          } else if (type === "add_tag" && value) {
-            if (!(lead.tags || []).some((t) => t.tags?.id === value)) {
-              await assignTagToLead(id, value);
-              const u = await getLead(id);
-              setLead((p) => ({ ...p, tags: u.tags }));
-              const tag = availableTags.find((t) => t.id === value);
-              await logActivity(
-                "tag",
-                `Tag "${tag?.name || "tag"}" added${by(rule)}`,
-              );
-              changed = true;
-            }
-          } else if (type === "remove_tag" && value) {
-            if ((lead.tags || []).some((t) => t.tags?.id === value)) {
-              await removeTagFromLead(id, value);
-              const u = await getLead(id);
-              setLead((p) => ({ ...p, tags: u.tags }));
-              const tag = availableTags.find((t) => t.id === value);
-              await logActivity(
-                "tag",
-                `Tag "${tag?.name || "tag"}" removed${by(rule)}`,
-              );
-              changed = true;
-            }
-          } else if (
-            type === "assign_to" &&
-            value &&
-            lead.assigned_to !== value
-          ) {
-            const u = await updateLead(id, { assigned_to: value });
-            setLead((p) => ({ ...p, assigned_to: u.assigned_to }));
-            const m = staff.find((s) => s.id === value);
-            await logActivity(
-              "note",
-              `Assigned to ${m?.name || "team member"}${by(rule)}`,
-            );
-            changed = true;
-          } else if (type === "add_note" && value) {
-            await logActivity("note", value);
-            changed = true;
-          } else if (type === "create_task" && act.title) {
-            const due = act.dueInDays
-              ? addDays(new Date(), Number(act.dueInDays)).toISOString()
-              : null;
-            const t = await createTask({
-              title: act.title,
-              priority: act.priority || "Medium",
-              due_date: due,
-              status: "Pending",
-              organization_id: orgId,
-              entity_type: "lead",
-              entity_id: id,
-            });
-            setTasks((p) => [t, ...p]);
-            await logActivity("note", `Task created${by(rule)}: ${act.title}`);
-            changed = true;
-          } else if (type === "schedule_followup") {
-            const when = addDays(
-              new Date(),
-              Number(act.inDays || 0),
-            ).toISOString();
-            const f = await createFollowup({
-              type: act.fuType || "Call",
-              scheduled_at: when,
-              status: "Scheduled",
-              organization_id: orgId,
-              lead_id: id,
-              patient_id: lead.patient_id || null,
-            });
-            setFollowups((p) => [f, ...p]);
-            await logActivity(
-              "note",
-              `Follow-up scheduled${by(rule)}: ${act.fuType || "Call"}`,
-            );
-            changed = true;
-          } else if (type === "notify") {
-            toast({
-              type: "default",
-              title: act.title || `Automation: ${rule.name || "rule"}`,
-              message: act.message || "",
-            });
-          }
-        } catch {
-          /* ignore individual action failures */
-        }
-      }
-    }
-    if (changed) await refreshActivities();
+    if (res?.ran?.length) await loadAll();
   };
 
   // Fire "Lead created" rules once for a freshly-created lead (manual create
