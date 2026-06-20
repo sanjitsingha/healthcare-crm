@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { runAutomations, logAutomationRuns } from '@/lib/automations/engine'
 
 // Inbound lead-capture webhook.
 // External services (Google Forms via Apps Script, WordPress, generic) POST here.
@@ -205,11 +206,17 @@ export async function POST(req, { params }) {
     stage: mapped.stage || 'New',
   }
 
-  const { data, error } = await supabase.from('leads').insert(lead).select('id').single()
+  const { data, error } = await supabase.from('leads').insert(lead).select('*').single()
   if (error) return json({ ok: false, error: error.message }, 500)
 
   // Learn this form's field names for the mapping UI (fire-and-forget).
   await rememberFields(orgId, settings, integ.id, Object.keys(fields))
+
+  // Fire "Lead created" automation rules server-side (best-effort).
+  try {
+    const outcome = await runAutomations({ supabase, org: { id: orgId, settings }, target: 'lead', event: 'lead_created', entity: data })
+    await logAutomationRuns(supabase, { orgId, entityType: 'lead', entityId: data.id, outcome })
+  } catch (e) { console.error('[webhook] automation error:', e.message) }
 
   return json({ ok: true, lead_id: data.id })
 }

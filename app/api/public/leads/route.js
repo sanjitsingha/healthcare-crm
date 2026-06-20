@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, getOrgByApiKey } from '@/lib/supabase/admin'
+import { runAutomations, logAutomationRuns } from '@/lib/automations/engine'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -77,12 +78,18 @@ export async function POST(req) {
     }
 
     const supabase = createAdminClient()
-    const { data, error } = await supabase.from('leads').insert(lead).select('id').single()
+    const { data, error } = await supabase.from('leads').insert(lead).select('*').single()
 
     if (error) {
       console.error('[public/leads]', error.message)
       return json({ error: 'Failed to create lead' }, 500)
     }
+
+    // Fire "Lead created" automation rules server-side (best-effort).
+    try {
+      const outcome = await runAutomations({ supabase, org, target: 'lead', event: 'lead_created', entity: data })
+      await logAutomationRuns(supabase, { orgId: org.id, entityType: 'lead', entityId: data.id, outcome })
+    } catch (e) { console.error('[public/leads] automation error:', e.message) }
 
     return json({ ok: true, lead_id: data.id })
   } catch (err) {
