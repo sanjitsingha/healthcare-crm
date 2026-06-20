@@ -7,6 +7,9 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
+const json = (body, status = 200) =>
+  NextResponse.json(body, { status, headers: CORS })
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS })
 }
@@ -23,57 +26,67 @@ function splitName(full) {
 }
 
 export async function POST(req) {
-  const auth = req.headers.get('authorization') || ''
-  const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : null
-  if (!apiKey) {
-    return NextResponse.json({ error: 'Missing Authorization: Bearer <api_key> header' }, { status: 401, headers: CORS })
+  try {
+    // Check service key first
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return json({ error: 'Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY is not set' }, 500)
+    }
+
+    // Auth
+    const auth = req.headers.get('authorization') || ''
+    const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : null
+    if (!apiKey) {
+      return json({ error: 'Missing Authorization: Bearer <api_key> header' }, 401)
+    }
+
+    const org = await getOrgByApiKey(apiKey)
+    if (!org) {
+      return json({ error: 'Invalid API key' }, 401)
+    }
+
+    // Parse body
+    let body = {}
+    try { body = await req.json() } catch { /* empty body */ }
+
+    // name → first_name + last_name alias
+    if (body.name && !body.first_name) {
+      const { first, last } = splitName(body.name)
+      body = { ...body, first_name: first, ...(last ? { last_name: last } : {}) }
+    }
+    // notes → description alias
+    if (body.notes && !body.description) body = { ...body, description: body.notes }
+
+    // Map fields
+    const lead = { organization_id: org.id, stage: body.stage || 'New' }
+    const custom = {}
+
+    for (const [k, v] of Object.entries(body)) {
+      if (k === 'name' || k === 'notes') continue
+      if (DIRECT_FIELDS.has(k)) lead[k] = v
+      else custom[k] = v
+    }
+    if (Object.keys(custom).length) lead.custom_data = custom
+
+    if (!lead.first_name && !lead.phone && !lead.email) {
+      return json({ error: 'Provide at least one of: first_name, phone, email' }, 422)
+    }
+
+    if (!lead.title) {
+      lead.title = [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim()
+        || lead.email || lead.phone || 'Lead'
+    }
+
+    const supabase = createAdminClient()
+    const { data, error } = await supabase.from('leads').insert(lead).select('id').single()
+
+    if (error) {
+      console.error('[public/leads]', error.message)
+      return json({ error: 'Failed to create lead' }, 500)
+    }
+
+    return json({ ok: true, lead_id: data.id })
+  } catch (err) {
+    console.error('[public/leads] unexpected error:', err.message)
+    return json({ error: 'Internal server error' }, 500)
   }
-
-  const org = await getOrgByApiKey(apiKey)
-  if (!org) {
-    return NextResponse.json({ error: 'Invalid API key' }, { status: 401, headers: CORS })
-  }
-
-  let body = {}
-  try { body = await req.json() } catch { /* empty body */ }
-
-  // name → first_name + last_name
-  if (body.name && !body.first_name) {
-    const { first, last } = splitName(body.name)
-    body = { ...body, first_name: first, ...(last ? { last_name: last } : {}) }
-  }
-  // notes → description alias
-  if (body.notes && !body.description) body = { ...body, description: body.notes }
-
-  const lead = { organization_id: org.id, stage: body.stage || 'New' }
-  const custom = {}
-
-  for (const [k, v] of Object.entries(body)) {
-    if (k === 'name' || k === 'notes') continue
-    if (DIRECT_FIELDS.has(k)) lead[k] = v
-    else custom[k] = v
-  }
-  if (Object.keys(custom).length) lead.custom_data = custom
-
-  if (!lead.first_name && !lead.phone && !lead.email) {
-    return NextResponse.json(
-      { error: 'Provide at least one of: first_name, phone, email' },
-      { status: 422, headers: CORS },
-    )
-  }
-
-  if (!lead.title) {
-    lead.title = [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim()
-      || lead.email || lead.phone || 'Lead'
-  }
-
-  const supabase = createAdminClient()
-  const { data, error } = await supabase.from('leads').insert(lead).select('id').single()
-
-  if (error) {
-    console.error('[public/leads]', error.message)
-    return NextResponse.json({ error: 'Failed to create lead' }, { status: 500, headers: CORS })
-  }
-
-  return NextResponse.json({ ok: true, lead_id: data.id }, { headers: CORS })
 }
