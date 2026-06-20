@@ -613,31 +613,30 @@ export default function ConfigurationPage() {
   )
 
   return (
-    <div className="flex gap-5 items-start">
-      {/* ── Left sub-menu ───────────────────────────────────── */}
-      <div className="w-44 shrink-0 rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-        <div className="px-3 py-2.5 border-b border-(--color-border)">
-          <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Integrations</p>
+    <div className="flex -m-6 -mb-16 h-screen">
+      {/* ── Left sub-menu — mirrors settings sidenav ─────────── */}
+      <aside className="w-52 shrink-0 border-r border-(--color-border) h-full flex flex-col p-4"
+        style={{ background: 'var(--color-surface)' }}>
+        <div className="mb-6">
+          <h2 className="text-base font-700 tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Integrations</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Connect &amp; configure</p>
         </div>
-        <nav className="p-1.5 space-y-0.5">
-          {TABS.map(t => {
-            const Icon = t.icon
-            return (
-              <button key={t.id} type="button" onClick={() => setTab(t.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-500 text-left transition-all"
-                style={tab === t.id
-                  ? { background: 'var(--color-brand)', color: '#fff' }
-                  : { color: 'var(--color-text-secondary)' }}>
-                <Icon size={15} />
-                {t.label}
-              </button>
-            )
-          })}
+        <nav className="space-y-0.5">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button key={id} type="button" onClick={() => setTab(id)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-all hover:bg-(--color-brand-50)"
+              style={tab === id
+                ? { background: 'var(--color-brand)', color: 'white' }
+                : { color: 'var(--color-text-secondary)' }}>
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
         </nav>
-      </div>
+      </aside>
 
       {/* ── Content area ────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-4">
+      <div className="flex-1 min-w-0 h-full overflow-y-auto p-6 pb-16 space-y-4">
 
       {/* ── Tab: Integrations ────────────────────────────────── */}
       {tab === 'integrations' && (
