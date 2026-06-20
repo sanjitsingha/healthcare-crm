@@ -4,6 +4,7 @@ import {
   Plug, Globe, Webhook, MessageCircle, BookOpen,
   Check, Copy, Trash2, Link2, RefreshCw, ChevronDown,
   Key, Eye, EyeOff, Code2, Lock, Plus, Pencil, X,
+  Settings2, Tag,
 } from 'lucide-react'
 import { Button, Card, Input, Switch } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
@@ -112,11 +113,11 @@ const LEAD_FIELD_OPTIONS = [
   { value: 'custom:',       label: 'Custom field (store as-is)' },
 ]
 
-// ── Page tabs ──────────────────────────────────────────────────
+// ── Sub-menu items ─────────────────────────────────────────────
 const TABS = [
-  { id: 'integrations', label: 'Configuration' },
-  { id: 'api-access',   label: 'API Access' },
-  { id: 'api-names',    label: 'API Names' },
+  { id: 'integrations', label: 'Configuration', icon: Settings2 },
+  { id: 'api-access',   label: 'API Access',    icon: Key },
+  { id: 'api-names',    label: 'API Names',     icon: Tag },
 ]
 
 // ── API Names — entity definitions ─────────────────────────────
@@ -612,19 +613,31 @@ export default function ConfigurationPage() {
   )
 
   return (
-    <div className="space-y-4">
-      {/* ── Tab navigation ──────────────────────────────────── */}
-      <div className="flex gap-1 p-1 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-        {TABS.map(t => (
-          <button key={t.id} type="button" onClick={() => setTab(t.id)}
-            className="flex-1 py-2 px-4 rounded-lg text-sm font-600 transition-all"
-            style={tab === t.id
-              ? { background: 'var(--color-surface)', color: 'var(--color-brand)', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
-              : { color: 'var(--color-text-muted)' }}>
-            {t.label}
-          </button>
-        ))}
+    <div className="flex gap-5 items-start">
+      {/* ── Left sub-menu ───────────────────────────────────── */}
+      <div className="w-44 shrink-0 rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+        <div className="px-3 py-2.5 border-b border-(--color-border)">
+          <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Integrations</p>
+        </div>
+        <nav className="p-1.5 space-y-0.5">
+          {TABS.map(t => {
+            const Icon = t.icon
+            return (
+              <button key={t.id} type="button" onClick={() => setTab(t.id)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-500 text-left transition-all"
+                style={tab === t.id
+                  ? { background: 'var(--color-brand)', color: '#fff' }
+                  : { color: 'var(--color-text-secondary)' }}>
+                <Icon size={15} />
+                {t.label}
+              </button>
+            )
+          })}
+        </nav>
       </div>
+
+      {/* ── Content area ────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 space-y-4">
 
       {/* ── Tab: Integrations ────────────────────────────────── */}
       {tab === 'integrations' && (
@@ -868,6 +881,7 @@ export default function ConfigurationPage() {
           )}
         </Card>
       )}
+      </div>
     </div>
   )
 }
