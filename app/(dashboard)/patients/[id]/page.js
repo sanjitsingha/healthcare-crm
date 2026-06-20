@@ -182,15 +182,24 @@ export default function PatientDetailPage({ params }) {
 
   const openProfileEdit = () => {
     setProfileDraft({
-      first_name:    patient.first_name    || '',
-      last_name:     patient.last_name     || '',
-      phone:         patient.phone         || '',
-      email:         patient.email         || '',
-      gender:        patient.gender        || '',
-      date_of_birth: patient.date_of_birth || '',
-      blood_group:   patient.custom_data?.blood_group || '',
-      address:       patient.address       || '',
-      status:        patient.status        || 'Active',
+      first_name:     patient.first_name    || '',
+      last_name:      patient.last_name     || '',
+      phone:          patient.phone         || '',
+      email:          patient.email         || '',
+      gender:         patient.gender        || '',
+      date_of_birth:  patient.date_of_birth || '',
+      blood_group:    patient.custom_data?.blood_group    || '',
+      address:        patient.address       || '',
+      status:         patient.status        || 'Active',
+      age:            patient.custom_data?.age            || '',
+      marital_status: patient.custom_data?.marital_status || '',
+      occupation:     patient.custom_data?.occupation     || '',
+      city:           patient.custom_data?.city           || '',
+      state:          patient.custom_data?.state          || '',
+      zip_code:       patient.custom_data?.zip_code       || '',
+      alt_phone:      patient.custom_data?.alt_phone      || '',
+      whatsapp_phone: patient.custom_data?.whatsapp_phone || '',
+      whatsapp_same:  !!patient.custom_data?.whatsapp_same,
     })
     setProfileEditing(true)
   }
@@ -208,7 +217,19 @@ export default function PatientDetailPage({ params }) {
         date_of_birth: profileDraft.date_of_birth      || null,
         address:       profileDraft.address?.trim()    || null,
         status:        profileDraft.status             || 'Active',
-        custom_data:   { ...(patient.custom_data || {}), blood_group: profileDraft.blood_group || null },
+        custom_data:   {
+          ...(patient.custom_data || {}),
+          blood_group:    profileDraft.blood_group    || null,
+          age:            profileDraft.age            || null,
+          marital_status: profileDraft.marital_status || null,
+          occupation:     profileDraft.occupation     || null,
+          city:           profileDraft.city           || null,
+          state:          profileDraft.state          || null,
+          zip_code:       profileDraft.zip_code       || null,
+          alt_phone:      profileDraft.alt_phone      || null,
+          whatsapp_same:  !!profileDraft.whatsapp_same,
+          whatsapp_phone: (profileDraft.whatsapp_same ? profileDraft.phone : profileDraft.whatsapp_phone) || null,
+        },
       }
       const updated = await updatePatient(id, patch)
       setPatient(prev => ({ ...prev, ...updated }))
@@ -747,10 +768,98 @@ export default function PatientDetailPage({ params }) {
                   <div className="space-y-1">
                     <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Address</label>
                     <textarea value={profileDraft.address} onChange={e => setProfileDraft(d => ({ ...d, address: e.target.value }))}
-                      placeholder="Full address" rows={3}
+                      placeholder="Full address" rows={2}
                       className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none resize-y"
                       style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
                   </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Age</label>
+                      <input type="number" min="0" value={profileDraft.age}
+                        onChange={e => setProfileDraft(d => ({ ...d, age: e.target.value }))}
+                        placeholder="Age"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Marital status</label>
+                      <select value={profileDraft.marital_status}
+                        onChange={e => setProfileDraft(d => ({ ...d, marital_status: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                        <option value="">—</option>
+                        {['Single', 'Married', 'Divorced', 'Widowed', 'Other'].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Occupation</label>
+                    <input type="text" value={profileDraft.occupation}
+                      onChange={e => setProfileDraft(d => ({ ...d, occupation: e.target.value }))}
+                      placeholder="Occupation"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>City</label>
+                      <input type="text" value={profileDraft.city}
+                        onChange={e => setProfileDraft(d => ({ ...d, city: e.target.value }))}
+                        placeholder="City"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>State</label>
+                      <input type="text" value={profileDraft.state}
+                        onChange={e => setProfileDraft(d => ({ ...d, state: e.target.value }))}
+                        placeholder="State"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Zip code</label>
+                      <input type="text" value={profileDraft.zip_code}
+                        onChange={e => setProfileDraft(d => ({ ...d, zip_code: e.target.value }))}
+                        placeholder="Zip / Pincode"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Alternative phone</label>
+                      <input type="tel" value={profileDraft.alt_phone}
+                        onChange={e => setProfileDraft(d => ({ ...d, alt_phone: e.target.value }))}
+                        placeholder="Alt phone"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>WhatsApp number</label>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>
+                        <input type="checkbox" checked={!!profileDraft.whatsapp_same}
+                          onChange={e => setProfileDraft(d => ({ ...d, whatsapp_same: e.target.checked, whatsapp_phone: e.target.checked ? d.phone : d.whatsapp_phone }))}
+                          className="w-3.5 h-3.5 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} />
+                        Same as primary
+                      </label>
+                    </div>
+                    <input type="tel"
+                      value={profileDraft.whatsapp_same ? profileDraft.phone : profileDraft.whatsapp_phone}
+                      disabled={profileDraft.whatsapp_same}
+                      onChange={e => setProfileDraft(d => ({ ...d, whatsapp_phone: e.target.value }))}
+                      placeholder="WhatsApp number"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none disabled:opacity-60"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+
                   <div className="space-y-1">
                     <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Status</label>
                     <div className="flex gap-2">
@@ -838,11 +947,16 @@ export default function PatientDetailPage({ params }) {
                   <div className="space-y-2.5">
                     {[
                       { icon: Phone,    label: patient.phone || '—' },
+                      patient.custom_data?.alt_phone && { icon: Phone, label: `Alt: ${patient.custom_data.alt_phone}` },
+                      patient.custom_data?.whatsapp_phone && { icon: MessageSquare, label: `WhatsApp: ${patient.custom_data.whatsapp_phone}` },
                       { icon: Mail,     label: patient.email || '—' },
-                      { icon: Calendar, label: patient.date_of_birth ? `DOB: ${format(new Date(patient.date_of_birth), 'MMM d, yyyy')}` : 'DOB: —' },
-                      { icon: MapPin,   label: patient.address || '—' },
+                      { icon: Calendar, label: patient.date_of_birth ? `DOB: ${format(new Date(patient.date_of_birth), 'MMM yyyy')}` : 'DOB: —' },
+                      { icon: MapPin,   label: [patient.custom_data?.city, patient.custom_data?.state, patient.custom_data?.zip_code].filter(Boolean).join(', ') || patient.address || '—' },
+                      patient.address && (patient.custom_data?.city || patient.custom_data?.state) && { icon: MapPin, label: patient.address },
                       { icon: Tag,      label: patient.custom_data?.blood_group ? `Blood: ${patient.custom_data.blood_group}` : 'Blood: —' },
-                    ].map(({ icon: Icon, label }, i) => (
+                      patient.custom_data?.marital_status && { icon: User, label: patient.custom_data.marital_status },
+                      patient.custom_data?.occupation && { icon: User, label: patient.custom_data.occupation },
+                    ].filter(Boolean).map(({ icon: Icon, label }, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <Icon size={13} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                         <span className="text-xs truncate" style={{ color: label.endsWith('—') ? 'var(--color-text-muted)' : 'var(--color-text-secondary)' }}>{label}</span>
