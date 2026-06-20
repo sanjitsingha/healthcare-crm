@@ -436,11 +436,13 @@ export default function ConfigurationPage() {
   const [busy, setBusy] = useState(false)
 
   // ── API Access state ─────────────────────────────────────────
-  const [apiKey, setApiKey]       = useState(() => localSettings.public_api_key || '')
-  const [showKey, setShowKey]     = useState(false)
-  const [keyCopied, setKeyCopied] = useState('')
-  const [keyBusy, setKeyBusy]     = useState(false)
-  const [showCode, setShowCode]   = useState(false)
+  const [apiKeys, setApiKeys]       = useState(() => localSettings.api_keys || [])
+  const [creatingKey, setCreatingKey] = useState(false)
+  const [newKeyForm, setNewKeyForm] = useState({ name: '', entity: 'leads', expiry_mode: 'never', expires_at: '' })
+  const [keyBusy, setKeyBusy]       = useState(false)
+  const [revealedKeys, setRevealedKeys] = useState(new Set())
+  const [copiedSlot, setCopiedSlot]   = useState('')
+  const [showCode, setShowCode]       = useState(false)
 
   // ── API Names state ──────────────────────────────────────────
   const [entity, setEntity]           = useState('leads')
@@ -490,32 +492,61 @@ export default function ConfigurationPage() {
   }
 
   // ── API Access handlers ──────────────────────────────────────
-  const handleGenerateKey = async () => {
-    if (apiKey) {
-      const ok = await showConfirm({ title: 'Regenerate API key?', message: 'The existing key will stop working immediately.', confirmLabel: 'Regenerate' })
-      if (!ok) return
-    }
+  const persistKeys = async (updated) => {
+    await saveSettings({ api_keys: updated })
+    setApiKeys(updated)
+  }
+
+  const handleCreateKey = async () => {
+    if (!newKeyForm.name.trim()) { toast({ type: 'error', title: 'Enter a name for this key' }); return }
     setKeyBusy(true)
     try {
-      const newKey = await generateOrgApiKey(orgId, localSettings)
-      setApiKey(newKey)
-      setLocalSettings(s => ({ ...s, public_api_key: newKey }))
-      setShowKey(true)
-      toast({ type: 'success', title: 'API key generated' })
+      const bytes = new Uint8Array(16)
+      crypto.getRandomValues(bytes)
+      const raw = 'hcrm_' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+      const entry = {
+        id: crypto.randomUUID(),
+        name: newKeyForm.name.trim(),
+        key: raw,
+        entity: newKeyForm.entity,
+        expires_at: newKeyForm.expiry_mode === 'never' ? null : newKeyForm.expires_at || null,
+        active: true,
+        created_at: new Date().toISOString(),
+      }
+      const updated = [...apiKeys, entry]
+      await persistKeys(updated)
+      setRevealedKeys(s => new Set([...s, entry.id]))
+      setCreatingKey(false)
+      setNewKeyForm({ name: '', entity: 'leads', expiry_mode: 'never', expires_at: '' })
+      toast({ type: 'success', title: 'API key created — copy it now' })
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setKeyBusy(false) }
   }
 
-  const clip = async (text, slot) => {
-    try { await navigator.clipboard.writeText(text); setKeyCopied(slot); setTimeout(() => setKeyCopied(''), 1500) } catch {}
+  const handleToggleKey = async (id) => {
+    await persistKeys(apiKeys.map(k => k.id === id ? { ...k, active: !k.active } : k))
   }
 
-  const codeExample =
+  const handleDeleteKey = async (id) => {
+    const ok = await showConfirm({ title: 'Delete this API key?', message: 'Any integrations using it will stop working immediately.', confirmLabel: 'Delete' })
+    if (!ok) return
+    persistKeys(apiKeys.filter(k => k.id !== id))
+  }
+
+  const clip = async (text, slot) => {
+    try { await navigator.clipboard.writeText(text); setCopiedSlot(slot); setTimeout(() => setCopiedSlot(''), 1500) } catch {}
+  }
+
+  const toggleReveal = (id) => setRevealedKeys(s => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+
+  const codeExample = (k) =>
 `fetch('${origin}/api/public/leads', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    Authorization: 'Bearer ${apiKey || 'hcrm_your_api_key'}',
+    Authorization: 'Bearer ${k?.key || 'hcrm_your_api_key'}',
   },
   body: JSON.stringify({
     first_name: 'Priya',
@@ -692,83 +723,179 @@ export default function ConfigurationPage() {
 
       {/* ── Tab: API Access ──────────────────────────────────── */}
       {tab === 'api-access' && (
-        <Card className="p-5">
-          <SectionHead icon={Key} title="API Access" description="Let your custom landing page submit leads directly into this CRM" />
-          <div className="space-y-3">
-
-            {/* API Key */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>API Key</label>
-              <div className="flex items-center gap-2">
-                <input readOnly
-                  value={apiKey ? (showKey ? apiKey : apiKey.slice(0, 8) + '••••••••••••••••••••••••') : ''}
-                  placeholder="No key generated yet"
-                  className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: apiKey ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }} />
-                {apiKey && (
-                  <>
-                    <button type="button" onClick={() => setShowKey(v => !v)}
-                      className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
-                      style={{ color: 'var(--color-text-muted)' }}>
-                      {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                    <button type="button" onClick={() => clip(apiKey, 'key')}
-                      className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
-                      style={{ color: keyCopied === 'key' ? '#15803d' : 'var(--color-text-muted)' }}>
-                      {keyCopied === 'key' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-                    </button>
-                  </>
-                )}
-                <Button size="sm" variant={apiKey ? 'secondary' : 'primary'} type="button" onClick={handleGenerateKey} disabled={keyBusy} className="shrink-0">
-                  {keyBusy ? 'Generating…' : apiKey ? 'Regenerate' : 'Generate key'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Endpoint */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Endpoint URL</label>
-              <div className="flex items-center gap-2">
-                <input readOnly value={`${origin}/api/public/leads`}
-                  className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }} />
-                <button type="button" onClick={() => clip(`${origin}/api/public/leads`, 'url')}
-                  className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
-                  style={{ color: keyCopied === 'url' ? '#15803d' : 'var(--color-text-muted)' }}>
-                  {keyCopied === 'url' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+        <>
+          {/* ── Header ─────────────────────────────────────────── */}
+          <Card className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <SectionHead icon={Key} title="API Access" description="Create named API keys for your landing pages and custom integrations" />
+              {!creatingKey && (
+                <button type="button" onClick={() => setCreatingKey(true)}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
+                  style={{ color: 'var(--color-brand)' }}>
+                  <Plus size={13} /> New API key
                 </button>
-              </div>
-            </div>
-
-            {/* Code example */}
-            <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-              <button type="button" onClick={() => setShowCode(v => !v)}
-                className="w-full flex items-center justify-between px-3 py-2.5">
-                <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
-                  <Code2 size={13} /> Code Example
-                  <span className="text-[10px] font-400" style={{ color: 'var(--color-text-muted)' }}>· fetch() for your landing page</span>
-                </span>
-                <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showCode ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-              </button>
-              {showCode && (
-                <div className="border-t border-(--color-border) relative">
-                  <button type="button" onClick={() => clip(codeExample, 'code')}
-                    className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
-                    style={{ color: keyCopied === 'code' ? '#15803d' : 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
-                    {keyCopied === 'code' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
-                  </button>
-                  <pre className="px-4 py-3 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
-                    {codeExample}
-                  </pre>
-                </div>
               )}
             </div>
 
-            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              Use <b>API Names</b> tab to see the accepted field names and add custom fields.
-            </p>
-          </div>
-        </Card>
+            {/* ── Create-key form ──────────────────────────────── */}
+            {creatingKey && (
+              <div className="mt-2 rounded-xl border border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>New API key</p>
+
+                {/* Name */}
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>Key Name *</label>
+                  <input value={newKeyForm.name} onChange={e => setNewKeyForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Facebook Landing Page"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-(--color-border) outline-none"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Entity */}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>For which page?</label>
+                    <select value={newKeyForm.entity} onChange={e => setNewKeyForm(f => ({ ...f, entity: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="leads">Leads</option>
+                      <option value="patients">Patients</option>
+                      <option value="consultations">Consultations</option>
+                    </select>
+                  </div>
+
+                  {/* Expiry */}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>Expiry</label>
+                    <select value={newKeyForm.expiry_mode} onChange={e => setNewKeyForm(f => ({ ...f, expiry_mode: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      <option value="never">Until deleted</option>
+                      <option value="date">Custom date</option>
+                    </select>
+                  </div>
+                </div>
+
+                {newKeyForm.expiry_mode === 'date' && (
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>Expiry Date</label>
+                    <input type="date" value={newKeyForm.expires_at} onChange={e => setNewKeyForm(f => ({ ...f, expires_at: e.target.value }))}
+                      min={new Date().toISOString().slice(0, 10)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Button variant="secondary" size="sm" type="button" onClick={() => { setCreatingKey(false); setNewKeyForm({ name: '', entity: 'leads', expiry_mode: 'never', expires_at: '' }) }}>Cancel</Button>
+                  <Button size="sm" type="button" onClick={handleCreateKey} disabled={keyBusy || !newKeyForm.name.trim()}>
+                    {keyBusy ? 'Generating…' : 'Generate & save'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* ── Key cards ───────────────────────────────────────── */}
+          {apiKeys.length === 0 && !creatingKey && (
+            <div className="py-10 text-center rounded-xl border border-dashed border-(--color-border)">
+              <Key size={26} className="mx-auto mb-2 opacity-20" />
+              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No API keys yet.</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Click <b>New API key</b> to get started.</p>
+            </div>
+          )}
+
+          {apiKeys.map(k => {
+            const isRevealed   = revealedKeys.has(k.id)
+            const isExpired    = k.expires_at && new Date(k.expires_at) < new Date()
+            const expiryLabel  = k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Until deleted'
+            const ENTITY_STYLE = {
+              leads:         { bg: '#ede9fe', color: '#7c3aed' },
+              patients:      { bg: '#dbeafe', color: '#1d4ed8' },
+              consultations: { bg: '#dcfce7', color: '#15803d' },
+            }
+            const es = ENTITY_STYLE[k.entity] || ENTITY_STYLE.leads
+            const maskedKey = k.key.slice(0, 9) + '•'.repeat(24)
+            const code = codeExample(k)
+
+            return (
+              <Card key={k.id} className="p-5 space-y-3">
+                {/* Row 1 — name + badges + toggle */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{k.name}</p>
+                    <span className="text-[10px] font-700 px-2 py-0.5 rounded-full"
+                      style={{ background: es.bg, color: es.color }}>
+                      {k.entity.charAt(0).toUpperCase() + k.entity.slice(1)}
+                    </span>
+                    {isExpired && (
+                      <span className="text-[10px] font-700 px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#dc2626' }}>Expired</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-600" style={{ color: k.active && !isExpired ? '#15803d' : 'var(--color-text-muted)' }}>
+                      {k.active && !isExpired ? 'Active' : 'Inactive'}
+                    </span>
+                    <Switch checked={k.active && !isExpired} onChange={() => handleToggleKey(k.id)} />
+                    <button type="button" onClick={() => handleDeleteKey(k.id)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2 — key value */}
+                <div className="flex items-center gap-2">
+                  <input readOnly value={isRevealed ? k.key : maskedKey}
+                    className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }} />
+                  <button type="button" onClick={() => toggleReveal(k.id)}
+                    className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
+                    style={{ color: 'var(--color-text-muted)' }}>
+                    {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button type="button" onClick={() => clip(k.key, k.id)}
+                    className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
+                    style={{ color: copiedSlot === k.id ? '#15803d' : 'var(--color-text-muted)' }}>
+                    {copiedSlot === k.id ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                  </button>
+                </div>
+
+                {/* Row 3 — meta */}
+                <div className="flex items-center gap-4 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                  <span>Created {new Date(k.created_at).toLocaleDateString()}</span>
+                  <span>·</span>
+                  <span>Expires: <b style={{ color: isExpired ? '#dc2626' : 'var(--color-text-secondary)' }}>{expiryLabel}</b></span>
+                  <span>·</span>
+                  <span>Endpoint: <span className="font-mono" style={{ color: 'var(--color-text-secondary)' }}>{origin}/api/public/leads</span></span>
+                </div>
+
+                {/* Code example (collapsible per key) */}
+                <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+                  <button type="button" onClick={() => setShowCode(v => v === k.id ? false : k.id)}
+                    className="w-full flex items-center justify-between px-3 py-2.5">
+                    <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                      <Code2 size={13} /> Code Example
+                    </span>
+                    <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showCode === k.id ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                  </button>
+                  {showCode === k.id && (
+                    <div className="border-t border-(--color-border) relative">
+                      <button type="button" onClick={() => clip(code, `code-${k.id}`)}
+                        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                        style={{ color: copiedSlot === `code-${k.id}` ? '#15803d' : 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
+                        {copiedSlot === `code-${k.id}` ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+                      </button>
+                      <pre className="px-4 py-3 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
+                        {code}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )
+          })}
+        </>
       )}
 
       {/* ── Tab: API Names ───────────────────────────────────── */}
