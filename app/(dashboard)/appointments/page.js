@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import {
-  Plus, Calendar, User, UserRound, Link2,
+  Plus, Calendar, User, UserRound, Link2, Hash,
   Check, X, List, CalendarDays, ChevronLeft, ChevronRight,
-  Search, SlidersHorizontal, IndianRupee,
+  Search, SlidersHorizontal, IndianRupee, CalendarClock, Banknote, CreditCard,
 } from 'lucide-react'
 import { Button, Card, Spinner } from '@/components/ui'
+import CustomDatePicker from '@/components/crm/CustomDatePicker'
 import { getAppointments, updateAppointment } from '@/lib/supabase/queries'
 import { getPref, setPref } from '@/lib/prefs'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -32,7 +33,7 @@ const TABS = [
 ]
 
 // ── Calendar view ──────────────────────────────────────────────
-function CalendarView({ appointments, doctors, onStatusChange, onPaymentUpdate }) {
+function CalendarView({ appointments, doctors, onStatusChange, onPaymentUpdate, onReschedule }) {
   const [month, setMonth]       = useState(startOfMonth(new Date()))
   const [selected, setSelected] = useState(new Date())
 
@@ -205,7 +206,7 @@ function CalendarView({ appointments, doctors, onStatusChange, onPaymentUpdate }
               </div>
             ) : (
               <div className="space-y-3">
-                {selectedAppts.map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={onStatusChange} onPaymentUpdate={onPaymentUpdate} />)}
+                {selectedAppts.map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={onStatusChange} onPaymentUpdate={onPaymentUpdate} onReschedule={onReschedule} />)}
               </div>
             )}
           </div>
@@ -228,9 +229,34 @@ function CalendarView({ appointments, doctors, onStatusChange, onPaymentUpdate }
 }
 
 // ── Appointment card ───────────────────────────────────────────
-function ApptCard({ appt, doctors = [], onStatusChange, onPaymentUpdate }) {
+function ApptCard({ appt, doctors = [], onStatusChange, onPaymentUpdate, onReschedule }) {
   const st          = STATUS_STYLE[appt.status] || STATUS_STYLE.confirmed
   const date        = new Date(appt.scheduled_at)
+  const [rescheduling, setRescheduling] = useState(false)
+  const [rDate, setRDate] = useState(format(date, 'yyyy-MM-dd'))
+  const [rTime, setRTime] = useState(format(date, 'HH:mm'))
+
+  const openReschedule = () => {
+    setRDate(format(date, 'yyyy-MM-dd'))
+    setRTime(format(date, 'HH:mm'))
+    setRescheduling(true)
+  }
+  const saveReschedule = () => {
+    if (!rDate) return
+    const iso = new Date(`${rDate}T${rTime || '10:00'}:00`).toISOString()
+    onReschedule?.(appt.id, iso)
+    setRescheduling(false)
+  }
+
+  // Collecting a fee — confirm cash vs online before marking paid.
+  const [collecting, setCollecting] = useState(null) // null | 'consult' | 'reg'
+  const confirmCollect = (mode) => {
+    const patch = collecting === 'consult'
+      ? { consultation_fee_status: 'paid', payment_mode: mode }
+      : { registration_fee_status: 'paid', payment_mode: mode }
+    onPaymentUpdate(appt.id, patch)
+    setCollecting(null)
+  }
   const patientName = [appt.patients?.first_name, appt.patients?.last_name].filter(Boolean).join(' ') || 'Unknown Patient'
   const leadName    = appt.leads
     ? ([appt.leads.first_name, appt.leads.last_name].filter(Boolean).join(' ') || appt.leads.title || 'Lead')
@@ -303,6 +329,13 @@ function ApptCard({ appt, doctors = [], onStatusChange, onPaymentUpdate }) {
                   style={{ background: st.bg, color: st.color }}>
                   {st.label}
                 </span>
+                {appt.appointment_ref && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-700 px-2 py-0.5 rounded-full shrink-0 font-mono tracking-tight"
+                    style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }}
+                    title="Appointment number">
+                    <Hash size={9} />{appt.appointment_ref}
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
@@ -364,43 +397,112 @@ function ApptCard({ appt, doctors = [], onStatusChange, onPaymentUpdate }) {
 
             {/* Action buttons */}
             {canAct && (
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                {/* Per-fee pay buttons — shown only when that fee is due */}
-                {cFee != null && !cPaid && (
-                  <button type="button"
-                    onClick={() => onPaymentUpdate(appt.id, { consultation_fee_status: 'paid' })}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
-                    style={{ background: '#fef9c3', color: '#854d0e' }}>
-                    <IndianRupee size={10} /> Mark consult paid
-                  </button>
-                )}
-                {rFee != null && !rPaid && (
-                  <button type="button"
-                    onClick={() => onPaymentUpdate(appt.id, { registration_fee_status: 'paid' })}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors"
-                    style={{ background: '#fef9c3', color: '#854d0e' }}>
-                    <IndianRupee size={10} /> Mark reg paid
-                  </button>
-                )}
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                {collecting ? (
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <span className="text-[11px] font-600" style={{ color: 'var(--color-text-secondary)' }}>
+                      Collect {collecting === 'consult' ? 'consultation' : 'registration'} fee via
+                    </span>
+                    <button type="button" onClick={() => confirmCollect('cash')}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-green-50"
+                      style={{ borderColor: '#86efac', color: '#15803d', background: 'var(--color-surface)' }}>
+                      <Banknote size={11} /> Cash
+                    </button>
+                    <button type="button" onClick={() => confirmCollect('online')}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-blue-50"
+                      style={{ borderColor: '#93c5fd', color: '#1d4ed8', background: 'var(--color-surface)' }}>
+                      <CreditCard size={11} /> Online
+                    </button>
+                    <button type="button" onClick={() => setCollecting(null)} title="Cancel"
+                      className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-(--color-surface-2)"
+                      style={{ color: 'var(--color-text-muted)' }}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {/* Per-fee pay buttons — shown only when that fee is due */}
+                  {cFee != null && !cPaid && (
+                    <button type="button"
+                      onClick={() => setCollecting('consult')}
+                      title="Collect consultation fee"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-amber-50"
+                      style={{ borderColor: '#fcd34d', color: '#b45309', background: 'var(--color-surface)' }}>
+                      <IndianRupee size={10} /> Collect consult
+                    </button>
+                  )}
+                  {rFee != null && !rPaid && (
+                    <button type="button"
+                      onClick={() => setCollecting('reg')}
+                      title="Collect registration fee"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-amber-50"
+                      style={{ borderColor: '#fcd34d', color: '#b45309', background: 'var(--color-surface)' }}>
+                      <IndianRupee size={10} /> Collect reg
+                    </button>
+                  )}
 
-                <div className="flex items-center gap-1.5">
+                  {/* Reschedule */}
+                  <button type="button" onClick={() => rescheduling ? setRescheduling(false) : openReschedule()}
+                    title="Reschedule appointment"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-(--color-surface-2)"
+                    style={rescheduling
+                      ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)', background: 'var(--color-brand-50)' }
+                      : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+                    <CalendarClock size={11} /> Reschedule
+                  </button>
+
                   {/* Complete — blocked until all dues cleared */}
                   <button type="button"
                     disabled={dueAmt > 0}
                     onClick={() => dueAmt === 0 && onStatusChange(appt.id, 'completed')}
                     title={dueAmt > 0 ? 'Clear all dues before completing' : 'Mark as completed'}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-all"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-all"
                     style={dueAmt > 0
-                      ? { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', cursor: 'not-allowed', opacity: 0.6 }
-                      : { background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                      ? { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', borderColor: 'transparent', cursor: 'not-allowed', opacity: 0.6 }
+                      : { background: 'var(--color-brand)', color: '#fff', borderColor: 'var(--color-brand)' }}>
                     <Check size={11} /> Complete
                   </button>
+
+                  {/* Cancel */}
                   <button type="button" onClick={() => onStatusChange(appt.id, 'cancelled')}
+                    title="Cancel appointment"
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border transition-colors hover:bg-red-50"
-                    style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
+                    style={{ borderColor: '#fecaca', color: '#b91c1c', background: 'var(--color-surface)' }}>
                     <X size={11} /> Cancel
                   </button>
                 </div>
+                )}
+
+                {/* Inline reschedule panel */}
+                {rescheduling && (
+                  <div className="p-2.5 rounded-xl border space-y-3"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)' }}>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="flex flex-col gap-1 w-48">
+                        <label className="text-[10px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Date</label>
+                        <CustomDatePicker popover value={rDate} onChange={setRDate} placeholder="Pick a date" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Time</label>
+                        <input type="time" value={rTime} onChange={e => setRTime(e.target.value)}
+                          className="px-2 py-1.5 rounded-lg border text-[12px] outline-none focus:border-(--color-brand)"
+                          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setRescheduling(false)}
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-600 transition-colors hover:bg-(--color-surface)"
+                        style={{ color: 'var(--color-text-muted)' }}>
+                        Cancel
+                      </button>
+                      <button type="button" onClick={saveReschedule} disabled={!rDate}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-600 transition-opacity hover:opacity-90"
+                        style={{ background: 'var(--color-brand)', color: '#fff', opacity: rDate ? 1 : 0.5 }}>
+                        <Check size={11} /> Save
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -451,6 +553,15 @@ export default function AppointmentsPage() {
   const handlePaymentUpdate = async (id, patch) => {
     try {
       const updated = await updateAppointment(id, patch)
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...updated } : a))
+    } catch (e) { alert(e.message) }
+  }
+
+  // Reschedule: changing the date re-generates appointment_ref (DB trigger), so
+  // merge the full returned row to reflect the new number immediately.
+  const handleReschedule = async (id, scheduledAtIso) => {
+    try {
+      const updated = await updateAppointment(id, { scheduled_at: scheduledAtIso })
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...updated } : a))
     } catch (e) { alert(e.message) }
   }
@@ -539,7 +650,7 @@ export default function AppointmentsPage() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner size={28} /></div>
       ) : view === 'calendar' ? (
-        <CalendarView appointments={appointments} doctors={doctors} onStatusChange={handleStatusChange} onPaymentUpdate={handlePaymentUpdate} />
+        <CalendarView appointments={appointments} doctors={doctors} onStatusChange={handleStatusChange} onPaymentUpdate={handlePaymentUpdate} onReschedule={handleReschedule} />
       ) : (
         <>
           {/* Tabs */}
@@ -697,8 +808,11 @@ export default function AppointmentsPage() {
           ) : (
             <div className="space-y-3">
               {filtered
-                .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
-                .map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={handleStatusChange} onPaymentUpdate={handlePaymentUpdate} />)}
+                .sort((a, b) => {
+                  const done = x => (x.status === 'completed' || x.status === 'cancelled') ? 1 : 0
+                  return (done(a) - done(b)) || (new Date(a.scheduled_at) - new Date(b.scheduled_at))
+                })
+                .map(a => <ApptCard key={a.id} appt={a} doctors={doctors} onStatusChange={handleStatusChange} onPaymentUpdate={handlePaymentUpdate} onReschedule={handleReschedule} />)}
             </div>
           )}
         </>

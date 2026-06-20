@@ -3,6 +3,7 @@ import { useEffect, useState, use, useRef } from 'react'
 import {
   ArrowLeft, Edit2, Trash2, Phone, Mail, MapPin, Calendar,
   Clock, Activity, FileText, History, Plus, Save, User, X,
+  Pill, FolderOpen, Upload, Download,
   CheckSquare, Bell, MessageSquare, Check, RotateCcw, PhoneCall, ChevronLeft, ChevronRight, ChevronDown, Tag,
   List, Table2, ArrowUpDown, ArrowUp, ArrowDown, Search,
 } from 'lucide-react'
@@ -10,7 +11,7 @@ import { Button, Card, Input, Textarea, Spinner, Select } from '@/components/ui'
 import {
   getPatient, updatePatient, deletePatient, updateLead,
   getPersonTimeline, createActivity,
-  getTasks, createTask, updateTask,
+  getTasks, createTask, updateTask, deleteTask,
   getFollowups, createFollowup, updateFollowup, deleteFollowup,
   getTags, assignTagToPatient, removeTagFromPatient,
   getAppointments, createAppointment, updateAppointment,
@@ -22,6 +23,10 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
 import FollowupTable from '@/components/crm/FollowupTable'
 import VisitsTable from '@/components/crm/VisitsTable'
+import AppointmentList from '@/components/crm/AppointmentList'
+import BookAppointmentForm from '@/components/crm/BookAppointmentForm'
+import TaskList from '@/components/crm/TaskList'
+import CustomDatePicker from '@/components/crm/CustomDatePicker'
 import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 import { logAudit, AUDIT } from '@/lib/audit'
@@ -84,7 +89,13 @@ export default function PatientDetailPage({ params }) {
   const [tagMenuPos, setTagMenuPos] = useState({ top: 0, left: 0 })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tasks')
-  const [bottomTab, setBottomTab] = useState('history')
+  const [docTab, setDocTab] = useState('prescription')
+  const [pendingDoc, setPendingDoc] = useState(null) // { name, type, size, data }
+  const [docNote, setDocNote] = useState('')
+  const [docSaving, setDocSaving] = useState(false)
+  const [renamingDocId, setRenamingDocId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const docInputRef = useRef(null)
   const [profileEditing, setProfileEditing] = useState(false)
   const [profileDraft, setProfileDraft] = useState({})
   const [profileSaving, setProfileSaving] = useState(false)
@@ -97,7 +108,6 @@ export default function PatientDetailPage({ params }) {
   const [assigningPatient, setAssigningPatient] = useState(false)
   const [appointments, setAppointments] = useState([])
   const [addingAppt, setAddingAppt] = useState(false)
-  const [apptForm, setApptForm] = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
   const [savingAppt, setSavingAppt] = useState(false)
   const [visitSort, setVisitSort] = useState('desc') // 'desc' | 'asc' by visit date
   const [notesEditing, setNotesEditing] = useState(false)
@@ -212,7 +222,61 @@ export default function PatientDetailPage({ params }) {
     finally { setProfileSaving(false) }
   }
   const handleTaskToggle = async (task) => { const status = task.status === 'Completed' ? 'Pending' : 'Completed'; const updated = await updateTask(task.id, { status }); setTasks(prev => prev.map(t => t.id === task.id ? updated : t)); if (status === 'Completed') await applyRules('task_completed') }
+  const handleDeleteTask = async (task) => { const ok = await showConfirm({ title: 'Delete this task?', confirmLabel: 'Delete' }); if (!ok) return; try { await deleteTask(task.id); setTasks(prev => prev.filter(t => t.id !== task.id)) } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) } }
   const handleCreateTask = async (e) => { e.preventDefault(); if (!newTask.title.trim() || !orgId) return; const t = await createTask({ ...newTask, organization_id: orgId, entity_type: 'patient', entity_id: id }); setTasks(prev => [t, ...prev]); await logActivity('note', `Task added: ${newTask.title}`); logAudit({ action: AUDIT.TASK_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `Task created: "${t.title}"`, metadata: { task_id: t.id, priority: t.priority, due_date: t.due_date } }); setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }); toast({ type: 'task', title: 'Task Added', message: `${fullName}: ${t.title}` }); await applyRules('task_added') }
+
+  // ── Document handlers (stored inline as base64 in custom_data.documents) ──
+  const MAX_DOC_BYTES = 100 * 1024
+  const handleDocPick = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file later
+    if (!file) return
+    const isImage = file.type.startsWith('image/')
+    const isPdf = file.type === 'application/pdf'
+    if (!isImage && !isPdf) { toast({ type: 'error', title: 'Unsupported file', message: 'Only images or PDF files are allowed.' }); return }
+    if (file.size > MAX_DOC_BYTES) { toast({ type: 'error', title: 'File too large', message: 'File must be under 100 KB.' }); return }
+    const reader = new FileReader()
+    reader.onload = () => { setPendingDoc({ name: file.name, type: file.type, size: file.size, data: reader.result }); setDocNote('') }
+    reader.readAsDataURL(file)
+  }
+  const handleDocUpload = async () => {
+    if (!pendingDoc) return
+    setDocSaving(true)
+    try {
+      const doc = {
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+        category: docTab, name: pendingDoc.name, type: pendingDoc.type, size: pendingDoc.size,
+        note: docNote.trim() || null, data: pendingDoc.data, uploaded_at: new Date().toISOString(),
+      }
+      const documents = [...(patient.custom_data?.documents || []), doc]
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), documents } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+      await logActivity('note', `Document uploaded: ${doc.name}`)
+      toast({ type: 'task', title: 'Document uploaded', message: doc.name })
+      setPendingDoc(null); setDocNote('')
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setDocSaving(false) }
+  }
+  const handleDocRename = async (docId) => {
+    const name = renameValue.trim()
+    if (!name) { setRenamingDocId(null); setRenameValue(''); return }
+    setRenamingDocId(null)
+    try {
+      const documents = (patient.custom_data?.documents || []).map(d => d.id === docId ? { ...d, name } : d)
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), documents } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setRenameValue('') }
+  }
+  const handleDocDelete = async (docId) => {
+    const ok = await showConfirm({ title: 'Delete this document?', confirmLabel: 'Delete' })
+    if (!ok) return
+    try {
+      const documents = (patient.custom_data?.documents || []).filter(d => d.id !== docId)
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), documents } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
 
   const handleAddRecord = async (e) => {
     e.preventDefault()
@@ -349,28 +413,41 @@ export default function PatientDetailPage({ params }) {
     if (changed) await loadAll()
   }
 
-  const handleBookAppt = async (e) => {
-    e.preventDefault()
-    if (!apptForm.date || !orgId) return
+  const handleBookAppt = async (data) => {
+    if (!data.scheduled_at || !orgId) return
     setSavingAppt(true)
     try {
-      const scheduledAt = new Date(`${apptForm.date}T${apptForm.time || '10:00'}:00`)
+      const scheduledAt = new Date(data.scheduled_at)
       const appt = await createAppointment({
         organization_id: orgId, patient_id: id, lead_id: null,
-        doctor_id: apptForm.doctor_id || null, scheduled_at: scheduledAt.toISOString(), notes: apptForm.notes || null, status: 'booked',
+        doctor_id: data.doctor_id, scheduled_at: data.scheduled_at, notes: data.notes, status: 'booked',
+        consultation_fee: data.consultation_fee,
+        consultation_fee_status: data.consultation_fee_status,
+        payment_mode: data.payment_mode,
       })
       setAppointments(prev => [appt, ...prev])
       await logActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
-      const apptDoc = doctors.find(d => d.id === apptForm.doctor_id)
+      const apptDoc = doctors.find(d => d.id === data.doctor_id)
       logAudit({ action: AUDIT.APPOINTMENT_CREATE, entityType: 'patient', entityId: id, entityName: fullName, description: `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}${apptDoc ? ` with ${apptDoc.name}` : ''}`, metadata: { scheduled_at: appt.scheduled_at, doctor: apptDoc?.name || null } })
       toast({ type: 'appointment', title: 'Appointment Booked', message: `${fullName} on ${format(scheduledAt, 'MMM d, h:mm a')}${apptDoc ? ` with ${apptDoc.name}` : ''}` })
-      setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
+      setAddingAppt(false)
       await applyRules('appointment_booked')
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) } finally { setSavingAppt(false) }
   }
   const handleApptStatus = async (aid, status) => {
-    try { const u = await updateAppointment(aid, { status }); setAppointments(prev => prev.map(a => a.id === aid ? { ...a, status: u.status } : a)) }
+    try { const u = await updateAppointment(aid, { status }); setAppointments(prev => prev.map(a => a.id === aid ? { ...a, ...u } : a)) }
     catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
+  const handleApptPayment = async (aid, patch) => {
+    try { const u = await updateAppointment(aid, patch); setAppointments(prev => prev.map(a => a.id === aid ? { ...a, ...u } : a)) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
+  const handleApptReschedule = async (aid, iso) => {
+    try {
+      const u = await updateAppointment(aid, { scheduled_at: iso })
+      setAppointments(prev => prev.map(a => a.id === aid ? { ...a, ...u } : a))
+      await logActivity('meeting', `Appointment rescheduled to ${format(new Date(iso), 'MMM d, yyyy')}`)
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // ── Visit details (stored on patient.custom_data.visits) ──
@@ -597,8 +674,8 @@ export default function PatientDetailPage({ params }) {
       </div>
 
       <div className="p-6 space-y-5">
-        <div className="grid grid-cols-3 gap-5 items-start">
-          <div className="space-y-4">
+        <div className="grid grid-cols-5 gap-5 items-start">
+          <div className="col-span-2 space-y-4">
             <Card className="p-5 border-(--color-border)">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>Patient Profile</p>
@@ -645,10 +722,9 @@ export default function PatientDetailPage({ params }) {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Date of birth</label>
-                      <input type="date" value={profileDraft.date_of_birth ? profileDraft.date_of_birth.slice(0, 10) : ''}
-                        onChange={e => setProfileDraft(d => ({ ...d, date_of_birth: e.target.value }))}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <CustomDatePicker popover monthOnly placeholder="Month & year"
+                        value={profileDraft.date_of_birth ? profileDraft.date_of_birth.slice(0, 10) : ''}
+                        onChange={v => setProfileDraft(d => ({ ...d, date_of_birth: v }))} />
                     </div>
                     <div className="space-y-1">
                       <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Gender</label>
@@ -671,9 +747,9 @@ export default function PatientDetailPage({ params }) {
                   </div>
                   <div className="space-y-1">
                     <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Address</label>
-                    <input type="text" value={profileDraft.address} onChange={e => setProfileDraft(d => ({ ...d, address: e.target.value }))}
-                      placeholder="Full address"
-                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                    <textarea value={profileDraft.address} onChange={e => setProfileDraft(d => ({ ...d, address: e.target.value }))}
+                      placeholder="Full address" rows={3}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none resize-y"
                       style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
                   </div>
                   <div className="space-y-1">
@@ -780,7 +856,7 @@ export default function PatientDetailPage({ params }) {
             <Card className="p-5 border-(--color-border)"><p className="text-[10px] font-700 uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-muted)' }}>Quick Stats</p><div className="grid grid-cols-2 gap-3">{[{ label: 'Visits', value: patient.appointments?.length || 0 }, { label: 'Invoices', value: patient.invoices?.length || 0 }, { label: 'Records', value: patient.medical_history?.length || 0 }, { label: 'Leads', value: patient.leads?.length || 0 }].map(s => <div key={s.label} className="p-3 rounded-xl text-center" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}><p className="text-xl font-800">{s.value}</p><p className="text-[10px]">{s.label}</p></div>)}</div></Card>
           </div>
 
-          <div className="col-span-2">
+          <div className="col-span-3">
             <Card className="border-(--color-border) overflow-hidden">
               <div className="flex items-center justify-between border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
                 <div className="flex">
@@ -791,20 +867,156 @@ export default function PatientDetailPage({ params }) {
                 )}
               </div>
               <div className="p-3">
-                {activeTab === 'tasks' && <div className="space-y-3">{taskOpen && <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Task *" value={newTask.title} onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required /><div className="grid grid-cols-2 gap-3"><Select label="Priority" value={newTask.priority} onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))} options={['Low', 'Medium', 'High', 'Urgent'].map(s => ({ value: s, label: s }))} /><Input label="Due Date" type="datetime-local" value={newTask.due_date} onChange={e => setNewTask(f => ({ ...f, due_date: e.target.value }))} /></div><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setTaskOpen(false)}>Cancel</Button><Button size="sm" type="submit">Create Task</Button></div></form>}{tasks.length === 0 ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><CheckSquare size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No tasks yet.</p></div> : tasks.map(task => <div key={task.id} className={clsx('flex items-start gap-3 p-4 rounded-xl border border-(--color-border)', task.status === 'Completed' && 'opacity-50')} style={{ background: 'var(--color-surface-2)' }}><input type="checkbox" checked={task.status === 'Completed'} className="mt-0.5 w-4 h-4" onChange={() => handleTaskToggle(task)} /><div className="flex-1"><p className={clsx('text-sm font-500', task.status === 'Completed' && 'line-through')}>{task.title}</p>{task.due_date && <p className="text-xs mt-0.5"><Calendar size={10} className="inline mr-1" />{format(new Date(task.due_date), 'MMM d, h:mm a')}</p>}</div></div>)}</div>}
+                {activeTab === 'tasks' && (
+                  <div className="space-y-2">
+                    {taskOpen && (
+                      <form onSubmit={handleCreateTask} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                        <Input label="Task *" placeholder="e.g. Send treatment plan, Follow up on insurance" value={newTask.title}
+                          onChange={e => setNewTask(f => ({ ...f, title: e.target.value }))} required />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Select label="Priority" value={newTask.priority}
+                            onChange={e => setNewTask(f => ({ ...f, priority: e.target.value }))}
+                            options={['Low', 'Medium', 'High', 'Urgent'].map(s => ({ value: s, label: s }))} />
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Due Date</label>
+                            <CustomDatePicker popover placeholder="Pick a date"
+                              value={newTask.due_date ? newTask.due_date.slice(0, 10) : ''}
+                              onChange={v => setNewTask(f => ({ ...f, due_date: v }))} />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
+                          <Button variant="secondary" size="sm" type="button" onClick={() => { setTaskOpen(false); setNewTask({ title: '', priority: 'Medium', due_date: '' }) }}>Cancel</Button>
+                          <Button size="sm" type="submit" disabled={!newTask.title.trim()}>Create Task</Button>
+                        </div>
+                      </form>
+                    )}
+                    <TaskList tasks={tasks} onToggle={handleTaskToggle} onDelete={handleDeleteTask} />
+                  </div>
+                )}
                 {activeTab === 'timeline' && <Timeline activities={activities} maxHeight="28rem" />}
               </div>
             </Card>
           </div>
         </div>
 
+        {/* Medical History */}
         <Card className="border-(--color-border) overflow-hidden">
-          <div className="flex border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            {[{ id: 'history', label: 'Medical History', icon: History }, { id: 'documents', label: 'Documents', icon: FileText }].map(tab => <button key={tab.id} onClick={() => setBottomTab(tab.id)} className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2', bottomTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')} style={bottomTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}><tab.icon size={14} />{tab.label}</button>)}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><History size={13} /> Medical History</p>
+            {!addingRecord && <Button size="sm" onClick={() => setAddingRecord(true)}><Plus size={14} /> Add Record</Button>}
           </div>
           <div className="p-5">
-            {bottomTab === 'history' && <div className="space-y-4"><div className="flex justify-end">{!addingRecord && <Button size="sm" onClick={() => setAddingRecord(true)}><Plus size={14} /> Add Record</Button>}</div>{addingRecord && <form onSubmit={handleAddRecord} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Diagnosis / Reason for Visit *" value={medEntry.diagnosis} onChange={e => setMedEntry(m => ({ ...m, diagnosis: e.target.value }))} required /><Textarea label="Treatment / Prescription" value={medEntry.treatment} onChange={e => setMedEntry(m => ({ ...m, treatment: e.target.value }))} rows={3} /><Textarea label="Additional Notes" value={medEntry.notes} onChange={e => setMedEntry(m => ({ ...m, notes: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setAddingRecord(false)}>Cancel</Button><Button size="sm" type="submit" disabled={savingRecord}>{savingRecord ? 'Saving...' : <><Save size={13} /> Save Record</>}</Button></div></form>}{!patient.medical_history?.length && !addingRecord ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><History size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p></div> : <div className="space-y-3">{(patient.medical_history || []).map((rec, i) => <div key={i} className="p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}><p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>{rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}</p><p className="text-sm font-700">{rec.diagnosis}</p>{rec.treatment && <p className="text-xs mt-2">{rec.treatment}</p>}</div>)}</div>}</div>}
-            {bottomTab === 'documents' && <div className="py-16 text-center border-2 border-dashed rounded-xl border-(--color-border)"><FileText size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Upload reports, prescriptions, or scan documents</p><p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Coming soon</p></div>}
+            <div className="space-y-4">
+              {addingRecord && <form onSubmit={handleAddRecord} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Diagnosis / Reason for Visit *" value={medEntry.diagnosis} onChange={e => setMedEntry(m => ({ ...m, diagnosis: e.target.value }))} required /><Textarea label="Treatment / Prescription" value={medEntry.treatment} onChange={e => setMedEntry(m => ({ ...m, treatment: e.target.value }))} rows={3} /><Textarea label="Additional Notes" value={medEntry.notes} onChange={e => setMedEntry(m => ({ ...m, notes: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setAddingRecord(false)}>Cancel</Button><Button size="sm" type="submit" disabled={savingRecord}>{savingRecord ? 'Saving...' : <><Save size={13} /> Save Record</>}</Button></div></form>}{!patient.medical_history?.length && !addingRecord ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><History size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p></div> : <div className="space-y-3">{(patient.medical_history || []).map((rec, i) => <div key={i} className="p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}><p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>{rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}</p><p className="text-sm font-700">{rec.diagnosis}</p>{rec.treatment && <p className="text-xs mt-2">{rec.treatment}</p>}</div>)}</div>}
+            </div>
+          </div>
+        </Card>
+
+        {/* Documents */}
+        <Card className="border-(--color-border) overflow-hidden">
+          <div className="flex items-center justify-between border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            <div className="flex">
+              {[
+                { id: 'prescription', label: 'Prescription',    icon: Pill },
+                { id: 'records',      label: 'Medical Records', icon: FileText },
+                { id: 'others',       label: 'Others',          icon: FolderOpen },
+              ].map(tab => (
+                <button key={tab.id} onClick={() => setDocTab(tab.id)}
+                  className={clsx('flex items-center gap-2 px-5 py-3.5 text-xs font-600 border-b-2', docTab === tab.id ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')}
+                  style={docTab === tab.id ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}>
+                  <tab.icon size={14} />{tab.label}
+                </button>
+              ))}
+            </div>
+            {!pendingDoc && (
+              <Button size="sm" className="mr-3 shrink-0" onClick={() => docInputRef.current?.click()}>
+                <Plus size={14} /> Add {docTab === 'prescription' ? 'Prescription' : docTab === 'records' ? 'Medical Record' : 'Document'}
+              </Button>
+            )}
+          </div>
+          <div className="p-5 space-y-4">
+            <input ref={docInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleDocPick} />
+            {(() => {
+              const meta = {
+                prescription: { icon: Pill,       text: 'Upload prescriptions' },
+                records:      { icon: FileText,   text: 'Upload lab reports, scans & medical records' },
+                others:       { icon: FolderOpen, text: 'Upload any other documents' },
+              }[docTab]
+              const Icon = meta.icon
+              const docs = (patient.custom_data?.documents || []).filter(d => d.category === docTab)
+              const fmtSize = b => b >= 1024 ? `${(b / 1024).toFixed(0)} KB` : `${b} B`
+
+              return (
+                <>
+                  {/* Picker / pending-note panel */}
+                  {pendingDoc ? (
+                    <div className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
+                      <div className="flex items-center gap-3">
+                        {pendingDoc.type.startsWith('image/')
+                          ? <img src={pendingDoc.data} alt="" className="w-12 h-12 object-cover rounded-lg border border-(--color-border)" />
+                          : <div className="w-12 h-12 rounded-lg flex items-center justify-center border border-(--color-border)" style={{ background: 'var(--color-surface)' }}><FileText size={20} style={{ color: 'var(--color-brand)' }} /></div>}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{pendingDoc.name}</p>
+                          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{fmtSize(pendingDoc.size)}</p>
+                        </div>
+                        <button type="button" onClick={() => { setPendingDoc(null); setDocNote('') }} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" style={{ color: '#b91c1c' }}><X size={15} /></button>
+                      </div>
+                      <Textarea label="Note (optional)" placeholder="Write something about this document…" value={docNote} onChange={e => setDocNote(e.target.value)} rows={3} />
+                      <div className="flex justify-end gap-2">
+                        <Button variant="secondary" size="sm" type="button" onClick={() => { setPendingDoc(null); setDocNote('') }}>Cancel</Button>
+                        <Button size="sm" type="button" onClick={handleDocUpload} disabled={docSaving}>{docSaving ? 'Uploading…' : <><Upload size={13} /> Upload</>}</Button>
+                      </div>
+                    </div>
+                  ) : docs.length === 0 ? (
+                    <button type="button" onClick={() => docInputRef.current?.click()}
+                      className="w-full py-10 border-2 border-dashed rounded-xl flex flex-col items-center gap-2 transition-colors hover:bg-(--color-surface-2)"
+                      style={{ borderColor: 'var(--color-border)' }}>
+                      <Icon size={26} className="opacity-40" style={{ color: 'var(--color-brand)' }} />
+                      <p className="text-sm font-500" style={{ color: 'var(--color-text-secondary)' }}>{meta.text}</p>
+                      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Images or PDF · under 100 KB</p>
+                    </button>
+                  ) : null}
+
+                  {/* Uploaded documents for this category */}
+                  {docs.length > 0 && (
+                    <div className="space-y-2">
+                      {docs.map(doc => (
+                        <div key={doc.id} className="flex items-start gap-3 p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                          <a href={doc.data} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Open document">
+                            {doc.type?.startsWith('image/')
+                              ? <img src={doc.data} alt="" className="w-12 h-12 object-cover rounded-lg border border-(--color-border)" />
+                              : <div className="w-12 h-12 rounded-lg flex items-center justify-center border border-(--color-border)" style={{ background: 'var(--color-surface)' }}><FileText size={20} style={{ color: 'var(--color-brand)' }} /></div>}
+                          </a>
+                          <div className="flex-1 min-w-0">
+                            {renamingDocId === doc.id ? (
+                              <input autoFocus value={renameValue}
+                                onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleDocRename(doc.id); if (e.key === 'Escape') { setRenamingDocId(null); setRenameValue('') } }}
+                                onBlur={() => handleDocRename(doc.id)}
+                                className="w-full px-2 py-1 text-sm rounded-md border outline-none"
+                                style={{ borderColor: 'var(--color-brand)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                            ) : (
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <a href={doc.data} target="_blank" rel="noopener noreferrer" className="text-sm font-600 hover:underline truncate" style={{ color: 'var(--color-text-primary)' }}>{doc.name}</a>
+                                <button type="button" onClick={() => { setRenamingDocId(doc.id); setRenameValue(doc.name) }} className="p-1 rounded hover:bg-(--color-surface) shrink-0 transition-colors" title="Rename" style={{ color: 'var(--color-text-muted)' }}><Edit2 size={12} /></button>
+                              </div>
+                            )}
+                            {doc.note && <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{doc.note}</p>}
+                            <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                              {fmtSize(doc.size)} · {doc.uploaded_at ? format(new Date(doc.uploaded_at), 'MMM d, yyyy') : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <a href={doc.data} download={doc.name} className="p-1.5 rounded-lg hover:bg-(--color-surface) transition-colors" title="Download" style={{ color: 'var(--color-text-muted)' }}><Download size={14} /></a>
+                            <button type="button" onClick={() => handleDocDelete(doc.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Delete" style={{ color: '#b91c1c' }}><Trash2 size={14} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </Card>
 
@@ -816,60 +1028,24 @@ export default function PatientDetailPage({ params }) {
           </div>
           <div className="p-3 space-y-3">
             {addingAppt && (
-              <form onSubmit={handleBookAppt} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Date *</label>
-                    <input type="date" required value={apptForm.date} onChange={e => setApptForm(f => ({ ...f, date: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Time</label>
-                    <input type="time" value={apptForm.time} onChange={e => setApptForm(f => ({ ...f, time: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                  </div>
-                </div>
-                {doctors.length > 0 && (
-                  <select value={apptForm.doctor_id} onChange={e => setApptForm(f => ({ ...f, doctor_id: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                    <option value="">— Doctor —</option>
-                    {doctors.map(d => <option key={d.id} value={d.id}>{d.name}{d.department ? ` · ${d.department}` : ''}</option>)}
-                  </select>
-                )}
-                <Textarea label="Notes" value={apptForm.notes} onChange={e => setApptForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
-                <div className="flex justify-end gap-2">
-                  <Button variant="secondary" size="sm" type="button" onClick={() => setAddingAppt(false)}>Cancel</Button>
-                  <Button size="sm" type="submit" disabled={savingAppt || !apptForm.date}>{savingAppt ? 'Booking…' : <><Calendar size={13} /> Book</>}</Button>
-                </div>
-              </form>
+              <BookAppointmentForm
+                doctors={doctors}
+                saving={savingAppt}
+                onCancel={() => setAddingAppt(false)}
+                onSubmit={handleBookAppt}
+              />
             )}
             {appointments.length === 0 && !addingAppt ? (
               <div className="-mx-3 -mb-3 py-16 text-center border-t border-(--color-border)"><Calendar size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No appointments yet.</p></div>
             ) : (
-              <div className="-mx-3 -mb-3 px-2 py-3 space-y-2 border-t border-(--color-border)">
-                {[...appointments].sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)).map(appt => {
-                  const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
-                  const st = ST[appt.status] || ST.booked
-                  const doc = appt.doctor_id ? doctors.find(d => d.id === appt.doctor_id) : null
-                  const canAct = appt.status === 'booked' || appt.status === 'confirmed'
-                  return (
-                    <div key={appt.id} className="flex items-start gap-3 p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}><Calendar size={15} style={{ color: 'var(--color-brand)' }} /></div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(appt.scheduled_at), 'EEE, MMM d yyyy · h:mm a')}</span>
-                          <span className="text-[10px] font-600 px-2 py-0.5 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{appt.status}</span>
-                          {appt.lead_id && !appt.patient_id && <span className="text-[9px] font-600 px-1.5 py-0.5 rounded-full" style={{ background: '#dbeafe', color: '#1d4ed8' }}>from lead</span>}
-                        </div>
-                        {doc && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{doc.name}{doc.department ? ` · ${doc.department}` : ''}</p>}
-                        {appt.notes && <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
-                      </div>
-                      {canAct && (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button type="button" onClick={() => handleApptStatus(appt.id, 'completed')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}><Check size={11} /> Complete</button>
-                          <button type="button" onClick={() => handleApptStatus(appt.id, 'cancelled')} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border" style={{ borderColor: '#fecaca', color: '#b91c1c' }}><X size={11} /> Cancel</button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+              <div className="-mx-3 -mb-3 px-2 py-3 border-t border-(--color-border)">
+                <AppointmentList
+                  appointments={appointments}
+                  doctors={doctors}
+                  onStatusChange={handleApptStatus}
+                  onPaymentUpdate={handleApptPayment}
+                  onReschedule={handleApptReschedule}
+                />
               </div>
             )}
           </div>

@@ -176,7 +176,9 @@ export default function NewAppointmentPage() {
       const name = selected
         ? `${selected.first_name || ''} ${selected.last_name || ''}`.trim()
         : `${newPat.first_name} ${newPat.last_name || ''}`.trim()
-      toast({ type: 'appointment_created', title: 'Appointment Booked', message: `Appointment for ${name} has been booked.` })
+      toast({ type: 'appointment_created', title: 'Appointment Booked', message: appt?.appointment_ref
+        ? `Appointment ${appt.appointment_ref} for ${name} has been booked.`
+        : `Appointment for ${name} has been booked.` })
       router.push('/appointments')
     } catch (err) {
       alert('Error: ' + err.message)

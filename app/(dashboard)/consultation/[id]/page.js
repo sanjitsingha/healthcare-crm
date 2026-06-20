@@ -12,7 +12,7 @@ import { Button, Card, Spinner, Avatar, Input, Select, Textarea, Modal } from '@
 import {
   getPatient, getLead, updatePatient, updateLead, getConsultations, createConsultation,
   getAppointments, createAppointment, updateAppointment,
-  getTasks, createTask, updateTask,
+  getTasks, createTask, updateTask, deleteTask,
   getPersonTimeline, createActivity,
   getFollowups, createFollowup, updateFollowup, deleteFollowup,
 } from '@/lib/supabase/queries'
@@ -22,6 +22,9 @@ import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 import Timeline from '@/components/crm/Timeline'
 import FollowupTable from '@/components/crm/FollowupTable'
+import AppointmentList from '@/components/crm/AppointmentList'
+import BookAppointmentForm from '@/components/crm/BookAppointmentForm'
+import TaskList from '@/components/crm/TaskList'
 import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
 import { format, isFuture, isToday, isPast } from 'date-fns'
 import clsx from 'clsx'
@@ -108,7 +111,6 @@ export default function ConsultationDetailPage({ params }) {
   const [taskForm, setTaskForm]     = useState({ title: '', priority: 'Medium', due_date: '' })
   const [savingTask, setSavingTask] = useState(false)
   const [addingAppt, setAddingAppt] = useState(false)
-  const [apptForm, setApptForm]     = useState({ date: '', time: '10:00', doctor_id: '', notes: '' })
   const [savingAppt, setSavingAppt] = useState(false)
 
   const [fuSort, setFuSort] = useState('scheduled_desc') // 'scheduled_desc' | 'scheduled_asc'
@@ -203,29 +205,52 @@ export default function ConsultationDetailPage({ params }) {
       setTasks(prev => prev.map(t => t.id === task.id ? u : t))
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
-  const handleBookAppt = async e => {
-    e.preventDefault()
-    if (!apptForm.date || !entity) return
+  const handleDeleteTask = async task => {
+    const ok = await showConfirm({ title: 'Delete this task?', confirmLabel: 'Delete' })
+    if (!ok) return
+    try {
+      await deleteTask(task.id)
+      setTasks(prev => prev.filter(t => t.id !== task.id))
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
+  const handleBookAppt = async (data) => {
+    if (!data.scheduled_at || !entity) return
     setSavingAppt(true)
     try {
-      const scheduledAt = new Date(`${apptForm.date}T${apptForm.time || '10:00'}:00`)
+      const scheduledAt = new Date(data.scheduled_at)
       const appt = await createAppointment({
         organization_id: orgId,
         patient_id: entity.type === 'patient' ? id : null,
         lead_id:    entity.type === 'lead'    ? id : null,
-        doctor_id: apptForm.doctor_id || null,
-        scheduled_at: scheduledAt.toISOString(),
-        notes: apptForm.notes || null,
+        doctor_id: data.doctor_id,
+        scheduled_at: data.scheduled_at,
+        notes: data.notes,
         status: 'booked',
+        consultation_fee: data.consultation_fee,
+        consultation_fee_status: data.consultation_fee_status,
+        payment_mode: data.payment_mode,
       })
-      setAppointments(prev => [appt, ...prev]); setApptForm({ date: '', time: '10:00', doctor_id: '', notes: '' }); setAddingAppt(false)
+      setAppointments(prev => [appt, ...prev]); setAddingAppt(false)
       await addActivity('meeting', `Appointment booked for ${format(scheduledAt, 'MMM d, yyyy')}`)
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) } finally { setSavingAppt(false) }
   }
   const handleApptStatus = async (aid, status) => {
     try {
       const u = await updateAppointment(aid, { status })
-      setAppointments(prev => prev.map(a => a.id === aid ? { ...a, status: u.status } : a))
+      setAppointments(prev => prev.map(a => a.id === aid ? { ...a, ...u } : a))
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
+  const handleApptPayment = async (aid, patch) => {
+    try {
+      const u = await updateAppointment(aid, patch)
+      setAppointments(prev => prev.map(a => a.id === aid ? { ...a, ...u } : a))
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+  }
+  const handleApptReschedule = async (aid, iso) => {
+    try {
+      const u = await updateAppointment(aid, { scheduled_at: iso })
+      setAppointments(prev => prev.map(a => a.id === aid ? { ...a, ...u } : a))
+      await addActivity('meeting', `Appointment rescheduled to ${format(new Date(iso), 'MMM d, yyyy')}`)
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
@@ -419,35 +444,12 @@ export default function ConsultationDetailPage({ params }) {
               </div>
               <div className="p-3 space-y-3">
                 {addingAppt && (
-                  <form onSubmit={handleBookAppt} className="p-3 rounded-xl border border-(--color-border) space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1.5">
-                        <label className="block text-[11px] font-500" style={{ color: 'var(--color-text-secondary)' }}>Date *</label>
-                        <input type="date" required value={apptForm.date} onChange={e => setApptForm(f => ({ ...f, date: e.target.value }))}
-                          className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none"
-                          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="block text-[11px] font-500" style={{ color: 'var(--color-text-secondary)' }}>Time</label>
-                        <input type="time" value={apptForm.time} onChange={e => setApptForm(f => ({ ...f, time: e.target.value }))}
-                          className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none"
-                          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                      </div>
-                    </div>
-                    {doctors.length > 0 && (
-                      <select value={apptForm.doctor_id} onChange={e => setApptForm(f => ({ ...f, doctor_id: e.target.value }))}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
-                        <option value="">— Doctor (optional) —</option>
-                        {doctors.map(dd => <option key={dd.id} value={dd.id}>{dd.name}</option>)}
-                      </select>
-                    )}
-                    <Textarea label="Notes" value={apptForm.notes} onChange={e => setApptForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
-                    <div className="flex justify-end gap-2">
-                      <Button variant="secondary" size="sm" type="button" onClick={() => setAddingAppt(false)}>Cancel</Button>
-                      <Button size="sm" type="submit" disabled={savingAppt || !apptForm.date}>{savingAppt ? 'Booking…' : 'Book'}</Button>
-                    </div>
-                  </form>
+                  <BookAppointmentForm
+                    doctors={doctors}
+                    saving={savingAppt}
+                    onCancel={() => setAddingAppt(false)}
+                    onSubmit={handleBookAppt}
+                  />
                 )}
 
                 {appointments.length === 0 && !addingAppt ? (
@@ -456,43 +458,13 @@ export default function ConsultationDetailPage({ params }) {
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No appointments yet.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {[...appointments].sort((a, b) => new Date(b.scheduled_at) - new Date(a.scheduled_at)).map(appt => {
-                      const ST = { booked: { bg: '#dbeafe', color: '#1d4ed8' }, confirmed: { bg: '#dcfce7', color: '#15803d' }, completed: { bg: '#f3f4f6', color: '#374151' }, cancelled: { bg: '#fee2e2', color: '#b91c1c' } }
-                      const st  = ST[appt.status] || ST.booked
-                      const doc = appt.doctor_id ? doctors.find(x => x.id === appt.doctor_id) : null
-                      const canAct = appt.status === 'booked' || appt.status === 'confirmed'
-                      return (
-                        <div key={appt.id} className="flex items-start gap-3 p-3 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
-                            <Calendar size={14} style={{ color: 'var(--color-brand)' }} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{format(new Date(appt.scheduled_at), 'EEE, MMM d · h:mm a')}</span>
-                              <span className="text-[10px] font-600 px-2 py-0.5 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{appt.status}</span>
-                            </div>
-                            {doc && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{doc.name}{doc.department ? ` · ${doc.department}` : ''}</p>}
-                            {appt.notes && <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>{appt.notes}</p>}
-                            {canAct && (
-                              <div className="flex items-center gap-1.5 mt-2">
-                                <button type="button" onClick={() => handleApptStatus(appt.id, 'completed')}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600"
-                                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
-                                  <Check size={11} /> Complete
-                                </button>
-                                <button type="button" onClick={() => handleApptStatus(appt.id, 'cancelled')}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-600 border"
-                                  style={{ borderColor: '#fecaca', color: '#b91c1c' }}>
-                                  <X size={11} /> Cancel
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <AppointmentList
+                    appointments={appointments}
+                    doctors={doctors}
+                    onStatusChange={handleApptStatus}
+                    onPaymentUpdate={handleApptPayment}
+                    onReschedule={handleApptReschedule}
+                  />
                 )}
               </div>
             </Card>
@@ -597,25 +569,9 @@ export default function ConsultationDetailPage({ params }) {
                         </div>
                       </form>
                     )}
-                    {tasks.length === 0 && !addingTask ? (
-                      <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
-                        <CheckSquare size={22} className="mx-auto mb-2 opacity-30" />
-                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No tasks yet.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                        {tasks.map(task => (
-                          <div key={task.id} className={clsx('flex items-start gap-2.5 p-3 rounded-xl border border-(--color-border)', task.status === 'Completed' && 'opacity-50')} style={{ background: 'var(--color-surface-2)' }}>
-                            <input type="checkbox" checked={task.status === 'Completed'} onChange={() => handleToggleTask(task)} className="mt-0.5 w-4 h-4 cursor-pointer shrink-0" style={{ accentColor: 'var(--color-brand)' }} />
-                            <div className="flex-1 min-w-0">
-                              <p className={clsx('text-xs font-500', task.status === 'Completed' && 'line-through')} style={{ color: 'var(--color-text-primary)' }}>{task.title}</p>
-                              {task.due_date && <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}><Clock size={10} />{format(new Date(task.due_date), 'MMM d, h:mm a')}</p>}
-                            </div>
-                            <span className="text-[9px] font-600 px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{task.priority}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div className="max-h-96 overflow-y-auto pr-1">
+                      <TaskList tasks={tasks} onToggle={handleToggleTask} onDelete={handleDeleteTask} />
+                    </div>
                   </div>
                 )}
 

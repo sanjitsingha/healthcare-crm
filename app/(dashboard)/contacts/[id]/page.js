@@ -7,7 +7,7 @@ import { showConfirm } from '@/lib/confirm'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format, formatDistanceToNow } from 'date-fns'
-import { MessageSquare, Phone as PhoneIcon } from 'lucide-react'
+import { activityVisual } from '@/components/crm/Timeline'
 
 export default function ContactDetailPage({ params }) {
   const { id } = use(params)
@@ -152,17 +152,21 @@ export default function ContactDetailPage({ params }) {
             <div className="space-y-4 border-t border-[var(--color-border)] pt-4">
               {activities.length === 0 ? (
                 <p className="text-xs text-center py-4" style={{ color: 'var(--color-text-muted)' }}>No activity yet</p>
-              ) : activities.map((a, i) => (
+              ) : activities.map((a, i) => {
+                const v = activityVisual(a.type)
+                const Icon = v.icon
+                return (
                 <div key={i} className="flex gap-3">
-                  <div className="p-2 rounded-lg h-fit" style={{ background: 'var(--color-brand-50)' }}>
-                    <MessageSquare size={13} style={{ color: 'var(--color-brand)' }} />
+                  <div className="p-2 rounded-lg h-fit border" style={{ background: v.color + '14', borderColor: v.color + '40' }}>
+                    <Icon size={13} style={{ color: v.color }} />
                   </div>
                   <div>
                     <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{a.content}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{a.created_by} · {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</p>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </Card>
         </div>
