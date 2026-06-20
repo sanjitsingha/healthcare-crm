@@ -15,7 +15,7 @@ const CAL_W = 256
 const CAL_H = 330
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-export default function CustomDatePicker({ value, onChange, popover = false, placeholder = 'Select date', monthOnly = false }) {
+export default function CustomDatePicker({ value, onChange, popover = false, placeholder = 'Select date', monthOnly = false, compact = false }) {
   const selected = value
     ? new Date(String(value).length === 10 ? value + 'T12:00:00' : value)
     : null
@@ -164,10 +164,10 @@ export default function CustomDatePicker({ value, onChange, popover = false, pla
   return (
     <>
       <button ref={btnRef} type="button" onClick={() => open ? setOpen(false) : openCal()}
-        className="w-full px-3 py-2 rounded-lg border text-sm outline-none flex items-center justify-between gap-2 text-left"
+        className={`w-full rounded-lg border outline-none flex items-center justify-between gap-2 text-left ${compact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'}`}
         style={{ borderColor: open ? 'var(--color-brand)' : 'var(--color-border)', background: 'var(--color-surface)', color: selected ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
-        <span className="truncate">{selected ? format(selected, monthOnly ? 'MMMM yyyy' : 'EEE, MMM d yyyy') : placeholder}</span>
-        <Calendar size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+        <span className="truncate">{selected ? format(selected, monthOnly ? 'MMMM yyyy' : 'dd/MM/yyyy') : placeholder}</span>
+        <Calendar size={compact ? 12 : 14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
       </button>
       {open && (
         <>
