@@ -3,7 +3,7 @@ import { useState } from 'react'
 import {
   Plug, Globe, Webhook, MessageCircle, BookOpen,
   Check, Copy, Trash2, Link2, RefreshCw, ChevronDown,
-  Key, Eye, EyeOff, Code2, Lock, Plus, Pencil, X,
+  Key, Eye, EyeOff, Code2, Lock, Plus,
   Settings2, Tag,
 } from 'lucide-react'
 import { Button, Card, Input, Switch } from '@/components/ui'
@@ -899,114 +899,82 @@ export default function ConfigurationPage() {
       )}
 
       {/* ── Tab: API Names ───────────────────────────────────── */}
-      {tab === 'api-names' && (
-        <Card className="p-5">
-          <div className="flex items-start justify-between gap-3 mb-4 pb-4 border-b border-(--color-border)">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
-                <Lock size={16} style={{ color: 'var(--color-brand)' }} />
-              </div>
-              <div>
-                <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>API Names</p>
-                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Field names to use when sending data via API. System fields are read-only; you can add custom fields below.</p>
-              </div>
+      {tab === 'api-names' && (() => {
+        // Merge all custom fields from all entities — deduplicated by api_name
+        const allCustom = Object.values(apiFieldsMap)
+          .flat()
+          .filter((f, i, arr) => arr.findIndex(x => x.api_name === f.api_name) === i)
+
+        const systemRows = SYSTEM_FIELDS[entity] || []
+
+        return (
+          <Card className="p-5">
+            <SectionHead icon={Lock} title="API Names"
+              description="Use these field names when sending data via the public API. Custom fields are shared across all pages." />
+
+            {/* Dropdown entity selector */}
+            <div className="flex items-center gap-3 mb-4">
+              <label className="text-xs font-600 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>Select page</label>
+              <select value={entity} onChange={e => setEntity(e.target.value)}
+                className="px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
+                style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', minWidth: 200 }}>
+                {ENTITIES.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
+              </select>
+              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                {systemRows.length} system field{systemRows.length !== 1 ? 's' : ''}
+                {allCustom.length > 0 && ` · ${allCustom.length} custom field${allCustom.length !== 1 ? 's' : ''}`}
+              </span>
             </div>
-            {!addingField && editingId === null && (
-              <button type="button" onClick={startAdd}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
-                style={{ color: 'var(--color-brand)' }}>
-                <Plus size={13} /> Add field
-              </button>
-            )}
-          </div>
 
-          {/* Entity selector */}
-          <div className="flex gap-1 mb-4 p-1 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            {ENTITIES.map(e => (
-              <button key={e.id} type="button" onClick={() => { setEntity(e.id); cancelField() }}
-                className="flex-1 py-1.5 px-3 rounded-md text-xs font-600 transition-all"
-                style={entity === e.id
-                  ? { background: 'var(--color-surface)', color: 'var(--color-brand)', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }
-                  : { color: 'var(--color-text-muted)' }}>
-                {e.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Fields table */}
-          <div className="rounded-lg border border-(--color-border) overflow-hidden">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr style={{ background: 'var(--color-surface-2)' }}>
-                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Display Name</th>
-                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>API Name</th>
-                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Type</th>
-                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Notes</th>
-                  <th className="px-3 py-2 w-16" />
-                </tr>
-              </thead>
-              <tbody>
-                {/* System fields */}
-                {(SYSTEM_FIELDS[entity] || []).map((f, i) => (
-                  <tr key={f.api_name} style={{ borderTop: i > 0 ? '1px solid var(--color-border)' : 'none' }}>
-                    <td className="px-3 py-2 font-500" style={{ color: 'var(--color-text-primary)' }}>{f.display}</td>
-                    <td className="px-3 py-2 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
-                    <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
-                    <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
-                    <td className="px-3 py-2 text-center"><Lock size={11} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} /></td>
+            {/* Fields table */}
+            <div className="rounded-lg border border-(--color-border) overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr style={{ background: 'var(--color-surface-2)' }}>
+                    <th className="px-3 py-2.5 text-left font-600 w-48" style={{ color: 'var(--color-text-muted)' }}>Display Name</th>
+                    <th className="px-3 py-2.5 text-left font-600 w-44" style={{ color: 'var(--color-text-muted)' }}>API Name</th>
+                    <th className="px-3 py-2.5 text-left font-600 w-24" style={{ color: 'var(--color-text-muted)' }}>Type</th>
+                    <th className="px-3 py-2.5 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Notes</th>
                   </tr>
-                ))}
+                </thead>
+                <tbody>
+                  {systemRows.map((f, i) => (
+                    <tr key={f.api_name} style={{ borderTop: i > 0 ? '1px solid var(--color-border)' : 'none' }}>
+                      <td className="px-3 py-2.5 font-500" style={{ color: 'var(--color-text-primary)' }}>{f.display}</td>
+                      <td className="px-3 py-2.5 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
+                      <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
+                      <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
+                    </tr>
+                  ))}
 
-                {/* Custom fields */}
-                {currentCustom.map((f, i) => (
-                  editingId === f.id ? (
-                    <tr key={f.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                      <td colSpan={5} className="px-3 py-2">
-                        <FieldForm onSubmit={handleEditField} onCancel={cancelField} submitLabel="Save" />
+                  {allCustom.length > 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-1.5" style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+                        <span className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Custom fields — available on all pages</span>
                       </td>
                     </tr>
-                  ) : (
-                    <tr key={f.id} style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-brand-50)' + '44' }}>
-                      <td className="px-3 py-2 font-500" style={{ color: 'var(--color-text-primary)' }}>
-                        <span className="text-[10px] font-700 mr-1.5 px-1.5 py-0.5 rounded" style={{ background: 'var(--color-brand)', color: '#fff' }}>custom</span>
-                        {f.display}
-                      </td>
-                      <td className="px-3 py-2 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
-                      <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-1">
-                          <button type="button" onClick={() => startEdit(f)}
-                            className="p-1 rounded hover:bg-(--color-surface-2) transition-colors" style={{ color: 'var(--color-text-muted)' }}>
-                            <Pencil size={12} />
-                          </button>
-                          <button type="button" onClick={() => handleDeleteField(f.id)}
-                            className="p-1 rounded hover:bg-red-50 transition-colors" style={{ color: 'var(--color-text-muted)' }}>
-                            <X size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  )}
 
-          {/* Add field form */}
-          {addingField && (
-            <div className="mt-3">
-              <FieldForm onSubmit={handleAddField} onCancel={cancelField} submitLabel="Add field" />
+                  {allCustom.map(f => (
+                    <tr key={f.api_name} style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-brand-50)' + '33' }}>
+                      <td className="px-3 py-2.5 font-500" style={{ color: 'var(--color-text-primary)' }}>{f.display}</td>
+                      <td className="px-3 py-2.5 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
+                      <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
+                      <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.note || 'Stored in custom_data'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
 
-          {currentCustom.length === 0 && !addingField && (
-            <p className="mt-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-              No custom fields yet. Click <b>Add field</b> to define fields specific to your clinic.
-            </p>
-          )}
-        </Card>
-      )}
+            {allCustom.length === 0 && (
+              <p className="mt-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
+                No custom fields yet. Custom fields added anywhere in the CRM will appear here automatically.
+              </p>
+            )}
+          </Card>
+        )
+      })()}
       </div>
     </div>
   )
