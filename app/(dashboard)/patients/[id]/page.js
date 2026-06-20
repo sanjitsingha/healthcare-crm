@@ -862,13 +862,12 @@ export default function PatientDetailPage({ params }) {
 
                   <div className="space-y-1">
                     <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Status</label>
-                    <div className="flex gap-2">
-                      {patientStatuses.map(({ name: s }) => (
-                        <button key={s} type="button" onClick={() => setProfileDraft(d => ({ ...d, status: s }))}
-                          className="flex-1 py-1.5 rounded-lg text-xs font-500 border transition-all"
-                          style={profileDraft.status === s ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>{s}</button>
-                      ))}
-                    </div>
+                    <select value={profileDraft.status}
+                      onChange={e => setProfileDraft(d => ({ ...d, status: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                      {patientStatuses.map(({ name: s }) => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                   <div className="flex gap-2 justify-end pt-1 border-t border-(--color-border)">
                     <Button variant="secondary" size="sm" type="button" onClick={() => setProfileEditing(false)}>Cancel</Button>
@@ -1228,7 +1227,8 @@ export default function PatientDetailPage({ params }) {
                   onField={handleFollowupField}
                   onCreate={handleCreateFollowupInline}
                   onDelete={handleDeleteFollowup}
-                  statusStyle={FU_STATUS_STYLE}
+                  statusOptions={patientStatuses.map(s => s.name)}
+                  statusStyle={STATUS_STYLE}
                   typeStyle={TYPE_COLOR}
                   types={FOLLOWUP_TYPES}
                   outcomeOptions={(t) => FOLLOWUP_STATUS_OPTIONS[t] || []}
