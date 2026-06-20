@@ -84,7 +84,20 @@ function AccessDenied({ pathname }) {
 
 export default function RouteGuard({ children }) {
   const pathname = usePathname()
-  const { hasPermission, userPermissions } = useOrg()
+  const { hasPermission, userPermissions, subscriptionAccess, isReadOnly } = useOrg()
+
+  // Subscription settings remains available so a read-only workspace can recover access.
+  if (isReadOnly && pathname !== '/settings/subscription') {
+    return <AccessDenied pathname="subscription" />
+  }
+  const planRequirement = [
+    { pattern: '/reports', capability: 'reports' },
+    { pattern: '/automation', capability: 'automation' },
+    { pattern: '/pharmacy', capability: 'pharmacy' },
+  ].find(item => pathname === item.pattern || pathname.startsWith(item.pattern + '/'))
+  if (planRequirement && subscriptionAccess && !subscriptionAccess.capabilities.includes(planRequirement.capability)) {
+    return <AccessDenied pathname={pathname} />
+  }
 
   // Owners (userPermissions === null) always have full access
   if (userPermissions === null) return children

@@ -34,10 +34,7 @@ import { matchingRules, ruleActions } from '@/lib/rulesEngine'
 import { format, formatDistanceToNow, differenceInYears, isPast, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, isSameMonth, addDays } from 'date-fns'
 import clsx from 'clsx'
 
-const STATUS_STYLE = {
-  Active: { bg: '#dcfce7', color: '#15803d' },
-  Inactive: { bg: '#fee2e2', color: '#b91c1c' },
-}
+const DEFAULT_PATIENT_STATUSES = [{ name: 'Active', color: '#10b981' }, { name: 'Inactive', color: '#ef4444' }]
 
 const GENDERS      = ['Male', 'Female', 'Other']
 const BLOOD_GROUPS = ['A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−']
@@ -78,6 +75,8 @@ export default function PatientDetailPage({ params }) {
   const { id } = use(params)
   const router = useRouter()
   const { orgId, org, hasPermission } = useOrg()
+  const patientStatuses = (org?.settings?.patient_statuses || DEFAULT_PATIENT_STATUSES).map(s => typeof s === 'string' ? { name: s, color: '#6366f1' } : s)
+  const STATUS_STYLE = Object.fromEntries(patientStatuses.map(s => [s.name, { bg: s.color + '20', color: s.color }]))
   const [patient, setPatient] = useState(null)
   const [activities, setActivities] = useState([])
   const [tasks, setTasks] = useState([])
@@ -755,7 +754,7 @@ export default function PatientDetailPage({ params }) {
                   <div className="space-y-1">
                     <label className="block text-[10px] font-500" style={{ color: 'var(--color-text-muted)' }}>Status</label>
                     <div className="flex gap-2">
-                      {['Active', 'Inactive'].map(s => (
+                      {patientStatuses.map(({ name: s }) => (
                         <button key={s} type="button" onClick={() => setProfileDraft(d => ({ ...d, status: s }))}
                           className="flex-1 py-1.5 rounded-lg text-xs font-500 border transition-all"
                           style={profileDraft.status === s ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>{s}</button>

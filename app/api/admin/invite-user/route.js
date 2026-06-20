@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { subscriptionAccess } from '@/lib/subscriptions'
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -22,6 +23,14 @@ export async function POST(req) {
     serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
+
+  const { data: subscription } = await adminClient.from('subscriptions').select('*').eq('organization_id', orgId).maybeSingle()
+  const access = subscription ? subscriptionAccess(subscription) : { writable: true, seatLimit: null }
+  if (!access.writable) return json({ error: 'This workspace is read-only. Renew the subscription to invite staff.' }, 403)
+  if (access.seatLimit !== null) {
+    const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('organization_id', orgId)
+    if ((count || 0) >= access.seatLimit) return json({ error: `This plan includes ${access.seatLimit} seats. Upgrade to invite another member.` }, 403)
+  }
 
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
     data: { name, designation: designation || '', org_id: orgId, role_id: roleId || null },

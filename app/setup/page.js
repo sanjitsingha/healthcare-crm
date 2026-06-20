@@ -79,56 +79,11 @@ export default function SetupPage() {
     setSaving(true)
     setError('')
 
-    const supabase = createClient()
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      // Create organization
-      const { data: org, error: orgErr } = await supabase
-        .from('organizations')
-        .insert({
-          name: form.name.trim(),
-          type: form.type,
-          email: form.email || userEmail || null,
-          phone: form.phone.trim(),
-          website: form.website.trim() || null,
-          address: form.address.trim() || null,
-          city: form.city.trim(),
-          state: form.state || null,
-          pincode: form.pincode.trim() || null,
-          country: form.country,
-          status: 'Active',
-          settings: {
-            specialty: form.specialty || null,
-            registration_number: form.registration_number.trim() || null,
-            staff_count: form.staff_count ? parseInt(form.staff_count) : null,
-          },
-        })
-        .select()
-        .single()
-
-      if (orgErr) throw orgErr
-
-      // Create profile linking this user to the org
-      const { error: profileErr } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          organization_id: org.id,
-          full_name: user.user_metadata?.full_name || user.email,
-          avatar_url: user.user_metadata?.avatar_url || null,
-        })
-
-      if (profileErr) throw profileErr
-
-      // Audit: account + organization created during onboarding.
-      await logAudit({
-        action: AUDIT.USER_CREATE,
-        description: `Account created and joined organization "${org.name}"`,
-        metadata: { organization_id: org.id, organization_name: org.name },
-        actor: { userId: user.id, email: user.email, name: user.user_metadata?.full_name || user.email, orgId: org.id },
-      })
+      const res = await fetch('/api/onboarding', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(form) })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Unable to create workspace.')
+      await logAudit({ action: AUDIT.USER_CREATE, description: `Account created and joined organization "${data.organization.name}"`, metadata: { organization_id: data.organization.id, organization_name: data.organization.name } })
 
       setStep(3)
       setTimeout(() => {

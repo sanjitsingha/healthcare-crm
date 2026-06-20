@@ -16,7 +16,7 @@ function SectionLabel({ children }) {
 }
 
 export default function NewPatientPage() {
-  const { orgId } = useOrg()
+  const { orgId, org } = useOrg()
   const router    = useRouter()
 
   const [form, setForm] = useState({
@@ -32,6 +32,7 @@ export default function NewPatientPage() {
     state:         '',
     pincode:       '',
     notes:         '',
+    status:        'Active',
   })
   const [saving, setSaving] = useState(false)
   const set = field => e => setForm(f => ({ ...f, [field]: e.target.value }))
@@ -50,6 +51,7 @@ export default function NewPatientPage() {
         date_of_birth:   form.date_of_birth     || null,
         address:         [form.address, form.city, form.state, form.pincode].filter(Boolean).join(', ') || null,
         medical_history: form.notes ? [{ note: form.notes, date: new Date().toISOString() }] : [],
+        status:          form.status || 'Active',
         organization_id: orgId,
       })
       toast({ type: 'patient_created', title: 'Patient Created', message: `${[form.first_name, form.last_name].filter(Boolean).join(' ').trim()} was registered.` })
@@ -92,6 +94,8 @@ export default function NewPatientPage() {
             <Input label="Date of Birth" type="date"          value={form.date_of_birth} onChange={set('date_of_birth')} />
             <Select label="Blood Group" value={form.blood_group} onChange={set('blood_group')}
               options={BLOOD_GROUPS.map(g => ({ value: g, label: g || 'Select...' }))} />
+            <Select label="Patient Status" value={form.status} onChange={set('status')}
+              options={(org?.settings?.patient_statuses || [{ name: 'Active' }, { name: 'Inactive' }]).map(s => ({ value: typeof s === 'string' ? s : s.name, label: typeof s === 'string' ? s : s.name }))} />
             <div className="col-span-2 space-y-1.5">
               <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Gender</label>
               <div className="flex gap-2 h-9.5">

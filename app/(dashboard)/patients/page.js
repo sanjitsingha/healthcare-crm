@@ -15,12 +15,7 @@ import clsx from 'clsx'
 
 // ── Constants ──────────────────────────────────────────────────
 const GENDERS  = ['Male', 'Female', 'Other']
-const STATUSES = ['Active', 'Inactive']
-
-const STATUS_STYLE = {
-  Active:   { bg: '#dcfce7', color: '#15803d' },
-  Inactive: { bg: '#fee2e2', color: '#b91c1c' },
-}
+const DEFAULT_STATUSES = [{ name: 'Active', color: '#10b981' }, { name: 'Inactive', color: '#ef4444' }]
 const GENDER_STYLE = {
   Male:   { bg: '#dbeafe', color: '#1d4ed8' },
   Female: { bg: '#fce7f3', color: '#be185d' },
@@ -306,6 +301,9 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
 // ── Main Page ──────────────────────────────────────────────────
 export default function PatientsPage() {
   const { orgId, org, hasPermission } = useOrg()
+  const patientStatuses = (org?.settings?.patient_statuses || DEFAULT_STATUSES).map(s => typeof s === 'string' ? { name: s, color: '#6366f1' } : s)
+  const STATUSES = patientStatuses.map(s => s.name)
+  const STATUS_STYLE = Object.fromEntries(patientStatuses.map(s => [s.name, { bg: s.color + '20', color: s.color }]))
   const router = useRouter()
 
   const [patients, setPatients] = useState([])

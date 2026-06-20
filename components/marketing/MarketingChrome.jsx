@@ -74,7 +74,7 @@ export function MarketingStyles() {
 const NAV = [
   { label: 'Features',   href: '/#features' },
   { label: 'Security',   href: '/#security' },
-  { label: 'Pricing',    href: '/#pricing' },
+  { label: 'Pricing',    href: '/pricing' },
   { label: 'FAQ',        href: '/#faq' },
   { label: 'Blog',       href: '/blog' },
   { label: 'Newsletter', href: '/newsletter' },
@@ -112,7 +112,7 @@ export function MarketingNav({ loggedIn = false, dest = '/dashboard' }) {
 
 // ── Light footer ───────────────────────────────────────────────
 const FOOTER_COLS = [
-  { heading: 'Product', links: [['Features', '/#features'], ['Security', '/#security'], ['Pricing', '/#pricing'], ['Status', '/status']] },
+  { heading: 'Product', links: [['Features', '/#features'], ['Security', '/#security'], ['Pricing', '/pricing'], ['Status', '/status']] },
   { heading: 'Company', links: [['Blog', '/blog'], ['Newsletter', '/newsletter'], ['Contact', '/contact'], ['Docs', '/docs']] },
   { heading: 'Legal',   links: [['Privacy', '/privacy'], ['Terms', '/terms'], ['Cookies', '/cookies'], ['Data retention', '/data-retention']] },
 ]

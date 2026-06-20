@@ -36,11 +36,16 @@ const CONTACTS = [
   },
 ]
 
-export default function ContactPage() {
+export default async function ContactPage({ searchParams }) {
+  const params = await searchParams
+  const selectedPlan = ['starter', 'growth', 'enterprise'].includes(params?.plan) ? params.plan : null
   return (
     <LegalLayout title="Contact Us" lastUpdated={null}>
 
       <p>We are here to help. Whether you need support with the platform, have a billing question, want to report a security issue, or have a legal enquiry — reach out to the right team below and we will get back to you promptly.</p>
+      {selectedPlan && <p style={{ padding: '12px 14px', borderRadius: 10, background: '#eef2ff', color: '#312e81', fontSize: 13.5 }}>
+        You&apos;re interested in the <strong style={{ textTransform: 'capitalize' }}>{selectedPlan}</strong> plan. Email <a href={`mailto:hello@healthcrm.in?subject=${encodeURIComponent(`Flowra ${selectedPlan} plan enquiry`)}`}>hello@healthcrm.in</a> and we&apos;ll help with activation.
+      </p>}
 
       <style>{`
         .contact-grid {

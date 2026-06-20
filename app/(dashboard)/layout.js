@@ -13,6 +13,7 @@ import InactivityGuard from '@/components/crm/InactivityGuard'
 import PageViewLogger from '@/components/crm/PageViewLogger'
 import GeoPermissionBanner from '@/components/crm/GeoPermissionBanner'
 import RouteGuard from '@/components/crm/RouteGuard'
+import { subscriptionAccess } from '@/lib/subscriptions'
 
 export default async function DashboardLayout({ children }) {
   const supabase = await createClient()
@@ -40,9 +41,16 @@ export default async function DashboardLayout({ children }) {
     ? (userRoleRow.roles?.role_permissions || []).map(rp => rp.permissions?.name).filter(Boolean)
     : null
   const userRoleName = userRoleRow?.roles?.name || null
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('organization_id', profile.organization_id)
+    .maybeSingle()
+  // Before the migration is deployed, do not lock existing clinics out.
+  const access = subscription ? subscriptionAccess(subscription) : { writable: true, capabilities: ['core', 'reports', 'automation', 'pharmacy', 'roles', 'custom_modules', 'integrations'], seatLimit: null, status: 'active', plan: { name: 'Enterprise' } }
 
   return (
-    <OrgProvider org={profile.organizations} user={user} userPermissions={userPermissions} userRoleName={userRoleName}>
+    <OrgProvider org={profile.organizations} user={user} userPermissions={userPermissions} userRoleName={userRoleName} subscription={subscription} subscriptionAccess={access}>
       <SidebarStateProvider>
         <AIPanelProvider>
           <ThemeApplier />

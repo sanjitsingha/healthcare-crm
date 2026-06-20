@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText,
-  ClipboardList, Stethoscope, Network, ShieldCheck, FileText,
+  ClipboardList, Stethoscope, Network, ShieldCheck, FileText, CreditCard,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -11,6 +11,7 @@ import { useOrg } from '@/lib/context/OrgContext'
 // permission: null = always visible (own account page)
 const NAV_ITEMS = [
   { href: '/settings/account',       label: 'Account',       icon: UserRound,    permission: null },
+  { href: '/settings/subscription',  label: 'Subscription',  icon: CreditCard,   permission: null },
   { href: '/settings/organization',  label: 'Organization',  icon: Building2,    permission: 'settings.organization' },
   { href: '/settings/users',         label: 'Users',         icon: Users,        permission: 'settings.users' },
   { href: '/settings/roles',         label: 'Roles',         icon: ShieldCheck,  permission: 'settings.roles' },
