@@ -9,12 +9,24 @@ import {
   Zap,
   TrendingUp,
   UserRound,
+  CalendarClock,
+  CheckSquare,
+  Stethoscope,
+  Play,
+  History,
+  CheckCircle2,
+  AlertTriangle,
+  MinusCircle,
 } from "lucide-react";
 import { Button, Card, Input, Select, Spinner, Switch } from "@/components/ui";
 import { useOrg } from "@/lib/context/OrgContext";
 import { toast } from "@/lib/toast";
 import { showConfirm } from "@/lib/confirm";
-import { updateOrganization, getTags } from "@/lib/supabase/queries";
+import {
+  updateOrganization, getTags, getAutomationRuns,
+  getLeads, getPatients, getAppointments, getTasks, getConsultations,
+} from "@/lib/supabase/queries";
+import { triggerAutomation } from "@/lib/automations/trigger";
 import {
   RULE_TARGETS,
   RULE_EVENTS,
@@ -27,6 +39,10 @@ import {
   FOLLOWUP_TYPES,
   ruleActions,
   eventLabel,
+  fieldOptions,
+  OP_NEEDS_VALUE,
+  FREEFORM_OPS,
+  evaluateConditions,
 } from "@/lib/rulesEngine";
 
 const uid = () => crypto.randomUUID?.() || Math.random().toString(36).slice(2);
@@ -53,12 +69,78 @@ const blankRule = (target = "lead") => ({
   actions: [blankAction(target)],
 });
 
-function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
+// Map a rule target → api_fields entity key + how to fetch a sample record.
+const ENTITY_KEY = { lead: "leads", patient: "patients", consultation: "consultations" };
+
+const TARGET_META = {
+  lead:         { label: "Lead rule",         icon: TrendingUp,    color: "#1d4ed8" },
+  patient:      { label: "Patient rule",      icon: UserRound,     color: "#15803d" },
+  appointment:  { label: "Appointment rule",  icon: CalendarClock, color: "#7c3aed" },
+  task:         { label: "Task rule",         icon: CheckSquare,   color: "#b45309" },
+  consultation: { label: "Consultation rule", icon: Stethoscope,   color: "#0ea5e9" },
+};
+
+async function fetchSampleEntity(target, orgId) {
+  const o = { orgId };
+  if (target === "lead") return (await getLeads(o))?.[0] || null;
+  if (target === "patient") return (await getPatients(o))?.[0] || null;
+  if (target === "appointment") return (await getAppointments(o))?.[0] || null;
+  if (target === "task") return (await getTasks(o))?.[0] || null;
+  if (target === "consultation") return (await getConsultations(o))?.[0] || null;
+  return null;
+}
+
+const RUN_STATUS_STYLE = {
+  success: { bg: "#dcfce7", color: "#15803d", icon: CheckCircle2,  label: "Success" },
+  partial: { bg: "#fef3c7", color: "#b45309", icon: AlertTriangle, label: "Partial" },
+  failed:  { bg: "#fee2e2", color: "#b91c1c", icon: AlertTriangle, label: "Failed" },
+  skipped: { bg: "#f3f4f6", color: "#6b7280", icon: MinusCircle,   label: "Skipped" },
+};
+
+function sampleLabel(target, e) {
+  if (!e) return "record";
+  if (target === "lead") return e.title || [e.first_name, e.last_name].filter(Boolean).join(" ") || e.phone || "lead";
+  if (target === "patient") return [e.first_name, e.last_name].filter(Boolean).join(" ") || e.phone || "patient";
+  if (target === "appointment") return `appointment ${e.scheduled_at ? new Date(e.scheduled_at).toLocaleDateString() : ""}`.trim();
+  if (target === "task") return e.title || "task";
+  if (target === "consultation") return e.chief_complaint || "consultation";
+  return "record";
+}
+
+function RuleCard({ rule, stages, tags, staff, customFields = [], runs = [], orgId, onChange, onRemove }) {
   const [open, setOpen] = useState(!rule.name);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [showRuns, setShowRuns] = useState(false);
   const events = RULE_EVENTS[rule.target] || [];
   const fields = RULE_FIELDS[rule.target] || [];
   const actionTypes = RULE_ACTIONS[rule.target] || [];
   const ruleActionList = ruleActions(rule);
+
+  // Field dropdown choices = system fields + this entity's custom fields.
+  const fieldChoices = [
+    ...fields.map((f) => ({ value: f, label: f })),
+    ...customFields.map((f) => ({ value: "custom:" + f.api_name, label: `${f.display} (custom)` })),
+  ];
+
+  // Test the (possibly unsaved) rule against the latest record of its target.
+  const runTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const sample = await fetchSampleEntity(rule.target, orgId);
+      if (!sample) {
+        setTestResult({ error: `No ${rule.target} records to test against yet.` });
+        return;
+      }
+      const matched = evaluateConditions(sample, rule, null);
+      setTestResult({ sample, matched, actions: matched ? ruleActionList : [] });
+    } catch (e) {
+      setTestResult({ error: e.message });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const patch = (p) => onChange({ ...rule, ...p });
 
@@ -208,10 +290,10 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
       <select
         value={c.field}
         onChange={(e) => actions.set({ field: e.target.value })}
-        className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+        className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none max-w-40"
         style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
       >
-        {fields.map((f) => <option key={f} value={f}>{f}</option>)}
+        {fieldChoices.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
       </select>
       <select
         value={c.op}
@@ -222,8 +304,13 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
         {RULE_OPS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       {(() => {
-        const opts = c.field === "stage" ? stages : FIELD_OPTIONS[c.field];
-        if (opts && c.op !== ">" && c.op !== "<" && c.op !== "contains") {
+        // is empty / is not empty take no value.
+        if (!OP_NEEDS_VALUE[c.op]) {
+          return <span className="flex-1 min-w-0 px-2 py-1.5 text-xs italic" style={{ color: "var(--color-text-muted)" }}>no value needed</span>;
+        }
+        const opts = fieldOptions(rule.target, c.field, { stages });
+        // Use a dropdown only for "is / is not" on option fields; free-form ops use text.
+        if (opts && opts.length && !FREEFORM_OPS.has(c.op)) {
           return (
             <select
               value={c.value}
@@ -236,12 +323,14 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
             </select>
           );
         }
+        const numeric = ["value", "amount"].includes(c.field);
+        const dateish = /(_at|_date)$/.test(c.field || "");
         return (
           <input
             value={c.value}
             onChange={(e) => actions.set({ value: e.target.value })}
-            placeholder="value"
-            type={c.field === "value" ? "number" : "text"}
+            placeholder={c.op === "between" ? "min,max" : c.op === "in" ? "a, b, c" : dateish ? "YYYY-MM-DD or +3d" : "value"}
+            type={numeric && c.op !== "between" ? "number" : "text"}
             className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
             style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
           />
@@ -554,6 +643,82 @@ function RuleCard({ rule, stages, tags, staff, onChange, onRemove }) {
               ))}
             </div>
           </div>
+
+          {/* TEST + RECENT RUNS */}
+          <div className="rounded-xl border border-(--color-border) p-3" style={{ background: "var(--color-surface-2)" }}>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-[10px] font-700 uppercase tracking-wide flex items-center gap-1.5" style={{ color: "#16a34a" }}>
+                <Play size={12} /> Test &amp; History
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={runTest}
+                  disabled={testing}
+                  className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface) inline-flex items-center gap-1"
+                  style={{ color: "var(--color-brand)" }}
+                >
+                  <Play size={12} /> {testing ? "Testing…" : "Test against latest record"}
+                </button>
+                {runs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRuns((s) => !s)}
+                    className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface) inline-flex items-center gap-1"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    <History size={12} /> {runs.length} run{runs.length !== 1 ? "s" : ""}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {testResult && (
+              <div className="mt-2 text-[11px] rounded-lg p-2.5 border border-(--color-border)" style={{ background: "var(--color-surface)" }}>
+                {testResult.error ? (
+                  <span style={{ color: "#b45309" }}>{testResult.error}</span>
+                ) : (
+                  <div className="space-y-1">
+                    <p style={{ color: "var(--color-text-secondary)" }}>
+                      Sample: <b>{sampleLabel(rule.target, testResult.sample)}</b> ·{" "}
+                      {testResult.matched ? (
+                        <span style={{ color: "#15803d", fontWeight: 700 }}>conditions MATCH ✓</span>
+                      ) : (
+                        <span style={{ color: "#b91c1c", fontWeight: 700 }}>conditions do not match ✗</span>
+                      )}
+                    </p>
+                    {testResult.matched && (
+                      <p style={{ color: "var(--color-text-muted)" }}>
+                        Would run: {testResult.actions.map((a) => a.type).join(", ") || "—"}
+                      </p>
+                    )}
+                    <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                      Dry run — no records were changed. Save the rule so it runs automatically on this event.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showRuns && runs.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {runs.slice(0, 8).map((r) => {
+                  const st = RUN_STATUS_STYLE[r.status] || RUN_STATUS_STYLE.skipped;
+                  const StIcon = st.icon;
+                  return (
+                    <div key={r.id} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ background: "var(--color-surface)" }}>
+                      <span className="inline-flex items-center gap-1 font-700 px-1.5 py-0.5 rounded" style={{ background: st.bg, color: st.color }}>
+                        <StIcon size={11} /> {st.label}
+                      </span>
+                      <span style={{ color: "var(--color-text-muted)" }}>{eventLabel(r.target, r.event)}</span>
+                      {r.error && <span className="truncate" style={{ color: "#b91c1c" }} title={r.error}>· {r.error}</span>}
+                      <span className="ml-auto shrink-0" style={{ color: "var(--color-text-muted)" }}>{new Date(r.created_at).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -568,6 +733,7 @@ export default function RulesPage() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [runs, setRuns] = useState([]);
 
   const stages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map((s) =>
     typeof s === "string" ? s : s.name,
@@ -603,7 +769,16 @@ export default function RulesPage() {
       .then((t) => setTags(t || []))
       .catch(() => setTags([]))
       .finally(() => setLoading(false));
+    getAutomationRuns({ orgId, limit: 200 })
+      .then((r) => setRuns(r || []))
+      .catch(() => setRuns([]));
   }, [orgId, org]);
+
+  // Group recent runs by rule for the per-rule History panel.
+  const runsByRule = rules.reduce((acc, r) => {
+    acc[r.id] = runs.filter((x) => x.rule_id === r.id);
+    return acc;
+  }, {});
 
   const [dirty, setDirty] = useState(false);
 
@@ -659,8 +834,8 @@ export default function RulesPage() {
                 className="text-xs"
                 style={{ color: "var(--color-text-muted)" }}
               >
-                When an event happens, optionally check conditions, then run an
-                action — for leads and patients.
+                When an event happens, optionally check conditions, then run
+                actions — across leads, patients, appointments, tasks &amp; consultations.
                 {saving
                   ? " · Saving…"
                   : dirty
@@ -696,38 +871,30 @@ export default function RulesPage() {
               </Button>
               {addOpen && (
                 <div
-                  className="absolute top-full right-0 mt-1.5 w-44 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                  className="absolute top-full right-0 mt-1.5 w-48 rounded-xl border border-(--color-border) overflow-hidden z-20"
                   style={{
                     background: "var(--color-surface)",
                     boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      addRule("lead");
-                      setAddOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)"
-                  >
-                    <TrendingUp size={14} style={{ color: "#1d4ed8" }} />{" "}
-                    <span style={{ color: "var(--color-text-primary)" }}>
-                      Lead rule
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      addRule("patient");
-                      setAddOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)"
-                  >
-                    <UserRound size={14} style={{ color: "#15803d" }} />{" "}
-                    <span style={{ color: "var(--color-text-primary)" }}>
-                      Patient rule
-                    </span>
-                  </button>
+                  {RULE_TARGETS.map(({ value }) => {
+                    const meta = TARGET_META[value];
+                    const Icon = meta.icon;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          addRule(value);
+                          setAddOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)"
+                      >
+                        <Icon size={14} style={{ color: meta.color }} />
+                        <span style={{ color: "var(--color-text-primary)" }}>{meta.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -755,7 +922,7 @@ export default function RulesPage() {
             className="text-xs mt-1"
             style={{ color: "var(--color-text-muted)" }}
           >
-            Add a lead or patient rule to get started.
+            Add a Lead, Patient, Appointment, Task, or Consultation rule to get started.
           </p>
         </div>
       ) : (
@@ -767,6 +934,9 @@ export default function RulesPage() {
               stages={stages}
               tags={tags}
               staff={org?.settings?.staff_members || []}
+              customFields={org?.settings?.api_fields?.[ENTITY_KEY[rule.target]] || []}
+              runs={runsByRule[rule.id] || []}
+              orgId={orgId}
               onChange={updateRule}
               onRemove={() => removeRule(rule.id)}
             />
