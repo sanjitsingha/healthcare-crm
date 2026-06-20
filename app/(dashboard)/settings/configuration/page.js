@@ -3,11 +3,12 @@ import { useState } from 'react'
 import {
   Plug, Globe, Webhook, MessageCircle, BookOpen,
   Check, X, Copy, Trash2, Link2, RefreshCw, ChevronDown,
+  Key, Eye, EyeOff, Code2, Table2,
 } from 'lucide-react'
 import { Button, Card, Input, Switch } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
 import { useOrg } from '@/lib/context/OrgContext'
-import { updateOrganization, getOrganization } from '@/lib/supabase/queries'
+import { updateOrganization, getOrganization, generateOrgApiKey } from '@/lib/supabase/queries'
 import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 
@@ -386,11 +387,36 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   )
 }
 
+// ── Field reference rows for the API Names table ───────────────
+const API_FIELDS = [
+  { name: 'first_name',    type: 'string', required: true,  note: 'Required if phone/email absent' },
+  { name: 'last_name',     type: 'string', required: false, note: '' },
+  { name: 'name',          type: 'string', required: false, note: 'Auto-split into first_name + last_name' },
+  { name: 'phone',         type: 'string', required: false, note: '' },
+  { name: 'email',         type: 'string', required: false, note: '' },
+  { name: 'gender',        type: 'string', required: false, note: 'Male / Female / Other' },
+  { name: 'date_of_birth', type: 'string', required: false, note: 'YYYY-MM-DD' },
+  { name: 'address',       type: 'string', required: false, note: '' },
+  { name: 'source',        type: 'string', required: false, note: 'e.g. "Website", "Instagram"' },
+  { name: 'stage',         type: 'string', required: false, note: 'Defaults to "New"' },
+  { name: 'priority',      type: 'string', required: false, note: 'Low / Medium / High / Urgent' },
+  { name: 'notes',         type: 'string', required: false, note: 'Alias for description' },
+  { name: 'description',   type: 'string', required: false, note: 'Message / extra notes' },
+]
+
 // ── Page ───────────────────────────────────────────────────────
 export default function ConfigurationPage() {
   const { org, orgId } = useOrg()
   const [integrations, setIntegrations] = useState(() => org?.settings?.integrations || [])
   const [busy, setBusy] = useState(false)
+
+  // API key state
+  const [apiKey, setApiKey]       = useState(() => org?.settings?.public_api_key || '')
+  const [showKey, setShowKey]     = useState(false)
+  const [keyCopied, setKeyCopied] = useState('')
+  const [keyBusy, setKeyBusy]     = useState(false)
+  const [showFields, setShowFields] = useState(false)
+  const [showCode, setShowCode]   = useState(false)
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -437,8 +463,175 @@ export default function ConfigurationPage() {
     await persist(integrations.filter(i => i.id !== id))
   }
 
+  const handleGenerateKey = async () => {
+    if (apiKey) {
+      const ok = await showConfirm({ title: 'Regenerate API key?', message: 'The existing key will stop working immediately. Any landing page using it must be updated.', confirmLabel: 'Regenerate' })
+      if (!ok) return
+    }
+    setKeyBusy(true)
+    try {
+      const newKey = await generateOrgApiKey(orgId, org?.settings)
+      setApiKey(newKey)
+      setShowKey(true)
+      toast({ type: 'success', title: 'API key generated', message: 'Copy it now — you can reveal it anytime here.' })
+    } catch (err) {
+      toast({ type: 'error', title: 'Error', message: err.message })
+    } finally {
+      setKeyBusy(false)
+    }
+  }
+
+  const copyKey = async (text, slot) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setKeyCopied(slot)
+      setTimeout(() => setKeyCopied(''), 1500)
+    } catch {}
+  }
+
+  const codeExample = `fetch('${origin}/api/public/leads', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ${apiKey || 'hcrm_your_api_key'}',
+  },
+  body: JSON.stringify({
+    first_name: 'Priya',
+    last_name: 'Sharma',
+    phone: '9876543210',
+    email: 'priya@example.com',
+    source: 'Website',
+  }),
+})`
+
   return (
     <div className="space-y-4">
+      {/* API Access */}
+      <Card className="p-5">
+        <SectionHead
+          icon={Key}
+          title="API Access"
+          description="Let your custom landing page submit leads directly into this CRM"
+        />
+
+        {/* Key row */}
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>API Key</label>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={apiKey ? (showKey ? apiKey : apiKey.slice(0, 8) + '••••••••••••••••••••••••') : ''}
+                placeholder="No key generated yet"
+                className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: apiKey ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
+              />
+              {apiKey && (
+                <>
+                  <button type="button" onClick={() => setShowKey(v => !v)}
+                    className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
+                    style={{ color: 'var(--color-text-muted)' }} title={showKey ? 'Hide key' : 'Reveal key'}>
+                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button type="button" onClick={() => copyKey(apiKey, 'key')}
+                    className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
+                    style={{ color: keyCopied === 'key' ? '#15803d' : 'var(--color-text-muted)' }}>
+                    {keyCopied === 'key' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                  </button>
+                </>
+              )}
+              <Button size="sm" variant={apiKey ? 'secondary' : 'primary'} type="button" onClick={handleGenerateKey} disabled={keyBusy} className="shrink-0">
+                {keyBusy ? 'Generating…' : apiKey ? 'Regenerate' : 'Generate key'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Endpoint URL */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Endpoint URL</label>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={`${origin}/api/public/leads`}
+                className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }}
+              />
+              <button type="button" onClick={() => copyKey(`${origin}/api/public/leads`, 'url')}
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
+                style={{ color: keyCopied === 'url' ? '#15803d' : 'var(--color-text-muted)' }}>
+                {keyCopied === 'url' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+              </button>
+            </div>
+          </div>
+
+          {/* Field Reference (API Names) */}
+          <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+            <button type="button" onClick={() => setShowFields(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2.5">
+              <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                <Table2 size={13} /> Field Reference
+                <span className="text-[10px] font-400" style={{ color: 'var(--color-text-muted)' }}>· API names for your form fields</span>
+              </span>
+              <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showFields ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+            </button>
+            {showFields && (
+              <div className="border-t border-(--color-border)">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+                      <th className="px-3 py-2 text-left font-600">Field name</th>
+                      <th className="px-3 py-2 text-left font-600">Type</th>
+                      <th className="px-3 py-2 text-left font-600">Required</th>
+                      <th className="px-3 py-2 text-left font-600">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {API_FIELDS.map((f, i) => (
+                      <tr key={f.name} style={{ borderTop: i > 0 ? '1px solid var(--color-border)' : 'none' }}>
+                        <td className="px-3 py-2 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.name}</td>
+                        <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
+                        <td className="px-3 py-2">
+                          {f.required
+                            ? <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: '#fef2f2', color: '#b91c1c' }}>required*</span>
+                            : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                        </td>
+                        <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="px-3 py-2 text-[10px] border-t border-(--color-border)" style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface-2)' }}>
+                  * At least one of <code className="font-mono">first_name</code>, <code className="font-mono">phone</code>, or <code className="font-mono">email</code> is required. Any unrecognised fields are stored as custom data.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Code Example */}
+          <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+            <button type="button" onClick={() => setShowCode(v => !v)}
+              className="w-full flex items-center justify-between px-3 py-2.5">
+              <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                <Code2 size={13} /> Code Example
+                <span className="text-[10px] font-400" style={{ color: 'var(--color-text-muted)' }}>· fetch() snippet for your landing page</span>
+              </span>
+              <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showCode ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+            </button>
+            {showCode && (
+              <div className="border-t border-(--color-border) relative">
+                <button type="button" onClick={() => copyKey(codeExample, 'code')}
+                  className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                  style={{ color: keyCopied === 'code' ? '#15803d' : 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
+                  {keyCopied === 'code' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+                </button>
+                <pre className="px-4 py-3 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
+                  {codeExample}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
       {/* Connected */}
       <Card className="p-5">
         <SectionHead
