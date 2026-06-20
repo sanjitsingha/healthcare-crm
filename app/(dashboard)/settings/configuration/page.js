@@ -2,8 +2,8 @@
 import { useState } from 'react'
 import {
   Plug, Globe, Webhook, MessageCircle, BookOpen,
-  Check, X, Copy, Trash2, Link2, RefreshCw, ChevronDown,
-  Key, Eye, EyeOff, Code2, Table2,
+  Check, Copy, Trash2, Link2, RefreshCw, ChevronDown,
+  Key, Eye, EyeOff, Code2, Lock, Plus, Pencil, X,
 } from 'lucide-react'
 import { Button, Card, Input, Switch } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
@@ -13,9 +13,6 @@ import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 
 // ── Provider catalog ───────────────────────────────────────────
-// Each provider defines the config fields it needs.
-// field.kind: 'generated' = read-only auto webhook URL (copyable),
-//             'text' / 'secret' = user-entered.
 const PROVIDERS = [
   {
     type: 'google_forms',
@@ -89,7 +86,6 @@ const PROVIDERS = [
 
 const PROVIDER_MAP = Object.fromEntries(PROVIDERS.map(p => [p.type, p]))
 
-// Per-provider docs section anchors on /docs.
 const DOCS_ANCHOR = {
   google_forms:  'google-forms',
   wordpress:     'wordpress',
@@ -99,7 +95,6 @@ const DOCS_ANCHOR = {
   whatsapp:      'integrations',
 }
 
-// Lead fields a form question can be mapped to (used by the field-mapping editor).
 const LEAD_FIELD_OPTIONS = [
   { value: 'first_name',    label: 'First name' },
   { value: 'last_name',     label: 'Last name' },
@@ -117,7 +112,79 @@ const LEAD_FIELD_OPTIONS = [
   { value: 'custom:',       label: 'Custom field (store as-is)' },
 ]
 
-// Combobox: type freely, or pick from detected form fields in a styled dropdown.
+// ── Page tabs ──────────────────────────────────────────────────
+const TABS = [
+  { id: 'integrations', label: 'Configuration' },
+  { id: 'api-access',   label: 'API Access' },
+  { id: 'api-names',    label: 'API Names' },
+]
+
+// ── API Names — entity definitions ─────────────────────────────
+const ENTITIES = [
+  { id: 'leads',         label: 'Lead Page' },
+  { id: 'patients',      label: 'Patient Page' },
+  { id: 'consultations', label: 'Consultation Page' },
+]
+
+const SYSTEM_FIELDS = {
+  leads: [
+    { api_name: 'first_name',    display: 'First Name',        type: 'text',     note: '* One of first_name / phone / email required' },
+    { api_name: 'last_name',     display: 'Last Name',         type: 'text',     note: '' },
+    { api_name: 'name',          display: 'Full Name (alias)', type: 'text',     note: 'Auto-split into first_name + last_name' },
+    { api_name: 'phone',         display: 'Phone',             type: 'text',     note: '* One of first_name / phone / email required' },
+    { api_name: 'email',         display: 'Email',             type: 'email',    note: '* One of first_name / phone / email required' },
+    { api_name: 'gender',        display: 'Gender',            type: 'text',     note: 'Male / Female / Other' },
+    { api_name: 'date_of_birth', display: 'Date of Birth',     type: 'date',     note: 'YYYY-MM-DD' },
+    { api_name: 'address',       display: 'Address',           type: 'text',     note: '' },
+    { api_name: 'source',        display: 'Source',            type: 'text',     note: 'e.g. Website, Instagram' },
+    { api_name: 'stage',         display: 'Stage',             type: 'text',     note: 'New / Contacted / Interested / Follow-up / Converted / Lost' },
+    { api_name: 'priority',      display: 'Priority',          type: 'text',     note: 'Low / Medium / High / Urgent' },
+    { api_name: 'notes',         display: 'Notes / Message',   type: 'text',     note: 'Alias for description' },
+    { api_name: 'description',   display: 'Description',       type: 'text',     note: '' },
+  ],
+  patients: [
+    { api_name: 'first_name',    display: 'First Name',        type: 'text',     note: '' },
+    { api_name: 'last_name',     display: 'Last Name',         type: 'text',     note: '' },
+    { api_name: 'phone',         display: 'Phone',             type: 'text',     note: '' },
+    { api_name: 'email',         display: 'Email',             type: 'email',    note: '' },
+    { api_name: 'gender',        display: 'Gender',            type: 'text',     note: 'Male / Female / Other' },
+    { api_name: 'date_of_birth', display: 'Date of Birth',     type: 'date',     note: 'YYYY-MM-DD (month only: YYYY-MM-01)' },
+    { api_name: 'address',       display: 'Address',           type: 'text',     note: '' },
+    { api_name: 'blood_group',   display: 'Blood Group',       type: 'text',     note: 'A+ / A- / B+ / B- / O+ / O- / AB+ / AB-' },
+    { api_name: 'marital_status',display: 'Marital Status',    type: 'text',     note: 'Single / Married / Widowed / Divorced' },
+    { api_name: 'age',           display: 'Age',               type: 'number',   note: '' },
+    { api_name: 'city',          display: 'City',              type: 'text',     note: '' },
+    { api_name: 'state',         display: 'State',             type: 'text',     note: '' },
+    { api_name: 'zip_code',      display: 'ZIP / Pincode',     type: 'text',     note: '' },
+    { api_name: 'occupation',    display: 'Occupation',        type: 'text',     note: '' },
+    { api_name: 'alt_phone',     display: 'Alternate Phone',   type: 'text',     note: '' },
+    { api_name: 'whatsapp_phone',display: 'WhatsApp Number',   type: 'text',     note: '' },
+  ],
+  consultations: [
+    { api_name: 'scheduled_at',              display: 'Date & Time',         type: 'datetime', note: 'ISO 8601 — e.g. 2026-06-21T10:30:00' },
+    { api_name: 'doctor_id',                 display: 'Doctor (ID)',          type: 'uuid',     note: 'UUID of the doctor record' },
+    { api_name: 'consultation_fee',          display: 'Consultation Fee',     type: 'number',   note: '' },
+    { api_name: 'consultation_fee_status',   display: 'Fee Status',           type: 'text',     note: 'pending / paid' },
+    { api_name: 'payment_mode',              display: 'Payment Mode',         type: 'text',     note: 'cash / online' },
+    { api_name: 'registration_fee',          display: 'Registration Fee',     type: 'number',   note: '' },
+    { api_name: 'registration_fee_status',   display: 'Reg Fee Status',       type: 'text',     note: 'pending / paid' },
+    { api_name: 'notes',                     display: 'Notes',                type: 'text',     note: '' },
+    { api_name: 'status',                    display: 'Status',               type: 'text',     note: 'scheduled / completed / cancelled' },
+  ],
+}
+
+const FIELD_TYPES = ['text', 'number', 'date', 'email', 'phone', 'select']
+
+// ── Helpers ────────────────────────────────────────────────────
+function toApiName(str) {
+  return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+
+function genToken() {
+  return (crypto.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, '')
+}
+
+// ── Sub-components ─────────────────────────────────────────────
 function FieldCombobox({ value, onChange, options, placeholder }) {
   const [open, setOpen] = useState(false)
   const q = (value || '').toLowerCase()
@@ -139,14 +206,10 @@ function FieldCombobox({ value, onChange, options, placeholder }) {
         <div className="absolute z-30 mt-1 w-full max-h-44 overflow-y-auto rounded-lg border border-(--color-border) shadow-lg"
           style={{ background: 'var(--color-surface)' }}>
           {list.map(o => (
-            <button
-              key={o}
-              type="button"
-              onMouseDown={e => e.preventDefault()}
+            <button key={o} type="button" onMouseDown={e => e.preventDefault()}
               onClick={() => { onChange(o); setOpen(false) }}
               className="block w-full text-left px-2.5 py-1.5 text-xs hover:bg-(--color-brand-50)"
-              style={{ color: 'var(--color-text-primary)' }}
-            >
+              style={{ color: 'var(--color-text-primary)' }}>
               {o}
             </button>
           ))}
@@ -154,10 +217,6 @@ function FieldCombobox({ value, onChange, options, placeholder }) {
       )}
     </div>
   )
-}
-
-function genToken() {
-  return (crypto.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, '')
 }
 
 function SectionHead({ icon: Icon, title, description }) {
@@ -177,16 +236,16 @@ function SectionHead({ icon: Icon, title, description }) {
 // ── Connected integration card ─────────────────────────────────
 function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const provider = PROVIDER_MAP[integration.type]
-  const [editing, setEditing] = useState(false)
-  const [values,  setValues]  = useState({ ...integration.config })
-  const [saving,  setSaving]  = useState(false)
-  const [copied,  setCopied]  = useState('')
-  const { orgId } = useOrg()
-  const [mapRows, setMapRows] = useState(() => integration.config?.field_map || [])
+  const [editing, setEditing]   = useState(false)
+  const [values, setValues]     = useState({ ...integration.config })
+  const [saving, setSaving]     = useState(false)
+  const [copied, setCopied]     = useState('')
+  const { orgId }               = useOrg()
+  const [mapRows, setMapRows]   = useState(() => integration.config?.field_map || [])
   const [savingMap, setSavingMap] = useState(false)
-  const [mapOpen, setMapOpen] = useState(false)
+  const [mapOpen, setMapOpen]   = useState(false)
   const [liveDetected, setLiveDetected] = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
+  const [refreshing, setRefreshing]     = useState(false)
   const detected = liveDetected ?? (integration.config?.detected_fields || [])
 
   const addMapRow    = () => setMapRows(r => [...r, { form_field: '', lead_field: '' }])
@@ -198,7 +257,6 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
     catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setSavingMap(false) }
   }
-  // Pull the latest detected form fields from the DB (no full page reload).
   const refreshFields = async () => {
     setRefreshing(true)
     try {
@@ -213,11 +271,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   const Icon = provider.icon
 
   const copy = async (text, key) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(key)
-      setTimeout(() => setCopied(''), 1500)
-    } catch {}
+    try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(''), 1500) } catch {}
   }
 
   const handleSave = async () => {
@@ -229,7 +283,6 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
 
   return (
     <div className="rounded-xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-      {/* Header */}
       <div className="flex items-center gap-3 p-4">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: provider.color + '18' }}>
           <Icon size={18} style={{ color: provider.color }} />
@@ -237,12 +290,10 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{provider.name}</p>
-            <span
-              className="text-[10px] font-700 px-2 py-0.5 rounded-full"
+            <span className="text-[10px] font-700 px-2 py-0.5 rounded-full"
               style={integration.enabled
                 ? { background: '#dcfce7', color: '#15803d' }
-                : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}
-            >
+                : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
               {integration.enabled ? 'Active' : 'Paused'}
             </span>
           </div>
@@ -257,22 +308,17 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
         </div>
       </div>
 
-      {/* Config */}
       <div className="border-t border-(--color-border) p-4 space-y-3" style={{ background: 'var(--color-surface-2)' }}>
         {provider.fields.map(field => {
           const val = (editing ? values[field.key] : integration.config?.[field.key]) || ''
-
           if (field.kind === 'generated') {
             return (
               <div key={field.key} className="space-y-1.5">
                 <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{field.label}</label>
                 <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={val}
+                  <input readOnly value={val}
                     className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
-                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}
-                  />
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }} />
                   <button type="button" onClick={() => copy(val, field.key)}
                     className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
                     style={{ color: copied === field.key ? '#15803d' : 'var(--color-text-muted)' }}>
@@ -282,16 +328,10 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
               </div>
             )
           }
-
           return editing ? (
-            <Input
-              key={field.key}
-              label={field.label}
-              type={field.kind === 'secret' ? 'password' : 'text'}
-              placeholder={field.placeholder}
-              value={values[field.key] || ''}
-              onChange={e => setValues(v => ({ ...v, [field.key]: e.target.value }))}
-            />
+            <Input key={field.key} label={field.label} type={field.kind === 'secret' ? 'password' : 'text'}
+              placeholder={field.placeholder} value={values[field.key] || ''}
+              onChange={e => setValues(v => ({ ...v, [field.key]: e.target.value }))} />
           ) : (
             <div key={field.key} className="flex items-center justify-between gap-4">
               <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>{field.label}</span>
@@ -330,19 +370,12 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
                   <div className="space-y-2">
                     {mapRows.map((row, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <FieldCombobox
-                          value={row.form_field}
-                          onChange={v => setMapRow(i, { form_field: v })}
-                          options={detected}
-                          placeholder="Form question"
-                        />
+                        <FieldCombobox value={row.form_field} onChange={v => setMapRow(i, { form_field: v })}
+                          options={detected} placeholder="Form question" />
                         <span className="text-xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>→</span>
-                        <select
-                          value={row.lead_field}
-                          onChange={e => setMapRow(i, { lead_field: e.target.value })}
+                        <select value={row.lead_field} onChange={e => setMapRow(i, { lead_field: e.target.value })}
                           className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                          style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}
-                        >
+                          style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>
                           <option value="">Select lead field…</option>
                           {LEAD_FIELD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
@@ -353,7 +386,7 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
                 )}
                 {detected.length === 0 && mapRows.length === 0 && (
                   <p className="text-[11px] px-2.5 py-2 rounded-md" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
-                    No fields detected yet. Submit the form once (or use the plugin’s “Send test lead”), then click <b>Refresh fields</b>.
+                    No fields detected yet. Submit the form once, then click <b>Refresh fields</b>.
                   </p>
                 )}
                 <div className="flex items-center justify-between pt-1">
@@ -387,43 +420,50 @@ function IntegrationCard({ integration, onSave, onToggle, onRemove }) {
   )
 }
 
-// ── Field reference rows for the API Names table ───────────────
-const API_FIELDS = [
-  { name: 'first_name',    type: 'string', required: true,  note: 'Required if phone/email absent' },
-  { name: 'last_name',     type: 'string', required: false, note: '' },
-  { name: 'name',          type: 'string', required: false, note: 'Auto-split into first_name + last_name' },
-  { name: 'phone',         type: 'string', required: false, note: '' },
-  { name: 'email',         type: 'string', required: false, note: '' },
-  { name: 'gender',        type: 'string', required: false, note: 'Male / Female / Other' },
-  { name: 'date_of_birth', type: 'string', required: false, note: 'YYYY-MM-DD' },
-  { name: 'address',       type: 'string', required: false, note: '' },
-  { name: 'source',        type: 'string', required: false, note: 'e.g. "Website", "Instagram"' },
-  { name: 'stage',         type: 'string', required: false, note: 'Defaults to "New"' },
-  { name: 'priority',      type: 'string', required: false, note: 'Low / Medium / High / Urgent' },
-  { name: 'notes',         type: 'string', required: false, note: 'Alias for description' },
-  { name: 'description',   type: 'string', required: false, note: 'Message / extra notes' },
-]
-
 // ── Page ───────────────────────────────────────────────────────
 export default function ConfigurationPage() {
   const { org, orgId } = useOrg()
-  const [integrations, setIntegrations] = useState(() => org?.settings?.integrations || [])
+
+  // Mutable local copy of org settings so multiple saves don't step on each other
+  const [localSettings, setLocalSettings] = useState(() => org?.settings || {})
+
+  // ── Tab state ────────────────────────────────────────────────
+  const [tab, setTab] = useState('integrations')
+
+  // ── Integrations state ───────────────────────────────────────
+  const [integrations, setIntegrations] = useState(() => localSettings.integrations || [])
   const [busy, setBusy] = useState(false)
 
-  // API key state
-  const [apiKey, setApiKey]       = useState(() => org?.settings?.public_api_key || '')
+  // ── API Access state ─────────────────────────────────────────
+  const [apiKey, setApiKey]       = useState(() => localSettings.public_api_key || '')
   const [showKey, setShowKey]     = useState(false)
   const [keyCopied, setKeyCopied] = useState('')
   const [keyBusy, setKeyBusy]     = useState(false)
-  const [showFields, setShowFields] = useState(false)
   const [showCode, setShowCode]   = useState(false)
+
+  // ── API Names state ──────────────────────────────────────────
+  const [entity, setEntity]           = useState('leads')
+  const [apiFieldsMap, setApiFieldsMap] = useState(() => localSettings.api_fields || {})
+  const [addingField, setAddingField] = useState(false)
+  const [editingId, setEditingId]     = useState(null)
+  const [fieldForm, setFieldForm]     = useState({ display: '', api_name: '', type: 'text', note: '' })
+  const [fieldBusy, setFieldBusy]     = useState(false)
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
+  // ── Save helper — always merges into latest localSettings ────
+  const saveSettings = async (patch) => {
+    const updated = { ...localSettings, ...patch }
+    await updateOrganization(orgId, { settings: updated })
+    setLocalSettings(updated)
+    return updated
+  }
+
+  // ── Integrations handlers ────────────────────────────────────
   const persist = async (updated) => {
     setBusy(true)
     try {
-      await updateOrganization(orgId, { settings: { ...(org?.settings || {}), integrations: updated } })
+      await saveSettings({ integrations: updated })
       setIntegrations(updated)
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setBusy(false) }
@@ -438,271 +478,396 @@ export default function ConfigurationPage() {
     provider.fields.forEach(f => {
       config[f.key] = f.kind === 'generated' ? `${origin}/api/webhooks/${provider.type}/${token}` : ''
     })
-    const integration = {
-      id: crypto.randomUUID(),
-      type: provider.type,
-      token,
-      enabled: true,
-      config,
-      created_at: new Date().toISOString(),
-    }
-    await persist([...integrations, integration])
+    await persist([...integrations, { id: crypto.randomUUID(), type: provider.type, token, enabled: true, config, created_at: new Date().toISOString() }])
   }
-
-  const handleSaveConfig = async (id, values) => {
-    await persist(integrations.map(i => i.id === id ? { ...i, config: { ...i.config, ...values } } : i))
-  }
-
-  const handleToggle = async (id) => {
-    await persist(integrations.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i))
-  }
-
-  const handleRemove = async (id) => {
+  const handleSaveConfig  = async (id, values) => persist(integrations.map(i => i.id === id ? { ...i, config: { ...i.config, ...values } } : i))
+  const handleToggle      = async (id) => persist(integrations.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i))
+  const handleRemove      = async (id) => {
     const ok = await showConfirm({ title: 'Remove this integration?', message: 'The webhook URL will stop working.', confirmLabel: 'Remove' })
     if (!ok) return
-    await persist(integrations.filter(i => i.id !== id))
+    persist(integrations.filter(i => i.id !== id))
   }
 
+  // ── API Access handlers ──────────────────────────────────────
   const handleGenerateKey = async () => {
     if (apiKey) {
-      const ok = await showConfirm({ title: 'Regenerate API key?', message: 'The existing key will stop working immediately. Any landing page using it must be updated.', confirmLabel: 'Regenerate' })
+      const ok = await showConfirm({ title: 'Regenerate API key?', message: 'The existing key will stop working immediately.', confirmLabel: 'Regenerate' })
       if (!ok) return
     }
     setKeyBusy(true)
     try {
-      const newKey = await generateOrgApiKey(orgId, org?.settings)
+      const newKey = await generateOrgApiKey(orgId, localSettings)
       setApiKey(newKey)
+      setLocalSettings(s => ({ ...s, public_api_key: newKey }))
       setShowKey(true)
-      toast({ type: 'success', title: 'API key generated', message: 'Copy it now — you can reveal it anytime here.' })
-    } catch (err) {
-      toast({ type: 'error', title: 'Error', message: err.message })
-    } finally {
-      setKeyBusy(false)
-    }
+      toast({ type: 'success', title: 'API key generated' })
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setKeyBusy(false) }
   }
 
-  const copyKey = async (text, slot) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setKeyCopied(slot)
-      setTimeout(() => setKeyCopied(''), 1500)
-    } catch {}
+  const clip = async (text, slot) => {
+    try { await navigator.clipboard.writeText(text); setKeyCopied(slot); setTimeout(() => setKeyCopied(''), 1500) } catch {}
   }
 
-  const codeExample = `fetch('${origin}/api/public/leads', {
+  const codeExample =
+`fetch('${origin}/api/public/leads', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${apiKey || 'hcrm_your_api_key'}',
+    Authorization: 'Bearer ${apiKey || 'hcrm_your_api_key'}',
   },
   body: JSON.stringify({
     first_name: 'Priya',
-    last_name: 'Sharma',
-    phone: '9876543210',
-    email: 'priya@example.com',
-    source: 'Website',
+    last_name:  'Sharma',
+    phone:      '9876543210',
+    email:      'priya@example.com',
+    source:     'Website',
   }),
 })`
 
+  // ── API Names handlers ───────────────────────────────────────
+  const currentCustom = apiFieldsMap[entity] || []
+
+  const persistApiFields = async (updatedForEntity) => {
+    const updated = { ...apiFieldsMap, [entity]: updatedForEntity }
+    setFieldBusy(true)
+    try {
+      await saveSettings({ api_fields: updated })
+      setApiFieldsMap(updated)
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setFieldBusy(false) }
+  }
+
+  const startAdd = () => { setFieldForm({ display: '', api_name: '', type: 'text', note: '' }); setAddingField(true); setEditingId(null) }
+  const startEdit = (f) => { setFieldForm({ display: f.display, api_name: f.api_name, type: f.type, note: f.note || '' }); setEditingId(f.id); setAddingField(false) }
+  const cancelField = () => { setAddingField(false); setEditingId(null) }
+
+  const handleAddField = async () => {
+    if (!fieldForm.display.trim() || !fieldForm.api_name.trim()) return
+    const apiName = toApiName(fieldForm.api_name)
+    const clash = [...(SYSTEM_FIELDS[entity] || []), ...currentCustom].some(f => f.api_name === apiName)
+    if (clash) { toast({ type: 'error', title: 'API name already exists', message: `"${apiName}" is already used by another field.` }); return }
+    await persistApiFields([...currentCustom, { id: crypto.randomUUID(), ...fieldForm, api_name: apiName }])
+    setAddingField(false)
+  }
+
+  const handleEditField = async () => {
+    if (!fieldForm.display.trim() || !fieldForm.api_name.trim()) return
+    const apiName = toApiName(fieldForm.api_name)
+    const clash = [...(SYSTEM_FIELDS[entity] || []), ...currentCustom].some(f => f.api_name === apiName && f.id !== editingId)
+    if (clash) { toast({ type: 'error', title: 'API name already exists', message: `"${apiName}" is already used by another field.` }); return }
+    await persistApiFields(currentCustom.map(f => f.id === editingId ? { ...f, ...fieldForm, api_name: apiName } : f))
+    setEditingId(null)
+  }
+
+  const handleDeleteField = async (id) => {
+    const ok = await showConfirm({ title: 'Delete custom field?', message: 'Existing data stored under this API name will remain in custom_data but won\'t be labelled.', confirmLabel: 'Delete' })
+    if (!ok) return
+    persistApiFields(currentCustom.filter(f => f.id !== id))
+  }
+
+  // ── Inline field form (add / edit) ───────────────────────────
+  const FieldForm = ({ onSubmit, onCancel, submitLabel }) => (
+    <div className="rounded-lg border border-(--color-border) p-3 space-y-2.5" style={{ background: 'var(--color-surface-2)' }}>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>Display Name *</label>
+          <input value={fieldForm.display} onChange={e => setFieldForm(f => ({ ...f, display: e.target.value, api_name: editingId ? f.api_name : toApiName(e.target.value) }))}
+            placeholder="e.g. Disease Name"
+            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>API Name *</label>
+          <input value={fieldForm.api_name} onChange={e => setFieldForm(f => ({ ...f, api_name: toApiName(e.target.value) }))}
+            placeholder="e.g. disease_name"
+            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none font-mono"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-brand)' }} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>Type</label>
+          <select value={fieldForm.type} onChange={e => setFieldForm(f => ({ ...f, type: e.target.value }))}
+            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+            {FIELD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="block text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>Notes / Description</label>
+          <input value={fieldForm.note} onChange={e => setFieldForm(f => ({ ...f, note: e.target.value }))}
+            placeholder="Optional hint"
+            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="secondary" size="sm" type="button" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" type="button" onClick={onSubmit} disabled={fieldBusy || !fieldForm.display.trim() || !fieldForm.api_name.trim()}>
+          {fieldBusy ? 'Saving…' : submitLabel}
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-4">
-      {/* API Access */}
-      <Card className="p-5">
-        <SectionHead
-          icon={Key}
-          title="API Access"
-          description="Let your custom landing page submit leads directly into this CRM"
-        />
+      {/* ── Tab navigation ──────────────────────────────────── */}
+      <div className="flex gap-1 p-1 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+        {TABS.map(t => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className="flex-1 py-2 px-4 rounded-lg text-sm font-600 transition-all"
+            style={tab === t.id
+              ? { background: 'var(--color-surface)', color: 'var(--color-brand)', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
+              : { color: 'var(--color-text-muted)' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Key row */}
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>API Key</label>
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={apiKey ? (showKey ? apiKey : apiKey.slice(0, 8) + '••••••••••••••••••••••••') : ''}
-                placeholder="No key generated yet"
-                className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
-                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: apiKey ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
-              />
-              {apiKey && (
-                <>
-                  <button type="button" onClick={() => setShowKey(v => !v)}
-                    className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
-                    style={{ color: 'var(--color-text-muted)' }} title={showKey ? 'Hide key' : 'Reveal key'}>
-                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                  <button type="button" onClick={() => copyKey(apiKey, 'key')}
-                    className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
-                    style={{ color: keyCopied === 'key' ? '#15803d' : 'var(--color-text-muted)' }}>
-                    {keyCopied === 'key' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-                  </button>
-                </>
-              )}
-              <Button size="sm" variant={apiKey ? 'secondary' : 'primary'} type="button" onClick={handleGenerateKey} disabled={keyBusy} className="shrink-0">
-                {keyBusy ? 'Generating…' : apiKey ? 'Regenerate' : 'Generate key'}
-              </Button>
-            </div>
-          </div>
-
-          {/* Endpoint URL */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Endpoint URL</label>
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={`${origin}/api/public/leads`}
-                className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
-                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }}
-              />
-              <button type="button" onClick={() => copyKey(`${origin}/api/public/leads`, 'url')}
-                className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
-                style={{ color: keyCopied === 'url' ? '#15803d' : 'var(--color-text-muted)' }}>
-                {keyCopied === 'url' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-              </button>
-            </div>
-          </div>
-
-          {/* Field Reference (API Names) */}
-          <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-            <button type="button" onClick={() => setShowFields(v => !v)}
-              className="w-full flex items-center justify-between px-3 py-2.5">
-              <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
-                <Table2 size={13} /> Field Reference
-                <span className="text-[10px] font-400" style={{ color: 'var(--color-text-muted)' }}>· API names for your form fields</span>
-              </span>
-              <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showFields ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-            </button>
-            {showFields && (
-              <div className="border-t border-(--color-border)">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
-                      <th className="px-3 py-2 text-left font-600">Field name</th>
-                      <th className="px-3 py-2 text-left font-600">Type</th>
-                      <th className="px-3 py-2 text-left font-600">Required</th>
-                      <th className="px-3 py-2 text-left font-600">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {API_FIELDS.map((f, i) => (
-                      <tr key={f.name} style={{ borderTop: i > 0 ? '1px solid var(--color-border)' : 'none' }}>
-                        <td className="px-3 py-2 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.name}</td>
-                        <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
-                        <td className="px-3 py-2">
-                          {f.required
-                            ? <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: '#fef2f2', color: '#b91c1c' }}>required*</span>
-                            : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                        </td>
-                        <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="px-3 py-2 text-[10px] border-t border-(--color-border)" style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface-2)' }}>
-                  * At least one of <code className="font-mono">first_name</code>, <code className="font-mono">phone</code>, or <code className="font-mono">email</code> is required. Any unrecognised fields are stored as custom data.
-                </p>
+      {/* ── Tab: Integrations ────────────────────────────────── */}
+      {tab === 'integrations' && (
+        <>
+          <Card className="p-5">
+            <SectionHead icon={Plug} title="Connected Integrations" description="Third-party services that capture leads into your CRM" />
+            {integrations.length === 0 ? (
+              <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
+                <Plug size={26} className="mx-auto mb-2 opacity-25" />
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No integrations connected yet.</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Pick one below to get started.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {integrations.map(i => (
+                  <IntegrationCard key={i.id} integration={i} onSave={handleSaveConfig} onToggle={handleToggle} onRemove={handleRemove} />
+                ))}
               </div>
             )}
-          </div>
+          </Card>
 
-          {/* Code Example */}
-          <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
-            <button type="button" onClick={() => setShowCode(v => !v)}
-              className="w-full flex items-center justify-between px-3 py-2.5">
-              <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
-                <Code2 size={13} /> Code Example
-                <span className="text-[10px] font-400" style={{ color: 'var(--color-text-muted)' }}>· fetch() snippet for your landing page</span>
-              </span>
-              <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showCode ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-            </button>
-            {showCode && (
-              <div className="border-t border-(--color-border) relative">
-                <button type="button" onClick={() => copyKey(codeExample, 'code')}
-                  className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
-                  style={{ color: keyCopied === 'code' ? '#15803d' : 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
-                  {keyCopied === 'code' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
-                </button>
-                <pre className="px-4 py-3 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
-                  {codeExample}
-                </pre>
+          {available.length > 0 && (
+            <Card className="p-5">
+              <SectionHead icon={Link2} title="Available Integrations" description="Connect a new lead source or third-party tool" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {available.map(provider => {
+                  const Icon = provider.icon
+                  return (
+                    <div key={provider.type} className="flex items-center gap-3 p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface)' }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: provider.color + '18' }}>
+                        <Icon size={18} style={{ color: provider.color }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{provider.name}</p>
+                        <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>{provider.description}</p>
+                      </div>
+                      <Button size="sm" variant="secondary" type="button" disabled={busy} onClick={() => handleConnect(provider)} className="shrink-0">Connect</Button>
+                    </div>
+                  )
+                })}
               </div>
-            )}
-          </div>
-        </div>
-      </Card>
-      {/* Connected */}
-      <Card className="p-5">
-        <SectionHead
-          icon={Plug}
-          title="Connected Integrations"
-          description="Third-party services that capture leads into your CRM"
-        />
+            </Card>
+          )}
 
-        {integrations.length === 0 ? (
-          <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
-            <Plug size={26} className="mx-auto mb-2 opacity-25" />
-            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No integrations connected yet.</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Pick one below to get started.</p>
+          <div className="flex gap-2.5 px-4 py-3 rounded-xl border" style={{ background: 'var(--color-brand-50)', borderColor: 'var(--color-brand)' + '30' }}>
+            <RefreshCw size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} />
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+              Copy the generated webhook URL into your external form or service. Incoming submissions will be created as new leads.
+            </p>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {integrations.map(i => (
-              <IntegrationCard
-                key={i.id}
-                integration={i}
-                onSave={handleSaveConfig}
-                onToggle={handleToggle}
-                onRemove={handleRemove}
-              />
-            ))}
-          </div>
-        )}
-      </Card>
+        </>
+      )}
 
-      {/* Available */}
-      {available.length > 0 && (
+      {/* ── Tab: API Access ──────────────────────────────────── */}
+      {tab === 'api-access' && (
         <Card className="p-5">
-          <SectionHead
-            icon={Link2}
-            title="Available Integrations"
-            description="Connect a new lead source or third-party tool"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {available.map(provider => {
-              const Icon = provider.icon
-              return (
-                <div
-                  key={provider.type}
-                  className="flex items-center gap-3 p-4 rounded-xl border border-(--color-border)"
-                  style={{ background: 'var(--color-surface)' }}
-                >
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: provider.color + '18' }}>
-                    <Icon size={18} style={{ color: provider.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{provider.name}</p>
-                    <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>{provider.description}</p>
-                  </div>
-                  <Button size="sm" variant="secondary" type="button" disabled={busy} onClick={() => handleConnect(provider)} className="shrink-0">
-                    Connect
-                  </Button>
+          <SectionHead icon={Key} title="API Access" description="Let your custom landing page submit leads directly into this CRM" />
+          <div className="space-y-3">
+
+            {/* API Key */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>API Key</label>
+              <div className="flex items-center gap-2">
+                <input readOnly
+                  value={apiKey ? (showKey ? apiKey : apiKey.slice(0, 8) + '••••••••••••••••••••••••') : ''}
+                  placeholder="No key generated yet"
+                  className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: apiKey ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }} />
+                {apiKey && (
+                  <>
+                    <button type="button" onClick={() => setShowKey(v => !v)}
+                      className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
+                      style={{ color: 'var(--color-text-muted)' }}>
+                      {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button type="button" onClick={() => clip(apiKey, 'key')}
+                      className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
+                      style={{ color: keyCopied === 'key' ? '#15803d' : 'var(--color-text-muted)' }}>
+                      {keyCopied === 'key' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                    </button>
+                  </>
+                )}
+                <Button size="sm" variant={apiKey ? 'secondary' : 'primary'} type="button" onClick={handleGenerateKey} disabled={keyBusy} className="shrink-0">
+                  {keyBusy ? 'Generating…' : apiKey ? 'Regenerate' : 'Generate key'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Endpoint */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Endpoint URL</label>
+              <div className="flex items-center gap-2">
+                <input readOnly value={`${origin}/api/public/leads`}
+                  className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }} />
+                <button type="button" onClick={() => clip(`${origin}/api/public/leads`, 'url')}
+                  className="flex items-center gap-1 px-2.5 py-2 rounded-lg border border-(--color-border) text-xs font-600 transition-colors hover:bg-(--color-brand-50) shrink-0"
+                  style={{ color: keyCopied === 'url' ? '#15803d' : 'var(--color-text-muted)' }}>
+                  {keyCopied === 'url' ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                </button>
+              </div>
+            </div>
+
+            {/* Code example */}
+            <div className="rounded-lg border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+              <button type="button" onClick={() => setShowCode(v => !v)}
+                className="w-full flex items-center justify-between px-3 py-2.5">
+                <span className="text-xs font-600 flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                  <Code2 size={13} /> Code Example
+                  <span className="text-[10px] font-400" style={{ color: 'var(--color-text-muted)' }}>· fetch() for your landing page</span>
+                </span>
+                <ChevronDown size={15} style={{ color: 'var(--color-text-muted)', transform: showCode ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+              </button>
+              {showCode && (
+                <div className="border-t border-(--color-border) relative">
+                  <button type="button" onClick={() => clip(codeExample, 'code')}
+                    className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+                    style={{ color: keyCopied === 'code' ? '#15803d' : 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
+                    {keyCopied === 'code' ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+                  </button>
+                  <pre className="px-4 py-3 text-[11px] font-mono overflow-x-auto leading-relaxed" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
+                    {codeExample}
+                  </pre>
                 </div>
-              )
-            })}
+              )}
+            </div>
+
+            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+              Use <b>API Names</b> tab to see the accepted field names and add custom fields.
+            </p>
           </div>
         </Card>
       )}
 
-      {/* Note */}
-      <div className="flex gap-2.5 px-4 py-3 rounded-xl border" style={{ background: 'var(--color-brand-50)', borderColor: 'var(--color-brand)' + '30' }}>
-        <RefreshCw size={14} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} />
-        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-          Copy the generated webhook URL into your external form or service. Incoming submissions will be created as new leads.
-          <span className="font-600"> The receiving endpoint is being set up</span> — configuration is saved and ready to connect.
-        </p>
-      </div>
+      {/* ── Tab: API Names ───────────────────────────────────── */}
+      {tab === 'api-names' && (
+        <Card className="p-5">
+          <div className="flex items-start justify-between gap-3 mb-4 pb-4 border-b border-(--color-border)">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--color-brand-50)' }}>
+                <Lock size={16} style={{ color: 'var(--color-brand)' }} />
+              </div>
+              <div>
+                <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>API Names</p>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Field names to use when sending data via API. System fields are read-only; you can add custom fields below.</p>
+              </div>
+            </div>
+            {!addingField && editingId === null && (
+              <button type="button" onClick={startAdd}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
+                style={{ color: 'var(--color-brand)' }}>
+                <Plus size={13} /> Add field
+              </button>
+            )}
+          </div>
+
+          {/* Entity selector */}
+          <div className="flex gap-1 mb-4 p-1 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            {ENTITIES.map(e => (
+              <button key={e.id} type="button" onClick={() => { setEntity(e.id); cancelField() }}
+                className="flex-1 py-1.5 px-3 rounded-md text-xs font-600 transition-all"
+                style={entity === e.id
+                  ? { background: 'var(--color-surface)', color: 'var(--color-brand)', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }
+                  : { color: 'var(--color-text-muted)' }}>
+                {e.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Fields table */}
+          <div className="rounded-lg border border-(--color-border) overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr style={{ background: 'var(--color-surface-2)' }}>
+                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Display Name</th>
+                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>API Name</th>
+                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Type</th>
+                  <th className="px-3 py-2 text-left font-600" style={{ color: 'var(--color-text-muted)' }}>Notes</th>
+                  <th className="px-3 py-2 w-16" />
+                </tr>
+              </thead>
+              <tbody>
+                {/* System fields */}
+                {(SYSTEM_FIELDS[entity] || []).map((f, i) => (
+                  <tr key={f.api_name} style={{ borderTop: i > 0 ? '1px solid var(--color-border)' : 'none' }}>
+                    <td className="px-3 py-2 font-500" style={{ color: 'var(--color-text-primary)' }}>{f.display}</td>
+                    <td className="px-3 py-2 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
+                    <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
+                    <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
+                    <td className="px-3 py-2 text-center"><Lock size={11} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} /></td>
+                  </tr>
+                ))}
+
+                {/* Custom fields */}
+                {currentCustom.map((f, i) => (
+                  editingId === f.id ? (
+                    <tr key={f.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                      <td colSpan={5} className="px-3 py-2">
+                        <FieldForm onSubmit={handleEditField} onCancel={cancelField} submitLabel="Save" />
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={f.id} style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-brand-50)' + '44' }}>
+                      <td className="px-3 py-2 font-500" style={{ color: 'var(--color-text-primary)' }}>
+                        <span className="text-[10px] font-700 mr-1.5 px-1.5 py-0.5 rounded" style={{ background: 'var(--color-brand)', color: '#fff' }}>custom</span>
+                        {f.display}
+                      </td>
+                      <td className="px-3 py-2 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
+                      <td className="px-3 py-2" style={{ color: 'var(--color-text-muted)' }}>{f.note}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <button type="button" onClick={() => startEdit(f)}
+                            className="p-1 rounded hover:bg-(--color-surface-2) transition-colors" style={{ color: 'var(--color-text-muted)' }}>
+                            <Pencil size={12} />
+                          </button>
+                          <button type="button" onClick={() => handleDeleteField(f.id)}
+                            className="p-1 rounded hover:bg-red-50 transition-colors" style={{ color: 'var(--color-text-muted)' }}>
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Add field form */}
+          {addingField && (
+            <div className="mt-3">
+              <FieldForm onSubmit={handleAddField} onCancel={cancelField} submitLabel="Add field" />
+            </div>
+          )}
+
+          {currentCustom.length === 0 && !addingField && (
+            <p className="mt-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
+              No custom fields yet. Click <b>Add field</b> to define fields specific to your clinic.
+            </p>
+          )}
+        </Card>
+      )}
     </div>
   )
 }

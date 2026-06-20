@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { href: '/settings/templates',     label: 'Templates',     icon: FileText,     permission: 'settings.templates' },
   { href: '/settings/services',      label: 'Services',      icon: ClipboardList,permission: 'settings.services' },
   { href: '/settings/rules',         label: 'Rules',         icon: Workflow,     permission: 'settings.rules' },
-  { href: '/settings/configuration', label: 'Configuration', icon: Plug,         permission: 'settings.configuration' },
+  { href: '/settings/configuration', label: 'Integrations',  icon: Plug,         permission: 'settings.configuration' },
   { href: '/settings/logs',          label: 'Logs',          icon: ScrollText,   permission: 'settings.logs' },
 ]
 
