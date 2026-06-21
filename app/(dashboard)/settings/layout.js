@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText,
-  ClipboardList, Stethoscope, Network, ShieldCheck, FileText, CreditCard,
+  ClipboardList, Stethoscope, Network, ShieldCheck, FileText, CreditCard, Code2,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/settings/services',      label: 'Services',      icon: ClipboardList,permission: 'settings.services' },
   { href: '/settings/rules',         label: 'Workflow Rules',icon: Workflow,     permission: 'settings.rules' },
   { href: '/settings/configuration', label: 'Integrations',  icon: Plug,         permission: 'settings.configuration' },
+  { href: '/settings/developer',     label: 'Developer Hub', icon: Code2,        permission: 'settings.configuration' },
   { href: '/settings/logs',          label: 'Logs',          icon: ScrollText,   permission: 'settings.logs' },
 ]
 
