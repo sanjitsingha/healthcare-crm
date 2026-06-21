@@ -39,6 +39,18 @@ const DEFAULT_PATIENT_STATUSES = [{ name: 'Active', color: '#10b981' }, { name: 
 const GENDERS      = ['Male', 'Female', 'Other']
 const BLOOD_GROUPS = ['A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−']
 
+// Medical History — free-text clinical sections (tabbed). Each section stores
+// { text, documents:[] } under patient.custom_data.medical[key].
+const MEDICAL_SECTIONS = [
+  { key: 'history',      label: 'Medical History',           placeholder: 'Past & chronic illnesses, family history, ongoing conditions…' },
+  { key: 'medication',   label: 'Current Medication',        placeholder: 'Drug name, dosage, frequency, since when…' },
+  { key: 'allergies',    label: 'Allergies',                 placeholder: 'Drug / food / environmental allergies and their reactions…' },
+  { key: 'surgeries',    label: 'Surgery / Hospitalization', placeholder: 'Past surgeries & hospital admissions with dates…' },
+  { key: 'lifestyle',    label: 'Lifestyle Habits',          placeholder: 'Smoking, alcohol, diet, exercise, sleep, occupational hazards…' },
+  { key: 'immunization', label: 'Immunizations',             placeholder: 'Vaccinations received and dates…' },
+  { key: 'notes',        label: 'Additional Notes',          placeholder: 'Any other relevant medical information…' },
+]
+
 // Timeline icon per activity type
 const ACTIVITY_ICON = {
   comment:       MessageSquare,
@@ -89,6 +101,12 @@ export default function PatientDetailPage({ params }) {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tasks')
   const [docTab, setDocTab] = useState('prescription')
+  // Medical History tabbed sections
+  const [medTab, setMedTab] = useState('history')
+  const [medText, setMedText] = useState({})
+  const [medSaving, setMedSaving] = useState(false)
+  const [medDocBusy, setMedDocBusy] = useState(false)
+  const medFileRef = useRef(null)
   const [pendingDoc, setPendingDoc] = useState(null) // { name, type, size, data }
   const [docNote, setDocNote] = useState('')
   const [docSaving, setDocSaving] = useState(false)
@@ -100,9 +118,6 @@ export default function PatientDetailPage({ params }) {
   const [profileSaving, setProfileSaving] = useState(false)
   const [taskOpen, setTaskOpen] = useState(false)
   const [newTask, setNewTask] = useState({ title: '', priority: 'Medium', due_date: '' })
-  const [addingRecord, setAddingRecord] = useState(false)
-  const [medEntry, setMedEntry] = useState({ diagnosis: '', treatment: '', notes: '' })
-  const [savingRecord, setSavingRecord] = useState(false)
   const [fuSort, setFuSort] = useState('scheduled_desc') // 'scheduled_desc' | 'scheduled_asc'
   const [assigningPatient, setAssigningPatient] = useState(false)
   const [appointments, setAppointments] = useState([])
@@ -298,17 +313,55 @@ export default function PatientDetailPage({ params }) {
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
-  const handleAddRecord = async (e) => {
-    e.preventDefault()
-    if (!medEntry.diagnosis.trim()) return
-    setSavingRecord(true)
+  // ── Medical History (tabbed free-text sections + per-section documents) ──
+  const handleSaveMedical = async (key) => {
+    setMedSaving(true)
     try {
-      const newHistory = [{ ...medEntry, date: new Date().toISOString() }, ...(patient.medical_history || [])]
-      await updatePatient(id, { medical_history: newHistory })
-      await logActivity('note', `Medical record added: ${medEntry.diagnosis}`)
-      await loadAll(); setAddingRecord(false); setMedEntry({ diagnosis: '', treatment: '', notes: '' })
-      await applyRules('medical_record_added')
-    } catch (e) { toast({ type: 'error', title: 'Error', message: e.message }) } finally { setSavingRecord(false) }
+      const medical = { ...(patient.custom_data?.medical || {}) }
+      const cur = medical[key] || {}
+      medical[key] = { ...cur, text: medText[key] !== undefined ? medText[key] : (cur.text || '') }
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), medical } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+      await logActivity('note', `Medical info updated: ${MEDICAL_SECTIONS.find(s => s.key === key)?.label || key}`)
+      toast({ type: 'success', title: 'Saved' })
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setMedSaving(false) }
+  }
+  const handleMedDocPick = (e, key) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    const isImage = file.type.startsWith('image/'); const isPdf = file.type === 'application/pdf'
+    if (!isImage && !isPdf) { toast({ type: 'error', title: 'Unsupported file', message: 'Only JPG/PNG images or PDF files are allowed.' }); return }
+    if (file.size > MAX_DOC_BYTES) { toast({ type: 'error', title: 'File too large', message: 'File must be under 100 KB.' }); return }
+    setMedDocBusy(true)
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const doc = {
+          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+          name: file.name, type: file.type, size: file.size, data: reader.result, uploaded_at: new Date().toISOString(),
+        }
+        const medical = { ...(patient.custom_data?.medical || {}) }
+        const cur = medical[key] || {}
+        medical[key] = { ...cur, documents: [...(cur.documents || []), doc] }
+        const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), medical } })
+        setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+        toast({ type: 'task', title: 'Document uploaded', message: file.name })
+      } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+      finally { setMedDocBusy(false) }
+    }
+    reader.readAsDataURL(file)
+  }
+  const handleDeleteMedDoc = async (key, docId) => {
+    const ok = await showConfirm({ title: 'Delete this document?', confirmLabel: 'Delete' })
+    if (!ok) return
+    try {
+      const medical = { ...(patient.custom_data?.medical || {}) }
+      const cur = medical[key] || {}
+      medical[key] = { ...cur, documents: (cur.documents || []).filter(d => d.id !== docId) }
+      const updated = await updatePatient(id, { custom_data: { ...(patient.custom_data || {}), medical } })
+      setPatient(prev => ({ ...prev, custom_data: updated.custom_data }))
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
   }
 
   // Add Follow-up inserts a blank row; values are filled inline in the table.
@@ -971,17 +1024,80 @@ export default function PatientDetailPage({ params }) {
           </div>
         </div>
 
-        {/* Medical History */}
+        {/* Medical History — tabbed free-text sections, each with documents */}
         <Card className="border-(--color-border) overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+          <div className="px-5 py-3.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
             <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}><History size={13} /> Medical History</p>
-            {!addingRecord && <Button size="sm" onClick={() => setAddingRecord(true)}><Plus size={14} /> Add Record</Button>}
           </div>
-          <div className="p-5">
-            <div className="space-y-4">
-              {addingRecord && <form onSubmit={handleAddRecord} className="p-4 rounded-xl border border-(--color-border) space-y-3" style={{ background: 'var(--color-surface-2)' }}><Input label="Diagnosis / Reason for Visit *" value={medEntry.diagnosis} onChange={e => setMedEntry(m => ({ ...m, diagnosis: e.target.value }))} required /><Textarea label="Treatment / Prescription" value={medEntry.treatment} onChange={e => setMedEntry(m => ({ ...m, treatment: e.target.value }))} rows={3} /><Textarea label="Additional Notes" value={medEntry.notes} onChange={e => setMedEntry(m => ({ ...m, notes: e.target.value }))} rows={2} /><div className="flex justify-end gap-2"><Button variant="secondary" size="sm" type="button" onClick={() => setAddingRecord(false)}>Cancel</Button><Button size="sm" type="submit" disabled={savingRecord}>{savingRecord ? 'Saving...' : <><Save size={13} /> Save Record</>}</Button></div></form>}{!patient.medical_history?.length && !addingRecord ? <div className="py-16 text-center border border-dashed rounded-xl border-(--color-border)"><History size={28} className="mx-auto mb-2 opacity-30" /><p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No medical records yet.</p></div> : <div className="space-y-3">{(patient.medical_history || []).map((rec, i) => <div key={i} className="p-4 rounded-xl border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}><p className="text-[10px] font-600 uppercase mb-0.5" style={{ color: 'var(--color-brand)' }}>{rec.date ? format(new Date(rec.date), 'MMM d, yyyy') : '—'}</p><p className="text-sm font-700">{rec.diagnosis}</p>{rec.treatment && <p className="text-xs mt-2">{rec.treatment}</p>}</div>)}</div>}
-            </div>
+
+          {/* Section sub-tabs */}
+          <div className="flex overflow-x-auto border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+            {MEDICAL_SECTIONS.map(s => {
+              const sec = patient.custom_data?.medical?.[s.key]
+              const filled = !!(sec?.text?.trim()) || (sec?.documents?.length > 0)
+              return (
+                <button key={s.key} onClick={() => setMedTab(s.key)}
+                  className={clsx('whitespace-nowrap flex items-center gap-1.5 px-4 py-3 text-xs font-600 border-b-2', medTab === s.key ? 'border-(--color-brand) bg-(--color-surface)' : 'border-transparent')}
+                  style={medTab === s.key ? { color: 'var(--color-brand)' } : { color: 'var(--color-text-muted)' }}>
+                  {s.label}
+                  {filled && <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'var(--color-brand)' }} />}
+                </button>
+              )
+            })}
           </div>
+
+          {/* Active section */}
+          {(() => {
+            const sec = MEDICAL_SECTIONS.find(s => s.key === medTab)
+            const saved = patient.custom_data?.medical?.[medTab] || {}
+            const text = medText[medTab] !== undefined ? medText[medTab] : (saved.text || '')
+            const dirty = medText[medTab] !== undefined && medText[medTab] !== (saved.text || '')
+            const docs = saved.documents || []
+            const fmtSize = b => b >= 1024 ? `${(b / 1024).toFixed(0)} KB` : `${b} B`
+            return (
+              <div className="p-5 space-y-3">
+                <Textarea label={sec.label} placeholder={sec.placeholder} rows={6}
+                  value={text} onChange={e => setMedText(t => ({ ...t, [medTab]: e.target.value }))} />
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={() => handleSaveMedical(medTab)} disabled={medSaving || !dirty}>
+                    {medSaving ? 'Saving…' : <><Save size={13} /> Save</>}
+                  </Button>
+                </div>
+
+                {/* Per-section documents */}
+                <div className="pt-3 border-t border-(--color-border)">
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <p className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Documents · PDF or JPG · under 100 KB</p>
+                    <input ref={medFileRef} type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={e => handleMedDocPick(e, medTab)} />
+                    <Button size="sm" variant="secondary" type="button" disabled={medDocBusy} onClick={() => medFileRef.current?.click()}>
+                      <Upload size={13} /> {medDocBusy ? 'Uploading…' : 'Upload'}
+                    </Button>
+                  </div>
+                  {docs.length === 0 ? (
+                    <p className="text-xs py-5 text-center rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>
+                      No documents for {sec.label} yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {docs.map(d => (
+                        <div key={d.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                          {d.type?.startsWith('image/')
+                            ? <img src={d.data} alt="" className="w-9 h-9 object-cover rounded border border-(--color-border)" />
+                            : <div className="w-9 h-9 rounded flex items-center justify-center border border-(--color-border)" style={{ background: 'var(--color-surface)' }}><FileText size={16} style={{ color: 'var(--color-brand)' }} /></div>}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{d.name}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{fmtSize(d.size)}{d.uploaded_at ? ` · ${format(new Date(d.uploaded_at), 'MMM d, yyyy')}` : ''}</p>
+                          </div>
+                          <a href={d.data} download={d.name} className="p-1.5 rounded-lg hover:bg-(--color-surface) transition-colors" style={{ color: 'var(--color-text-muted)' }} title="Download"><Download size={14} /></a>
+                          <button type="button" onClick={() => handleDeleteMedDoc(medTab, d.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" style={{ color: 'var(--color-text-muted)' }} title="Delete"><Trash2 size={14} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         </Card>
 
         {/* Documents */}
