@@ -158,6 +158,32 @@ const WA_PROVIDERS = {
   },
 }
 
+// WhatsApp status + technical request-preview helpers.
+const WA_REQUIRED = { wati: ['endpoint', 'access_token'], interakt: ['api_key'], msg91: ['authkey', 'integrated_number'], custom: ['url'] }
+function waReadyOf(wa) {
+  const need = WA_REQUIRED[wa?.provider] || []
+  return need.length > 0 && need.every((k) => String(wa?.[k] || '').trim())
+}
+function waEndpoint(wa) {
+  switch (wa?.provider) {
+    case 'wati':     return wa.endpoint ? `${String(wa.endpoint).replace(/\/+$/, '')}/api/v1/sendTemplateMessage` : '<endpoint>/api/v1/sendTemplateMessage'
+    case 'interakt': return 'https://api.interakt.ai/v1/public/message/'
+    case 'msg91':    return 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/'
+    case 'custom':   return wa.url || '<your endpoint>'
+    default:         return '—'
+  }
+}
+function waAuthLine(wa) {
+  const mask = (s) => (s ? '••••' + String(s).slice(-4) : '••••••••')
+  switch (wa?.provider) {
+    case 'wati':     return `Authorization: Bearer ${mask(wa.access_token)}`
+    case 'interakt': return `Authorization: Basic ${mask(wa.api_key)}`
+    case 'msg91':    return `authkey: ${mask(wa.authkey)}`
+    case 'custom':   return `${wa.auth_header || 'Authorization'}: ${mask(wa.auth_value)}`
+    default:         return ''
+  }
+}
+
 // ── API Names — entity definitions ─────────────────────────────
 const ENTITIES = [
   { id: 'leads',         label: 'Lead Page' },
@@ -1059,119 +1085,128 @@ export default function ConfigurationPage() {
       })()}
 
       {/* ── Tab: WhatsApp ────────────────────────────────────── */}
-      {tab === 'messaging' && (
-        <>
-          <Card className="p-5">
-            <SectionHead icon={MessageCircle} title="WhatsApp Messaging"
-              description="Connect your WhatsApp Business API provider so the CRM can send messages" />
-            <div className="space-y-3">
-
-              {/* Enable */}
-              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'var(--color-surface-2)' }}>
-                <div>
-                  <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Enable WhatsApp sending</p>
-                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Turn on once your credentials are saved and a test succeeds.</p>
+      {tab === 'messaging' && (() => {
+        const waDef = WA_PROVIDERS[wa.provider] || WA_PROVIDERS.wati
+        const waReady = waReadyOf(wa)
+        const status = wa.enabled && waReady
+          ? { label: 'CONNECTED', dot: '#22c55e', color: '#15803d', bg: '#dcfce7' }
+          : waReady
+            ? { label: 'READY · DISABLED', dot: '#f59e0b', color: '#b45309', bg: '#fef3c7' }
+            : { label: 'NOT CONFIGURED', dot: '#94a3b8', color: '#64748b', bg: 'var(--color-surface-2)' }
+        return (
+          <Card className="p-0 overflow-hidden">
+            {/* Console header */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#dcfce7' }}>
+                  <MessageCircle size={15} style={{ color: '#15803d' }} />
                 </div>
-                <Switch checked={!!wa.enabled} onChange={() => setWa((w) => ({ ...w, enabled: !w.enabled }))} />
+                <div className="min-w-0">
+                  <p className="text-sm font-700 leading-tight" style={{ color: 'var(--color-text-primary)' }}>WhatsApp Gateway</p>
+                  <p className="text-[11px] font-mono leading-tight truncate" style={{ color: 'var(--color-text-muted)' }}>provider: {wa.provider || 'wati'}</p>
+                </div>
               </div>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-800 px-2 py-1 rounded-full tracking-wider shrink-0"
+                style={{ background: status.bg, color: status.color }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: status.dot }} />
+                {status.label}
+              </span>
+            </div>
 
-              {/* Provider */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Provider</label>
+            <div className="p-4 space-y-4">
+              {/* Controls row: provider + reveal + enable + save */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <select value={wa.provider || 'wati'} onChange={(e) => setWa((w) => ({ ...w, provider: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>
+                  className="px-2.5 py-1.5 rounded-lg border text-xs font-600 outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
                   {Object.entries(WA_PROVIDERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
-                <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{WA_PROVIDERS[wa.provider]?.hint}</p>
+                <button type="button" onClick={() => setWaReveal((v) => !v)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-(--color-border) text-[11px] font-600 hover:bg-(--color-surface-2) transition-colors"
+                  style={{ color: 'var(--color-text-muted)' }}>
+                  {waReveal ? <EyeOff size={12} /> : <Eye size={12} />}{waReveal ? 'Hide' : 'Reveal'} secrets
+                </button>
+                <div className="flex-1" />
+                <label className="inline-flex items-center gap-2 text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+                  Enabled
+                  <Switch checked={!!wa.enabled} onChange={() => setWa((w) => ({ ...w, enabled: !w.enabled }))} />
+                </label>
+                <Button size="sm" onClick={handleSaveWa} disabled={waBusy}>{waBusy ? 'Saving…' : 'Save'}</Button>
               </div>
 
-              {/* Dynamic credential fields */}
-              {(WA_PROVIDERS[wa.provider]?.fields || []).map((f) => (
-                <div key={f.key} className="space-y-1.5">
-                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{f.label}</label>
-                  {f.textarea ? (
-                    <textarea value={wa[f.key] || ''} onChange={(e) => setWaField(f.key, e.target.value)} placeholder={f.placeholder} rows={3}
-                      className="w-full px-3 py-2 rounded-lg border text-xs font-mono outline-none resize-y"
-                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
-                  ) : (
-                    <div className="flex items-center gap-2">
+              {/* Credentials — env-style key/value rows */}
+              <div className="rounded-lg border border-(--color-border) divide-y divide-(--color-border) overflow-hidden">
+                {(waDef.fields || []).map((f) => (
+                  <div key={f.key} className="flex items-stretch" style={{ background: 'var(--color-surface)' }}>
+                    <div className="w-40 shrink-0 flex items-center gap-1 px-3 py-2 border-r border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                      <code className="text-[11px] font-700" style={{ color: 'var(--color-brand)' }}>{f.key}</code>
+                      {(WA_REQUIRED[wa.provider] || []).includes(f.key) && <span style={{ color: '#dc2626' }}>*</span>}
+                    </div>
+                    {f.textarea ? (
+                      <textarea value={wa[f.key] || ''} onChange={(e) => setWaField(f.key, e.target.value)} placeholder={f.placeholder} rows={2}
+                        className="flex-1 px-3 py-2 text-[11px] font-mono outline-none resize-y bg-transparent"
+                        style={{ color: 'var(--color-text-primary)' }} />
+                    ) : (
                       <input type={f.secret && !waReveal ? 'password' : 'text'} value={wa[f.key] || ''}
                         onChange={(e) => setWaField(f.key, e.target.value)} placeholder={f.placeholder}
-                        className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
-                        style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
-                      {f.secret && (
-                        <button type="button" onClick={() => setWaReveal((v) => !v)}
-                          className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
-                          style={{ color: 'var(--color-text-muted)' }}>
-                          {waReveal ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              <div className="flex justify-end">
-                <Button size="sm" onClick={handleSaveWa} disabled={waBusy}>{waBusy ? 'Saving…' : 'Save settings'}</Button>
+                        className="flex-1 px-3 py-2 text-[11px] font-mono outline-none bg-transparent"
+                        style={{ color: 'var(--color-text-primary)' }} />
+                    )}
+                  </div>
+                ))}
               </div>
-            </div>
-          </Card>
+              <p className="text-[11px] -mt-1" style={{ color: 'var(--color-text-muted)' }}>{waDef.hint}</p>
 
-          {/* Send test */}
-          <Card className="p-5">
-            <SectionHead icon={MessageCircle} title="Send test message"
-              description="Verify the connection. Proactive messages must use an approved template name." />
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>To (WhatsApp number)</label>
+              {/* Request preview — terminal block */}
+              <div className="rounded-lg overflow-hidden border border-(--color-border) text-[11px]" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ background: '#1e293b' }}>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#ef4444' }} />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#f59e0b' }} />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#22c55e' }} />
+                  <span className="ml-2 text-[10px] uppercase tracking-widest" style={{ color: '#94a3b8' }}>outbound request</span>
+                </div>
+                <div className="px-3 py-2.5 space-y-1 overflow-x-auto" style={{ background: '#0f172a' }}>
+                  <div style={{ color: '#e2e8f0' }}><span style={{ color: '#38bdf8' }}>POST</span> {waEndpoint(wa)}</div>
+                  <div style={{ color: '#94a3b8' }}>{waAuthLine(wa)}</div>
+                  <div style={{ color: '#64748b' }}>Content-Type: application/json</div>
+                </div>
+              </div>
+
+              {/* Compact inline test */}
+              <div className="pt-3 border-t border-(--color-border)">
+                <p className="text-[10px] font-700 uppercase tracking-wide mb-2" style={{ color: 'var(--color-text-muted)' }}>Test send</p>
+                <div className="flex items-center gap-2 flex-wrap">
                   <input value={test.to} onChange={(e) => setTest((t) => ({ ...t, to: e.target.value }))} placeholder="+9198xxxxxxxx"
-                    className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+                    className="w-40 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono outline-none"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  <input value={test.template} onChange={(e) => setTest((t) => ({ ...t, template: e.target.value }))} placeholder="template_name"
+                    className="flex-1 min-w-32 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono outline-none"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  <input value={test.params} onChange={(e) => setTest((t) => ({ ...t, params: e.target.value }))} placeholder="var1, var2"
+                    className="flex-1 min-w-28 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono outline-none"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                  <Button size="sm" onClick={handleSendTest} disabled={testBusy}>{testBusy ? '…' : 'Send'}</Button>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Template name</label>
-                  <input value={test.template} onChange={(e) => setTest((t) => ({ ...t, template: e.target.value }))} placeholder="appointment_reminder"
-                    className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Template variables (comma-separated)</label>
-                <input value={test.params} onChange={(e) => setTest((t) => ({ ...t, params: e.target.value }))} placeholder="John, 5 Jun · 3:00 PM"
-                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Or free text <span style={{ color: 'var(--color-text-muted)' }}>(session message — only delivers within 24h of the patient messaging you)</span></label>
-                <input value={test.text} onChange={(e) => setTest((t) => ({ ...t, text: e.target.value }))} placeholder="Hello from the clinic"
-                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
-              </div>
-              <div className="flex justify-end">
-                <Button size="sm" onClick={handleSendTest} disabled={testBusy}>{testBusy ? 'Sending…' : 'Send test'}</Button>
-              </div>
 
-              {testResult && (
-                <div className="rounded-lg border p-3 text-[11px]"
-                  style={{
-                    background: testResult.ok ? '#f0fdf4' : '#fef2f2',
-                    borderColor: testResult.ok ? '#16a34a55' : '#dc262655',
-                    color: testResult.ok ? '#15803d' : '#b91c1c',
-                  }}>
-                  <p className="font-700 mb-1">
-                    {testResult.ok ? 'Sent ✓' : 'Failed ✗'}{testResult.status ? ` · HTTP ${testResult.status}` : ''}
-                  </p>
-                  <pre className="whitespace-pre-wrap break-all font-mono" style={{ color: 'var(--color-text-secondary)' }}>
-                    {JSON.stringify(testResult.response ?? testResult.error ?? testResult, null, 2)}
-                  </pre>
-                </div>
-              )}
+                {testResult && (
+                  <div className="mt-2 text-[11px] font-mono">
+                    <span className="inline-flex items-center gap-1 font-700 px-1.5 py-0.5 rounded"
+                      style={{ background: testResult.ok ? '#dcfce7' : '#fee2e2', color: testResult.ok ? '#15803d' : '#b91c1c' }}>
+                      {testResult.ok ? '✓ 200' : `✗ ${testResult.status || 'ERR'}`}
+                    </span>
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>response</summary>
+                      <pre className="mt-1 whitespace-pre-wrap break-all px-2.5 py-2 rounded-lg" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }}>
+                        {JSON.stringify(testResult.response ?? testResult.error ?? testResult, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
-        </>
-      )}
+        )
+      })()}
       </div>
     </div>
   )
