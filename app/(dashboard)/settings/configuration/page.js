@@ -9,7 +9,7 @@ import {
 import { Button, Card, Input, Switch } from '@/components/ui'
 import { GoogleFormsLogo, MetaLogo, ZapierLogo } from '@/components/crm/BrandLogos'
 import { useOrg } from '@/lib/context/OrgContext'
-import { updateOrganization, getOrganization, generateOrgApiKey } from '@/lib/supabase/queries'
+import { updateOrganization, getOrganization } from '@/lib/supabase/queries'
 import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 
