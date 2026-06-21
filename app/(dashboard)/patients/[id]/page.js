@@ -1055,45 +1055,54 @@ export default function PatientDetailPage({ params }) {
             const docs = saved.documents || []
             const fmtSize = b => b >= 1024 ? `${(b / 1024).toFixed(0)} KB` : `${b} B`
             return (
-              <div className="p-5 space-y-3">
-                <Textarea label={sec.label} placeholder={sec.placeholder} rows={6}
-                  value={text} onChange={e => setMedText(t => ({ ...t, [medTab]: e.target.value }))} />
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={() => handleSaveMedical(medTab)} disabled={medSaving || !dirty}>
-                    {medSaving ? 'Saving…' : <><Save size={13} /> Save</>}
-                  </Button>
-                </div>
-
-                {/* Per-section documents */}
-                <div className="pt-3 border-t border-(--color-border)">
-                  <div className="flex items-center justify-between mb-2 gap-2">
-                    <p className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Documents · PDF or JPG · under 100 KB</p>
-                    <input ref={medFileRef} type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={e => handleMedDocPick(e, medTab)} />
-                    <Button size="sm" variant="secondary" type="button" disabled={medDocBusy} onClick={() => medFileRef.current?.click()}>
-                      <Upload size={13} /> {medDocBusy ? 'Uploading…' : 'Upload'}
-                    </Button>
-                  </div>
-                  {docs.length === 0 ? (
-                    <p className="text-xs py-5 text-center rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>
-                      No documents for {sec.label} yet.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {docs.map(d => (
-                        <div key={d.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                          {d.type?.startsWith('image/')
-                            ? <img src={d.data} alt="" className="w-9 h-9 object-cover rounded border border-(--color-border)" />
-                            : <div className="w-9 h-9 rounded flex items-center justify-center border border-(--color-border)" style={{ background: 'var(--color-surface)' }}><FileText size={16} style={{ color: 'var(--color-brand)' }} /></div>}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{d.name}</p>
-                            <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{fmtSize(d.size)}{d.uploaded_at ? ` · ${format(new Date(d.uploaded_at), 'MMM d, yyyy')}` : ''}</p>
-                          </div>
-                          <a href={d.data} download={d.name} className="p-1.5 rounded-lg hover:bg-(--color-surface) transition-colors" style={{ color: 'var(--color-text-muted)' }} title="Download"><Download size={14} /></a>
-                          <button type="button" onClick={() => handleDeleteMedDoc(medTab, d.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" style={{ color: 'var(--color-text-muted)' }} title="Delete"><Trash2 size={14} /></button>
-                        </div>
-                      ))}
+              <div className="p-5">
+                <div className="flex flex-col md:flex-row gap-4 items-start">
+                  {/* Left — 80%: free-text */}
+                  <div className="w-full md:w-4/5 space-y-3">
+                    <Textarea label={sec.label} placeholder={sec.placeholder} rows={10}
+                      value={text} onChange={e => setMedText(t => ({ ...t, [medTab]: e.target.value }))} />
+                    <div className="flex justify-end">
+                      <Button size="sm" onClick={() => handleSaveMedical(medTab)} disabled={medSaving || !dirty}>
+                        {medSaving ? 'Saving…' : <><Save size={13} /> Save</>}
+                      </Button>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Right — 20%: documents */}
+                  <div className="w-full md:w-1/5 md:border-l md:border-(--color-border) md:pl-4">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <p className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Docs</p>
+                      <input ref={medFileRef} type="file" accept="image/jpeg,image/png,application/pdf" className="hidden" onChange={e => handleMedDocPick(e, medTab)} />
+                      <button type="button" disabled={medDocBusy} onClick={() => medFileRef.current?.click()}
+                        className="inline-flex items-center gap-1 text-[11px] font-600 px-2 py-1 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors" style={{ color: 'var(--color-brand)' }}>
+                        <Upload size={12} /> {medDocBusy ? '…' : 'Add'}
+                      </button>
+                    </div>
+                    <p className="text-[9px] mb-2" style={{ color: 'var(--color-text-muted)' }}>PDF / JPG · under 100 KB</p>
+                    {docs.length === 0 ? (
+                      <p className="text-[11px] py-4 text-center rounded-lg border border-dashed border-(--color-border)" style={{ color: 'var(--color-text-muted)' }}>No files</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {docs.map(d => (
+                          <div key={d.id} className="p-2 rounded-lg border border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                            <div className="flex items-center gap-1.5">
+                              {d.type?.startsWith('image/')
+                                ? <img src={d.data} alt="" className="w-7 h-7 object-cover rounded border border-(--color-border) shrink-0" />
+                                : <div className="w-7 h-7 rounded flex items-center justify-center border border-(--color-border) shrink-0" style={{ background: 'var(--color-surface)' }}><FileText size={13} style={{ color: 'var(--color-brand)' }} /></div>}
+                              <p className="flex-1 min-w-0 text-[11px] font-600 truncate" style={{ color: 'var(--color-text-primary)' }} title={d.name}>{d.name}</p>
+                            </div>
+                            <div className="flex items-center justify-between mt-1.5">
+                              <span className="text-[9px]" style={{ color: 'var(--color-text-muted)' }}>{fmtSize(d.size)}</span>
+                              <div className="flex items-center gap-0.5">
+                                <a href={d.data} download={d.name} className="p-1 rounded hover:bg-(--color-surface) transition-colors" style={{ color: 'var(--color-text-muted)' }} title="Download"><Download size={12} /></a>
+                                <button type="button" onClick={() => handleDeleteMedDoc(medTab, d.id)} className="p-1 rounded hover:bg-red-50 transition-colors" style={{ color: 'var(--color-text-muted)' }} title="Delete"><Trash2 size={12} /></button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )
