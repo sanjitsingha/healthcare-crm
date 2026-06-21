@@ -118,7 +118,45 @@ const TABS = [
   { id: 'integrations', label: 'Configuration', icon: Settings2 },
   { id: 'api-access',   label: 'API Access',    icon: Key },
   { id: 'api-names',    label: 'API Names',     icon: Tag },
+  { id: 'messaging',    label: 'WhatsApp',      icon: MessageCircle },
 ]
+
+// ── WhatsApp provider catalog (outbound) ───────────────────────
+const WA_PROVIDERS = {
+  wati: {
+    label: 'WATI',
+    hint: 'Find your API endpoint + access token in WATI → Settings → API Docs / Integrations.',
+    fields: [
+      { key: 'endpoint', label: 'API Endpoint', placeholder: 'https://live-server-xxxxx.wati.io' },
+      { key: 'access_token', label: 'Access Token', secret: true },
+    ],
+  },
+  interakt: {
+    label: 'Interakt',
+    hint: 'Interakt → Settings → Developer Settings → copy the Base64 Secret Key.',
+    fields: [
+      { key: 'api_key', label: 'API Key (Base64 secret)', secret: true },
+    ],
+  },
+  msg91: {
+    label: 'MSG91',
+    hint: 'MSG91 → WhatsApp → your integrated number; Auth Key is under Settings → API.',
+    fields: [
+      { key: 'authkey', label: 'Auth Key', secret: true },
+      { key: 'integrated_number', label: 'WhatsApp Number', placeholder: '15558xxxxxxx' },
+    ],
+  },
+  custom: {
+    label: 'Generic / Custom REST',
+    hint: 'Any provider with a POST endpoint. Use {{to}}, {{text}}, {{template}}, {{params}} in the body template.',
+    fields: [
+      { key: 'url', label: 'POST URL', placeholder: 'https://api.yourprovider.com/messages' },
+      { key: 'auth_header', label: 'Auth Header Name', placeholder: 'Authorization' },
+      { key: 'auth_value', label: 'Auth Header Value', secret: true, placeholder: 'Bearer xxxxx' },
+      { key: 'body_template', label: 'JSON Body Template', textarea: true, placeholder: '{"to":"{{to}}","template":"{{template}}","text":"{{text}}"}' },
+    ],
+  },
+}
 
 // ── API Names — entity definitions ─────────────────────────────
 const ENTITIES = [
@@ -452,6 +490,14 @@ export default function ConfigurationPage() {
   const [fieldForm, setFieldForm]     = useState({ display: '', api_name: '', type: 'text', note: '' })
   const [fieldBusy, setFieldBusy]     = useState(false)
 
+  // ── WhatsApp messaging state ─────────────────────────────────
+  const [wa, setWa]           = useState(() => localSettings.whatsapp || { provider: 'wati', enabled: false })
+  const [waBusy, setWaBusy]   = useState(false)
+  const [waReveal, setWaReveal] = useState(false)
+  const [test, setTest]       = useState({ to: '', template: '', params: '', text: '' })
+  const [testBusy, setTestBusy] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
   // ── Save helper — always merges into latest localSettings ────
@@ -460,6 +506,42 @@ export default function ConfigurationPage() {
     await updateOrganization(orgId, { settings: updated })
     setLocalSettings(updated)
     return updated
+  }
+
+  // ── WhatsApp handlers ────────────────────────────────────────
+  const setWaField = (key, val) => setWa((w) => ({ ...w, [key]: val }))
+
+  const handleSaveWa = async () => {
+    setWaBusy(true)
+    try { await saveSettings({ whatsapp: wa }); toast({ type: 'success', title: 'WhatsApp settings saved' }) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setWaBusy(false) }
+  }
+
+  const handleSendTest = async () => {
+    if (!test.to.trim()) { toast({ type: 'error', title: 'Enter a recipient number' }); return }
+    setTestBusy(true); setTestResult(null)
+    try {
+      await saveSettings({ whatsapp: wa }) // ensure latest creds are persisted before the test
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgId,
+          to: test.to.trim(),
+          templateName: test.template.trim() || undefined,
+          params: test.params,
+          text: test.text.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({ ok: false, error: 'Unreadable response' }))
+      setTestResult(data)
+      if (data.ok) toast({ type: 'success', title: 'Test message sent' })
+    } catch (err) {
+      setTestResult({ ok: false, error: err.message })
+    } finally {
+      setTestBusy(false)
+    }
   }
 
   // ── Integrations handlers ────────────────────────────────────
@@ -975,6 +1057,121 @@ export default function ConfigurationPage() {
           </Card>
         )
       })()}
+
+      {/* ── Tab: WhatsApp ────────────────────────────────────── */}
+      {tab === 'messaging' && (
+        <>
+          <Card className="p-5">
+            <SectionHead icon={MessageCircle} title="WhatsApp Messaging"
+              description="Connect your WhatsApp Business API provider so the CRM can send messages" />
+            <div className="space-y-3">
+
+              {/* Enable */}
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'var(--color-surface-2)' }}>
+                <div>
+                  <p className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Enable WhatsApp sending</p>
+                  <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Turn on once your credentials are saved and a test succeeds.</p>
+                </div>
+                <Switch checked={!!wa.enabled} onChange={() => setWa((w) => ({ ...w, enabled: !w.enabled }))} />
+              </div>
+
+              {/* Provider */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Provider</label>
+                <select value={wa.provider || 'wati'} onChange={(e) => setWa((w) => ({ ...w, provider: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }}>
+                  {Object.entries(WA_PROVIDERS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{WA_PROVIDERS[wa.provider]?.hint}</p>
+              </div>
+
+              {/* Dynamic credential fields */}
+              {(WA_PROVIDERS[wa.provider]?.fields || []).map((f) => (
+                <div key={f.key} className="space-y-1.5">
+                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>{f.label}</label>
+                  {f.textarea ? (
+                    <textarea value={wa[f.key] || ''} onChange={(e) => setWaField(f.key, e.target.value)} placeholder={f.placeholder} rows={3}
+                      className="w-full px-3 py-2 rounded-lg border text-xs font-mono outline-none resize-y"
+                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input type={f.secret && !waReveal ? 'password' : 'text'} value={wa[f.key] || ''}
+                        onChange={(e) => setWaField(f.key, e.target.value)} placeholder={f.placeholder}
+                        className="flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none"
+                        style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+                      {f.secret && (
+                        <button type="button" onClick={() => setWaReveal((v) => !v)}
+                          className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors shrink-0"
+                          style={{ color: 'var(--color-text-muted)' }}>
+                          {waReveal ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div className="flex justify-end">
+                <Button size="sm" onClick={handleSaveWa} disabled={waBusy}>{waBusy ? 'Saving…' : 'Save settings'}</Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Send test */}
+          <Card className="p-5">
+            <SectionHead icon={MessageCircle} title="Send test message"
+              description="Verify the connection. Proactive messages must use an approved template name." />
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>To (WhatsApp number)</label>
+                  <input value={test.to} onChange={(e) => setTest((t) => ({ ...t, to: e.target.value }))} placeholder="+9198xxxxxxxx"
+                    className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Template name</label>
+                  <input value={test.template} onChange={(e) => setTest((t) => ({ ...t, template: e.target.value }))} placeholder="appointment_reminder"
+                    className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Template variables (comma-separated)</label>
+                <input value={test.params} onChange={(e) => setTest((t) => ({ ...t, params: e.target.value }))} placeholder="John, 5 Jun · 3:00 PM"
+                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Or free text <span style={{ color: 'var(--color-text-muted)' }}>(session message — only delivers within 24h of the patient messaging you)</span></label>
+                <input value={test.text} onChange={(e) => setTest((t) => ({ ...t, text: e.target.value }))} placeholder="Hello from the clinic"
+                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text-primary)' }} />
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" onClick={handleSendTest} disabled={testBusy}>{testBusy ? 'Sending…' : 'Send test'}</Button>
+              </div>
+
+              {testResult && (
+                <div className="rounded-lg border p-3 text-[11px]"
+                  style={{
+                    background: testResult.ok ? '#f0fdf4' : '#fef2f2',
+                    borderColor: testResult.ok ? '#16a34a55' : '#dc262655',
+                    color: testResult.ok ? '#15803d' : '#b91c1c',
+                  }}>
+                  <p className="font-700 mb-1">
+                    {testResult.ok ? 'Sent ✓' : 'Failed ✗'}{testResult.status ? ` · HTTP ${testResult.status}` : ''}
+                  </p>
+                  <pre className="whitespace-pre-wrap break-all font-mono" style={{ color: 'var(--color-text-secondary)' }}>
+                    {JSON.stringify(testResult.response ?? testResult.error ?? testResult, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </Card>
+        </>
+      )}
       </div>
     </div>
   )
