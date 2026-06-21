@@ -1,24 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import {
-  Workflow,
-  Plus,
-  Trash2,
-  ChevronDown,
-  Filter,
-  Zap,
-  TrendingUp,
-  UserRound,
-  CalendarClock,
-  CheckSquare,
-  Stethoscope,
-  Play,
-  History,
-  CheckCircle2,
-  AlertTriangle,
-  MinusCircle,
+  Workflow, Plus, Trash2, ChevronDown,
+  TrendingUp, UserRound, CalendarClock, CheckSquare, Stethoscope,
+  Play, History, CheckCircle2, AlertTriangle, MinusCircle, Blocks,
 } from "lucide-react";
-import { Button, Card, Input, Select, Spinner, Switch } from "@/components/ui";
+import { Button, Card, Input, Spinner, Switch } from "@/components/ui";
 import { useOrg } from "@/lib/context/OrgContext";
 import { toast } from "@/lib/toast";
 import { showConfirm } from "@/lib/confirm";
@@ -26,38 +14,25 @@ import {
   updateOrganization, getTags, getAutomationRuns,
   getLeads, getPatients, getAppointments, getTasks, getConsultations,
 } from "@/lib/supabase/queries";
-import { triggerAutomation } from "@/lib/automations/trigger";
 import {
-  RULE_TARGETS,
-  RULE_EVENTS,
-  RULE_FIELDS,
-  RULE_OPS,
-  RULE_ACTIONS,
-  FIELD_OPTIONS,
-  ACTION_KIND,
-  PRIORITIES,
-  FOLLOWUP_TYPES,
-  ruleActions,
-  eventLabel,
-  fieldOptions,
-  OP_NEEDS_VALUE,
-  FREEFORM_OPS,
-  evaluateConditions,
+  RULE_TARGETS, RULE_EVENTS, RULE_ACTIONS, ruleActions, eventLabel, evaluateConditions,
 } from "@/lib/rulesEngine";
+
+// Blockly canvas is client-only and heavy → load it lazily, off SSR.
+const RuleBlocklyCanvas = dynamic(() => import("@/components/crm/RuleBlocklyCanvas"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full rounded-xl border border-(--color-border) flex items-center justify-center" style={{ height: 560, background: "#f8fafc" }}>
+      <Spinner size={26} />
+    </div>
+  ),
+});
 
 const uid = () => crypto.randomUUID?.() || Math.random().toString(36).slice(2);
 
-const DEFAULT_LEAD_STAGES = [
-  "New",
-  "Contacted",
-  "Interested",
-  "Follow-up",
-  "Converted",
-  "Lost",
-];
+const DEFAULT_LEAD_STAGES = ["New", "Contacted", "Interested", "Follow-up", "Converted", "Lost"];
 
 const blankAction = (target = "lead") => ({ type: RULE_ACTIONS[target][0].value, value: "" });
-
 const blankRule = (target = "lead") => ({
   id: uid(),
   name: "",
@@ -66,29 +41,19 @@ const blankRule = (target = "lead") => ({
   event: RULE_EVENTS[target][0].value,
   condition_match: "all",
   conditions: [],
+  condition_groups: [],
   actions: [blankAction(target)],
 });
 
-// Map a rule target → api_fields entity key + how to fetch a sample record.
 const ENTITY_KEY = { lead: "leads", patient: "patients", consultation: "consultations" };
 
 const TARGET_META = {
-  lead:         { label: "Lead rule",         icon: TrendingUp,    color: "#1d4ed8" },
-  patient:      { label: "Patient rule",      icon: UserRound,     color: "#15803d" },
-  appointment:  { label: "Appointment rule",  icon: CalendarClock, color: "#7c3aed" },
-  task:         { label: "Task rule",         icon: CheckSquare,   color: "#b45309" },
-  consultation: { label: "Consultation rule", icon: Stethoscope,   color: "#0ea5e9" },
+  lead:         { label: "Lead",         ruleLabel: "Lead rule",         icon: TrendingUp,    color: "#1d4ed8", bg: "#dbeafe" },
+  patient:      { label: "Patient",      ruleLabel: "Patient rule",      icon: UserRound,     color: "#15803d", bg: "#dcfce7" },
+  appointment:  { label: "Appointment", ruleLabel: "Appointment rule",  icon: CalendarClock, color: "#7c3aed", bg: "#ede9fe" },
+  task:         { label: "Task",         ruleLabel: "Task rule",         icon: CheckSquare,   color: "#b45309", bg: "#fef3c7" },
+  consultation: { label: "Consultation",ruleLabel: "Consultation rule", icon: Stethoscope,   color: "#0ea5e9", bg: "#e0f2fe" },
 };
-
-async function fetchSampleEntity(target, orgId) {
-  const o = { orgId };
-  if (target === "lead") return (await getLeads(o))?.[0] || null;
-  if (target === "patient") return (await getPatients(o))?.[0] || null;
-  if (target === "appointment") return (await getAppointments(o))?.[0] || null;
-  if (target === "task") return (await getTasks(o))?.[0] || null;
-  if (target === "consultation") return (await getConsultations(o))?.[0] || null;
-  return null;
-}
 
 const RUN_STATUS_STYLE = {
   success: { bg: "#dcfce7", color: "#15803d", icon: CheckCircle2,  label: "Success" },
@@ -107,633 +72,35 @@ function sampleLabel(target, e) {
   return "record";
 }
 
-function RuleCard({ rule, stages, tags, staff, customFields = [], runs = [], orgId, onChange, onRemove }) {
-  const [open, setOpen] = useState(!rule.name);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [showRuns, setShowRuns] = useState(false);
-  const events = RULE_EVENTS[rule.target] || [];
-  const fields = RULE_FIELDS[rule.target] || [];
-  const actionTypes = RULE_ACTIONS[rule.target] || [];
-  const ruleActionList = ruleActions(rule);
-
-  // Field dropdown choices = system fields + this entity's custom fields.
-  const fieldChoices = [
-    ...fields.map((f) => ({ value: f, label: f })),
-    ...customFields.map((f) => ({ value: "custom:" + f.api_name, label: `${f.display} (custom)` })),
-  ];
-
-  // Test the (possibly unsaved) rule against the latest record of its target.
-  const runTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const sample = await fetchSampleEntity(rule.target, orgId);
-      if (!sample) {
-        setTestResult({ error: `No ${rule.target} records to test against yet.` });
-        return;
-      }
-      const matched = evaluateConditions(sample, rule, null);
-      setTestResult({ sample, matched, actions: matched ? ruleActionList : [] });
-    } catch (e) {
-      setTestResult({ error: e.message });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const patch = (p) => onChange({ ...rule, ...p });
-
-  // ── Actions (multiple) ──
-  const setActionAt = (i, p) =>
-    onChange({
-      ...rule,
-      actions: ruleActionList.map((a, idx) => (idx === i ? { ...a, ...p } : a)),
-    });
-  const addAction = () =>
-    onChange({ ...rule, action: undefined, actions: [...ruleActionList, blankAction(rule.target)] });
-  const removeAction = (i) =>
-    onChange({ ...rule, action: undefined, actions: ruleActionList.filter((_, idx) => idx !== i) });
-
-  const addCond = () =>
-    onChange({
-      ...rule,
-      conditions: [
-        ...(rule.conditions || []),
-        { field: fields[0], op: "==", value: "" },
-      ],
-    });
-  const setCond = (i, p) =>
-    onChange({
-      ...rule,
-      conditions: rule.conditions.map((c, idx) =>
-        idx === i ? { ...c, ...p } : c,
-      ),
-    });
-  const removeCond = (i) =>
-    onChange({
-      ...rule,
-      conditions: rule.conditions.filter((_, idx) => idx !== i),
-    });
-
-  const groups = rule.condition_groups || [];
-
-  const patchGroups = (condition_groups) =>
-    onChange({ ...rule, condition_groups });
-
-  const addGroup = (match = "all") =>
-    patchGroups([
-      ...groups,
-      { id: uid(), match, conditions: [] },
-    ]);
-
-  const updateGroup = (groupId, patch) =>
-    patchGroups(groups.map((g) => (g.id === groupId ? { ...g, ...patch } : g)));
-
-  const removeGroup = (groupId) =>
-    patchGroups(groups.filter((g) => g.id !== groupId));
-
-  const addCondToGroup = (groupId) =>
-    patchGroups(
-      groups.map((g) =>
-        g.id === groupId
-          ? {
-              ...g,
-              conditions: [
-                ...(g.conditions || []),
-                { field: fields[0], op: "==", value: "" },
-              ],
-            }
-          : g,
-      ),
-    );
-
-  const setGroupCond = (groupId, condIndex, patch) =>
-    patchGroups(
-      groups.map((g) =>
-        g.id === groupId
-          ? {
-              ...g,
-              conditions: (g.conditions || []).map((c, idx) =>
-                idx === condIndex ? { ...c, ...patch } : c,
-              ),
-            }
-          : g,
-      ),
-    );
-
-  const removeGroupCond = (groupId, condIndex) =>
-    patchGroups(
-      groups.map((g) =>
-        g.id === groupId
-          ? {
-              ...g,
-              conditions: (g.conditions || []).filter((_, idx) => idx !== condIndex),
-            }
-          : g,
-      ),
-    );
-
-  const moveConditionToGroup = (dragData, targetGroupId) => {
-    let moved = null;
-    let nextConditions = rule.conditions || [];
-    let nextGroups = groups.map((g) => ({ ...g, conditions: [...(g.conditions || [])] }));
-
-    if (dragData.source === "loose") {
-      moved = nextConditions[dragData.index];
-      nextConditions = nextConditions.filter((_, idx) => idx !== dragData.index);
-    } else if (dragData.source === "group") {
-      nextGroups = nextGroups.map((g) => {
-        if (g.id !== dragData.groupId) return g;
-        moved = g.conditions[dragData.index];
-        return { ...g, conditions: g.conditions.filter((_, idx) => idx !== dragData.index) };
-      });
-    }
-
-    if (!moved) return;
-    nextGroups = nextGroups.map((g) =>
-      g.id === targetGroupId ? { ...g, conditions: [...g.conditions, moved] } : g,
-    );
-    onChange({ ...rule, conditions: nextConditions, condition_groups: nextGroups });
-  };
-
-  const moveConditionToLoose = (dragData) => {
-    if (dragData.source !== "group") return;
-    let moved = null;
-    const nextGroups = groups.map((g) => {
-      if (g.id !== dragData.groupId) return g;
-      moved = (g.conditions || [])[dragData.index];
-      return { ...g, conditions: (g.conditions || []).filter((_, idx) => idx !== dragData.index) };
-    });
-    if (!moved) return;
-    onChange({
-      ...rule,
-      conditions: [...(rule.conditions || []), moved],
-      condition_groups: nextGroups,
-    });
-  };
-
-  const readDragData = (e) => {
-    try { return JSON.parse(e.dataTransfer.getData("application/json")); }
-    catch { return null; }
-  };
-
-  const renderCondition = (c, actions) => (
-    <div
-      key={actions.key}
-      draggable
-      onDragStart={actions.onDragStart}
-      className="group flex items-center gap-2 p-2 rounded-xl border border-(--color-border) cursor-grab active:cursor-grabbing transition-all hover:shadow-sm"
-      style={{ background: "var(--color-surface)" }}
-    >
-      <span className="text-[10px] font-800 px-2 py-1 rounded-lg select-none" style={{ background: "#f3e8ff", color: "#7c3aed" }}>⋮⋮</span>
-      <select
-        value={c.field}
-        onChange={(e) => actions.set({ field: e.target.value })}
-        className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none max-w-40"
-        style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
-      >
-        {fieldChoices.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-      </select>
-      <select
-        value={c.op}
-        onChange={(e) => actions.set({ op: e.target.value })}
-        className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-        style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
-      >
-        {RULE_OPS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      {(() => {
-        // is empty / is not empty take no value.
-        if (!OP_NEEDS_VALUE[c.op]) {
-          return <span className="flex-1 min-w-0 px-2 py-1.5 text-xs italic" style={{ color: "var(--color-text-muted)" }}>no value needed</span>;
-        }
-        const opts = fieldOptions(rule.target, c.field, { stages });
-        // Use a dropdown only for "is / is not" on option fields; free-form ops use text.
-        if (opts && opts.length && !FREEFORM_OPS.has(c.op)) {
-          return (
-            <select
-              value={c.value}
-              onChange={(e) => actions.set({ value: e.target.value })}
-              className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-              style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
-            >
-              <option value="">Select…</option>
-              {opts.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          );
-        }
-        const numeric = ["value", "amount"].includes(c.field);
-        const dateish = /(_at|_date)$/.test(c.field || "");
-        return (
-          <input
-            value={c.value}
-            onChange={(e) => actions.set({ value: e.target.value })}
-            placeholder={c.op === "between" ? "min,max" : c.op === "in" ? "a, b, c" : dateish ? "YYYY-MM-DD or +3d" : "value"}
-            type={numeric && c.op !== "between" ? "number" : "text"}
-            className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-            style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
-          />
-        );
-      })()}
-      <button type="button" onClick={actions.remove} className="p-1 text-gray-400 hover:text-red-500">
-        <Trash2 size={13} />
-      </button>
-    </div>
-  );
-
-  // when target changes, reset event + actions to that target's options
-  const changeTarget = (target) =>
-    onChange({
-      ...rule,
-      target,
-      event: RULE_EVENTS[target][0].value,
-      action: undefined,
-      actions: [blankAction(target)],
-      conditions: [],
-      condition_groups: [],
-    });
-
-  const tagOptions = tags
-    .filter((t) => t.page === rule.target + "s" || (!t.page && rule.target === "patient"))
-    .map((t) => ({ value: t.id, label: t.name }));
-  const staffOptions = (staff || []).map((m) => ({ value: m.id, label: m.name }));
-
-  // Render the value input(s) for an action based on its kind.
-  const renderActionValue = (a, i) => {
-    const kind = ACTION_KIND[a.type];
-    const sel = (opts, placeholder = "Select…") => (
-      <select
-        value={a.value || ""}
-        onChange={(e) => setActionAt(i, { value: e.target.value })}
-        className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border outline-none"
-        style={{ background: "var(--color-surface)", color: "var(--color-text-primary)", borderColor: a.value ? "var(--color-border)" : "#f59e0b" }}
-      >
-        <option value="">{placeholder}</option>
-        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    );
-    const txt = (key, ph, opts = {}) => (
-      <input
-        value={a[key] ?? ""}
-        onChange={(e) => setActionAt(i, { [key]: e.target.value })}
-        placeholder={ph}
-        type={opts.type || "text"}
-        className="min-w-0 px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-        style={{ background: "var(--color-surface)", color: "var(--color-text-primary)", width: opts.width || "auto", flex: opts.flex }}
-      />
-    );
-    switch (kind) {
-      case "stage":    return sel(stages.map((s) => ({ value: s, label: s })));
-      case "status":   return sel(["Active", "Inactive"].map((s) => ({ value: s, label: s })));
-      case "priority": return sel(PRIORITIES.map((s) => ({ value: s, label: s })));
-      case "source":   return sel((FIELD_OPTIONS.source || []).map((s) => ({ value: s, label: s })));
-      case "tag":      return sel(tagOptions, tagOptions.length ? "Select tag…" : "No tags for this page");
-      case "staff":    return sel(staffOptions, staffOptions.length ? "Select member…" : "No team members");
-      case "number":   return txt("value", "e.g. 5000", { type: "number", flex: 1 });
-      case "text":     return txt("value", "Note text…", { flex: 1 });
-      case "task":
-        return (
-          <>
-            {txt("title", "Task title", { flex: 2 })}
-            <select value={a.priority || "Medium"} onChange={(e) => setActionAt(i, { priority: e.target.value })}
-              className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}>
-              {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            {txt("dueInDays", "in days", { type: "number", width: "5.5rem" })}
-          </>
-        );
-      case "followup":
-        return (
-          <>
-            <select value={a.fuType || "Call"} onChange={(e) => setActionAt(i, { fuType: e.target.value })}
-              className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}>
-              {FOLLOWUP_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            {txt("inDays", "in days", { type: "number", width: "5.5rem" })}
-          </>
-        );
-      case "notify":
-        return (
-          <>
-            {txt("title", "Notification title", { flex: 1 })}
-            {txt("message", "Message", { flex: 2 })}
-          </>
-        );
-      default: return null;
-    }
-  };
-
-  return (
-    <div
-      className="rounded-2xl border border-(--color-border) overflow-hidden"
-      style={{ background: "var(--color-surface)" }}
-    >
-      {/* summary header */}
-      <div
-        className="flex items-center gap-3 px-4 py-3"
-        style={{ background: "var(--color-surface-2)" }}
-      >
-        <Switch
-          checked={rule.enabled}
-          onChange={() => patch({ enabled: !rule.enabled })}
-          title={rule.enabled ? "Enabled" : "Disabled"}
-        />
-        <div className="flex-1 min-w-0">
-          <p
-            className="text-sm font-600 truncate"
-            style={{ color: "var(--color-text-primary)" }}
-          >
-            {rule.name || "Untitled rule"}
-          </p>
-          <p
-            className="text-[11px] truncate"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            <span className="capitalize">{rule.target}</span> ·{" "}
-            {eventLabel(rule.target, rule.event)}
-            {rule.conditions?.length
-              ? ` · ${rule.condition_match === "any" ? "OR" : "AND"} · ${rule.conditions.length} condition${rule.conditions.length !== 1 ? "s" : ""}`
-              : ""}
-          </p>
-        </div>
-        <span
-          className="text-[10px] font-700 px-2 py-0.5 rounded-full capitalize"
-          style={
-            rule.target === "lead"
-              ? { background: "#dbeafe", color: "#1d4ed8" }
-              : { background: "#dcfce7", color: "#15803d" }
-          }
-        >
-          {rule.target}
-        </span>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="p-1.5 rounded-lg hover:bg-(--color-surface)"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          <ChevronDown
-            size={15}
-            style={{
-              transform: open ? "rotate(180deg)" : "none",
-              transition: "transform 0.15s",
-            }}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-
-      {open && (
-        <div className="p-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Rule name"
-              placeholder="e.g. Tag hot Meta leads"
-              value={rule.name}
-              onChange={(e) => patch({ name: e.target.value })}
-            />
-            <Select
-              label="Applies to"
-              value={rule.target}
-              onChange={(e) => changeTarget(e.target.value)}
-              options={RULE_TARGETS}
-            />
-          </div>
-
-          {/* WHEN */}
-          <div
-            className="rounded-xl border border-(--color-border) p-3"
-            style={{ background: "var(--color-surface-2)" }}
-          >
-            <p
-              className="text-[10px] font-700 uppercase tracking-wide mb-2 flex items-center gap-1.5"
-              style={{ color: "#f59e0b" }}
-            >
-              <Zap size={12} /> When
-            </p>
-            <Select
-              value={rule.event}
-              onChange={(e) => patch({ event: e.target.value })}
-              options={events.map((ev) => ({
-                value: ev.value,
-                label: ev.label,
-              }))}
-            />
-          </div>
-
-          {/* IF (conditions) */}
-          <div className="rounded-2xl border border-(--color-border) p-3" style={{ background: "var(--color-surface-2)" }}>
-            <div className="flex items-center justify-between mb-3 gap-3">
-              <div>
-                <p className="text-[10px] font-700 uppercase tracking-wide flex items-center gap-1.5" style={{ color: "#7c3aed" }}>
-                  <Filter size={12} /> If · Lego Builder
-                </p>
-                <p className="text-[11px] mt-0.5" style={{ color: "var(--color-text-muted)" }}>Drag condition blocks into AND / OR magnetic groups.</p>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                <button type="button" onClick={addCond} className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface)" style={{ color: "var(--color-brand)" }}><Plus size={12} className="inline mr-1" /> Condition</button>
-                <button type="button" onClick={() => addGroup("all")} className="text-[11px] font-800 px-2.5 py-1.5 rounded-lg" style={{ background: "#dcfce7", color: "#15803d" }}>+ AND Block</button>
-                <button type="button" onClick={() => addGroup("any")} className="text-[11px] font-800 px-2.5 py-1.5 rounded-lg" style={{ background: "#fef3c7", color: "#b45309" }}>+ OR Block</button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const data = readDragData(e); if (data) moveConditionToLoose(data); }} className="rounded-xl border border-dashed border-(--color-border) p-3" style={{ background: "var(--color-surface)" }}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-800 uppercase tracking-wide" style={{ color: "var(--color-text-muted)" }}>Loose conditions</p>
-                  {(rule.conditions || []).length > 1 && (
-                    <select value={rule.condition_match || "all"} onChange={(e) => patch({ condition_match: e.target.value })} className="px-2 py-1 text-[11px] font-700 rounded-lg border border-(--color-border) outline-none" style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}>
-                      <option value="all">AND loose conditions</option>
-                      <option value="any">OR loose conditions</option>
-                    </select>
-                  )}
-                </div>
-                {!(rule.conditions || []).length ? (
-                  <p className="text-[11px] py-3 text-center rounded-lg border border-dashed border-(--color-border)" style={{ color: "var(--color-text-muted)" }}>Drop a condition here, or click “Condition”.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {(rule.conditions || []).map((c, i) => renderCondition(c, { key: `loose-${i}`, set: (patchValue) => setCond(i, patchValue), remove: () => removeCond(i), onDragStart: (e) => e.dataTransfer.setData("application/json", JSON.stringify({ source: "loose", index: i })) }))}
-                  </div>
-                )}
-              </div>
-
-              {groups.map((group) => {
-                const isOr = group.match === "any";
-                return (
-                  <div key={group.id} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const data = readDragData(e); if (data) moveConditionToGroup(data, group.id); }} className="rounded-2xl border-2 border-dashed p-3 transition-all hover:shadow-sm" style={{ background: isOr ? "#fffbeb" : "#f0fdf4", borderColor: isOr ? "#f59e0b55" : "#16a34a55" }}>
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-900 px-2.5 py-1 rounded-lg" style={{ background: isOr ? "#f59e0b" : "#16a34a", color: "white" }}>{isOr ? "OR" : "AND"}</span>
-                        <select value={group.match || "all"} onChange={(e) => updateGroup(group.id, { match: e.target.value })} className="px-2 py-1 text-[11px] font-700 rounded-lg border border-(--color-border) outline-none" style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}>
-                          <option value="all">All inside must match</option>
-                          <option value="any">Any inside can match</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => addCondToGroup(group.id)} className="text-[11px] font-700" style={{ color: "var(--color-brand)" }}><Plus size={12} className="inline mr-1" /> Condition</button>
-                        <button type="button" onClick={() => removeGroup(group.id)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
-                      </div>
-                    </div>
-                    {!(group.conditions || []).length ? (
-                      <p className="text-[11px] py-4 text-center rounded-xl border border-dashed" style={{ color: "var(--color-text-muted)", background: "rgba(255,255,255,0.55)", borderColor: isOr ? "#f59e0b55" : "#16a34a55" }}>Magnetic drop zone — drag condition blocks here.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {(group.conditions || []).map((c, i) => renderCondition(c, { key: `g-${group.id}-${i}`, set: (patchValue) => setGroupCond(group.id, i, patchValue), remove: () => removeGroupCond(group.id, i), onDragStart: (e) => e.dataTransfer.setData("application/json", JSON.stringify({ source: "group", groupId: group.id, index: i })) }))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* THEN (actions) */}
-          <div
-            className="rounded-xl border border-(--color-border) p-3"
-            style={{ background: "var(--color-surface-2)" }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p
-                className="text-[10px] font-700 uppercase tracking-wide flex items-center gap-1.5"
-                style={{ color: "#0ea5e9" }}
-              >
-                <Workflow size={12} /> Then · do all of these
-              </p>
-              <button
-                type="button"
-                onClick={addAction}
-                className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface)"
-                style={{ color: "var(--color-brand)" }}
-              >
-                <Plus size={12} className="inline mr-1" /> Action
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              {ruleActionList.map((a, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 flex-wrap p-2 rounded-xl border border-(--color-border)"
-                  style={{ background: "var(--color-surface)" }}
-                >
-                  <select
-                    value={a.type}
-                    onChange={(e) => setActionAt(i, { type: e.target.value, value: "" })}
-                    className="px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none"
-                    style={{ background: "var(--color-surface)", color: "var(--color-text-primary)" }}
-                  >
-                    {actionTypes.map((act) => (
-                      <option key={act.value} value={act.value}>{act.label}</option>
-                    ))}
-                  </select>
-                  {renderActionValue(a, i)}
-                  {ruleActionList.length > 1 && (
-                    <button type="button" onClick={() => removeAction(i)} className="p-1 text-gray-400 hover:text-red-500">
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* TEST + RECENT RUNS */}
-          <div className="rounded-xl border border-(--color-border) p-3" style={{ background: "var(--color-surface-2)" }}>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-[10px] font-700 uppercase tracking-wide flex items-center gap-1.5" style={{ color: "#16a34a" }}>
-                <Play size={12} /> Test &amp; History
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={runTest}
-                  disabled={testing}
-                  className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface) inline-flex items-center gap-1"
-                  style={{ color: "var(--color-brand)" }}
-                >
-                  <Play size={12} /> {testing ? "Testing…" : "Test against latest record"}
-                </button>
-                {runs.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowRuns((s) => !s)}
-                    className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface) inline-flex items-center gap-1"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    <History size={12} /> {runs.length} run{runs.length !== 1 ? "s" : ""}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {testResult && (
-              <div className="mt-2 text-[11px] rounded-lg p-2.5 border border-(--color-border)" style={{ background: "var(--color-surface)" }}>
-                {testResult.error ? (
-                  <span style={{ color: "#b45309" }}>{testResult.error}</span>
-                ) : (
-                  <div className="space-y-1">
-                    <p style={{ color: "var(--color-text-secondary)" }}>
-                      Sample: <b>{sampleLabel(rule.target, testResult.sample)}</b> ·{" "}
-                      {testResult.matched ? (
-                        <span style={{ color: "#15803d", fontWeight: 700 }}>conditions MATCH ✓</span>
-                      ) : (
-                        <span style={{ color: "#b91c1c", fontWeight: 700 }}>conditions do not match ✗</span>
-                      )}
-                    </p>
-                    {testResult.matched && (
-                      <p style={{ color: "var(--color-text-muted)" }}>
-                        Would run: {testResult.actions.map((a) => a.type).join(", ") || "—"}
-                      </p>
-                    )}
-                    <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
-                      Dry run — no records were changed. Save the rule so it runs automatically on this event.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {showRuns && runs.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {runs.slice(0, 8).map((r) => {
-                  const st = RUN_STATUS_STYLE[r.status] || RUN_STATUS_STYLE.skipped;
-                  const StIcon = st.icon;
-                  return (
-                    <div key={r.id} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ background: "var(--color-surface)" }}>
-                      <span className="inline-flex items-center gap-1 font-700 px-1.5 py-0.5 rounded" style={{ background: st.bg, color: st.color }}>
-                        <StIcon size={11} /> {st.label}
-                      </span>
-                      <span style={{ color: "var(--color-text-muted)" }}>{eventLabel(r.target, r.event)}</span>
-                      {r.error && <span className="truncate" style={{ color: "#b91c1c" }} title={r.error}>· {r.error}</span>}
-                      <span className="ml-auto shrink-0" style={{ color: "var(--color-text-muted)" }}>{new Date(r.created_at).toLocaleString()}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+async function fetchSampleEntity(target, orgId) {
+  const o = { orgId };
+  if (target === "lead") return (await getLeads(o))?.[0] || null;
+  if (target === "patient") return (await getPatients(o))?.[0] || null;
+  if (target === "appointment") return (await getAppointments(o))?.[0] || null;
+  if (target === "task") return (await getTasks(o))?.[0] || null;
+  if (target === "consultation") return (await getConsultations(o))?.[0] || null;
+  return null;
 }
+
+const tagsForTarget = (allTags, target) =>
+  (allTags || []).filter((t) => (target === "lead" ? t.page === "leads" : t.page === "patients" || !t.page));
 
 export default function RulesPage() {
   const { org, orgId } = useOrg();
   const [rules, setRules] = useState([]);
   const [tags, setTags] = useState([]);
+  const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
+  const [dirty, setDirty] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [runs, setRuns] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+
+  // Test panel state (per selected rule).
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [showRuns, setShowRuns] = useState(false);
 
   const stages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map((s) =>
     typeof s === "string" ? s : s.name,
@@ -741,206 +108,276 @@ export default function RulesPage() {
 
   useEffect(() => {
     if (!orgId) return;
-    // Seed from new rules, else migrate legacy stage_rules
     const existing = org?.settings?.rules;
     if (Array.isArray(existing)) {
-      // Migrate legacy single-action rules to an actions[] array.
-      setRules(
-        existing.map((r) =>
-          Array.isArray(r.actions)
-            ? r
-            : { ...r, actions: r.action ? [r.action] : [], action: undefined },
-        ),
+      const migrated = existing.map((r) =>
+        Array.isArray(r.actions) ? r : { ...r, actions: r.action ? [r.action] : [], action: undefined },
       );
+      setRules(migrated);
+      setSelectedId((id) => id || migrated[0]?.id || null);
     } else if (Array.isArray(org?.settings?.stage_rules)) {
-      setRules(
-        org.settings.stage_rules.map((r) => ({
-          id: r.id || uid(),
-          name: "Imported rule",
-          enabled: true,
-          target: "lead",
-          event: r.event,
-          conditions: [],
-          action: { type: "set_stage", value: r.stage },
-        })),
-      );
+      const migrated = org.settings.stage_rules.map((r) => ({
+        id: r.id || uid(), name: "Imported rule", enabled: true, target: "lead",
+        event: r.event, condition_match: "all", conditions: [], condition_groups: [],
+        actions: [{ type: "set_stage", value: r.stage }],
+      }));
+      setRules(migrated);
+      setSelectedId((id) => id || migrated[0]?.id || null);
     }
-    getTags(orgId)
-      .then((t) => setTags(t || []))
-      .catch(() => setTags([]))
-      .finally(() => setLoading(false));
-    getAutomationRuns({ orgId, limit: 200 })
-      .then((r) => setRuns(r || []))
-      .catch(() => setRuns([]));
+    getTags(orgId).then((t) => setTags(t || [])).catch(() => setTags([])).finally(() => setLoading(false));
+    getAutomationRuns({ orgId, limit: 200 }).then((r) => setRuns(r || [])).catch(() => setRuns([]));
   }, [orgId, org]);
 
-  // Group recent runs by rule for the per-rule History panel.
-  const runsByRule = rules.reduce((acc, r) => {
-    acc[r.id] = runs.filter((x) => x.rule_id === r.id);
-    return acc;
-  }, {});
-
-  const [dirty, setDirty] = useState(false);
+  const selected = rules.find((r) => r.id === selectedId) || null;
+  const selectedRuns = runs.filter((x) => x.rule_id === selectedId);
 
   const addRule = (target) => {
-    setRules((prev) => [...prev, blankRule(target)]);
+    const r = blankRule(target);
+    setRules((prev) => [...prev, r]);
+    setSelectedId(r.id);
+    setDirty(true);
+    setTestResult(null);
+  };
+
+  // Canvas emits canonical fields; preserve id/name/enabled.
+  const onCanvasChange = (updated) => {
+    setRules((prev) => prev.map((r) => (r.id === selectedId ? { ...r, ...updated } : r)));
     setDirty(true);
   };
-  const updateRule = (r) => {
-    setRules((prev) => prev.map((x) => (x.id === r.id ? r : x)));
+
+  const patchSelected = (patch) => {
+    setRules((prev) => prev.map((r) => (r.id === selectedId ? { ...r, ...patch } : r)));
     setDirty(true);
   };
+
   const removeRule = async (id) => {
-    const ok = await showConfirm({ title: 'Delete this rule?', confirmLabel: 'Delete' });
+    const ok = await showConfirm({ title: "Delete this rule?", confirmLabel: "Delete" });
     if (!ok) return;
-    setRules((prev) => prev.filter((r) => r.id !== id));
+    setRules((prev) => {
+      const next = prev.filter((r) => r.id !== id);
+      if (id === selectedId) setSelectedId(next[0]?.id || null);
+      return next;
+    });
     setDirty(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateOrganization(orgId, {
-        settings: { ...(org?.settings || {}), rules },
-      });
+      await updateOrganization(orgId, { settings: { ...(org?.settings || {}), rules } });
       setSavedAt(Date.now());
       setDirty(false);
     } catch (err) {
-      toast({ type: 'error', title: 'Error', message: err.message });
+      toast({ type: "error", title: "Error", message: err.message });
     } finally {
       setSaving(false);
     }
   };
 
+  const runTest = async () => {
+    if (!selected) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const sample = await fetchSampleEntity(selected.target, orgId);
+      if (!sample) { setTestResult({ error: `No ${selected.target} records to test against yet.` }); return; }
+      const matched = evaluateConditions(sample, selected, null);
+      setTestResult({ sample, matched, actions: matched ? ruleActions(selected) : [] });
+    } catch (e) {
+      setTestResult({ error: e.message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const canvasCtx = selected && {
+    stages,
+    tags: tagsForTarget(tags, selected.target),
+    staff: org?.settings?.staff_members || [],
+    customFields: org?.settings?.api_fields?.[ENTITY_KEY[selected.target]] || [],
+  };
+
   return (
     <div className="space-y-4">
+      {/* Header */}
       <Card className="p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-start gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: "var(--color-brand-50)" }}
-            >
-              <Workflow size={16} style={{ color: "var(--color-brand)" }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--color-brand-50)" }}>
+              <Blocks size={16} style={{ color: "var(--color-brand)" }} />
             </div>
             <div>
-              <p
-                className="text-sm font-600"
-                style={{ color: "var(--color-text-primary)" }}
-              >
-                Automation Rules
-              </p>
-              <p
-                className="text-xs"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                When an event happens, optionally check conditions, then run
-                actions — across leads, patients, appointments, tasks &amp; consultations.
-                {saving
-                  ? " · Saving…"
-                  : dirty
-                    ? " · Unsaved changes"
-                    : savedAt
-                      ? " · Saved"
-                      : ""}
+              <p className="text-sm font-600" style={{ color: "var(--color-text-primary)" }}>Automation Rules</p>
+              <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+                Snap together blocks — WHEN an event happens, IF conditions match, DO actions. Runs on the server.
+                {saving ? " · Saving…" : dirty ? " · Unsaved changes" : savedAt ? " · Saved" : ""}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              {addOpen && (
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setAddOpen(false)}
-                />
-              )}
-              <Button
-                size="sm"
-                variant="secondary"
-                className="relative z-20"
-                onClick={() => setAddOpen((o) => !o)}
-              >
+              {addOpen && <div className="fixed inset-0 z-10" onClick={() => setAddOpen(false)} />}
+              <Button size="sm" variant="secondary" className="relative z-20" onClick={() => setAddOpen((o) => !o)}>
                 <Plus size={14} /> Add Rule
-                <ChevronDown
-                  size={13}
-                  style={{
-                    transform: addOpen ? "rotate(180deg)" : "none",
-                    transition: "transform 0.15s",
-                  }}
-                />
+                <ChevronDown size={13} style={{ transform: addOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
               </Button>
               {addOpen && (
-                <div
-                  className="absolute top-full right-0 mt-1.5 w-48 rounded-xl border border-(--color-border) overflow-hidden z-20"
-                  style={{
-                    background: "var(--color-surface)",
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                  }}
-                >
+                <div className="absolute top-full right-0 mt-1.5 w-48 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                  style={{ background: "var(--color-surface)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
                   {RULE_TARGETS.map(({ value }) => {
                     const meta = TARGET_META[value];
                     const Icon = meta.icon;
                     return (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => {
-                          addRule(value);
-                          setAddOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)"
-                      >
+                      <button key={value} type="button"
+                        onClick={() => { addRule(value); setAddOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)">
                         <Icon size={14} style={{ color: meta.color }} />
-                        <span style={{ color: "var(--color-text-primary)" }}>{meta.label}</span>
+                        <span style={{ color: "var(--color-text-primary)" }}>{meta.ruleLabel}</span>
                       </button>
                     );
                   })}
                 </div>
               )}
             </div>
-            <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
+            <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>{saving ? "Saving…" : "Save"}</Button>
           </div>
         </div>
       </Card>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Spinner size={28} />
-        </div>
+        <div className="flex justify-center py-12"><Spinner size={28} /></div>
       ) : rules.length === 0 ? (
         <div className="py-20 text-center border border-dashed rounded-2xl border-(--color-border)">
-          <Workflow size={32} className="mx-auto mb-3 opacity-20" />
-          <p
-            className="text-sm font-500"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            No rules yet.
-          </p>
-          <p
-            className="text-xs mt-1"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Add a Lead, Patient, Appointment, Task, or Consultation rule to get started.
+          <Blocks size={32} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm font-500" style={{ color: "var(--color-text-muted)" }}>No rules yet.</p>
+          <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+            Add a Lead, Patient, Appointment, Task, or Consultation rule to start snapping blocks.
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {rules.map((rule) => (
-            <RuleCard
-              key={rule.id}
-              rule={rule}
-              stages={stages}
-              tags={tags}
-              staff={org?.settings?.staff_members || []}
-              customFields={org?.settings?.api_fields?.[ENTITY_KEY[rule.target]] || []}
-              runs={runsByRule[rule.id] || []}
-              orgId={orgId}
-              onChange={updateRule}
-              onRemove={() => removeRule(rule.id)}
-            />
-          ))}
+        <div className="flex gap-4 items-start">
+          {/* Master: rule list */}
+          <div className="w-60 shrink-0 space-y-1.5">
+            {rules.map((r) => {
+              const meta = TARGET_META[r.target] || TARGET_META.lead;
+              const Icon = meta.icon;
+              const active = r.id === selectedId;
+              return (
+                <button key={r.id} type="button" onClick={() => { setSelectedId(r.id); setTestResult(null); }}
+                  className="w-full text-left rounded-xl border p-3 transition-all"
+                  style={active
+                    ? { borderColor: "var(--color-brand)", background: "var(--color-brand-50)" }
+                    : { borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
+                  <div className="flex items-center gap-2">
+                    <Icon size={14} style={{ color: meta.color, flexShrink: 0 }} />
+                    <span className="flex-1 min-w-0 text-sm font-600 truncate" style={{ color: "var(--color-text-primary)" }}>
+                      {r.name || "Untitled rule"}
+                    </span>
+                    <span className="w-2 h-2 rounded-full shrink-0" title={r.enabled ? "Enabled" : "Disabled"}
+                      style={{ background: r.enabled ? "#22c55e" : "#cbd5e1" }} />
+                  </div>
+                  <p className="text-[11px] mt-1 truncate" style={{ color: "var(--color-text-muted)" }}>
+                    {meta.label} · {eventLabel(r.target, r.event)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Detail: selected rule */}
+          {selected && (
+            <div className="flex-1 min-w-0 space-y-3">
+              <Card className="p-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Input
+                    placeholder="Rule name (e.g. Tag hot website leads)"
+                    value={selected.name}
+                    onChange={(e) => patchSelected({ name: e.target.value })}
+                    className="flex-1 min-w-48"
+                  />
+                  <label className="flex items-center gap-2 text-xs font-600 shrink-0" style={{ color: "var(--color-text-muted)" }}>
+                    <Switch checked={selected.enabled} onChange={() => patchSelected({ enabled: !selected.enabled })} />
+                    {selected.enabled ? "Enabled" : "Disabled"}
+                  </label>
+                  <button type="button" onClick={() => removeRule(selected.id)}
+                    className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors shrink-0">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <p className="text-[11px] mt-2" style={{ color: "var(--color-text-muted)" }}>
+                  Drag blocks from the left palette. Change the target/event on the yellow WHEN block.
+                </p>
+              </Card>
+
+              {/* Blockly canvas — keyed by rule id so switching rules reloads cleanly */}
+              <RuleBlocklyCanvas key={selected.id} rule={selected} ctx={canvasCtx} onChange={onCanvasChange} />
+
+              {/* Test + History */}
+              <Card className="p-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-[10px] font-700 uppercase tracking-wide flex items-center gap-1.5" style={{ color: "#16a34a" }}>
+                    <Play size={12} /> Test &amp; History
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={runTest} disabled={testing}
+                      className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) inline-flex items-center gap-1"
+                      style={{ color: "var(--color-brand)" }}>
+                      <Play size={12} /> {testing ? "Testing…" : "Test against latest record"}
+                    </button>
+                    {selectedRuns.length > 0 && (
+                      <button type="button" onClick={() => setShowRuns((s) => !s)}
+                        className="text-[11px] font-700 px-2.5 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) inline-flex items-center gap-1"
+                        style={{ color: "var(--color-text-muted)" }}>
+                        <History size={12} /> {selectedRuns.length} run{selectedRuns.length !== 1 ? "s" : ""}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {testResult && (
+                  <div className="mt-2 text-[11px] rounded-lg p-2.5 border border-(--color-border)" style={{ background: "var(--color-surface-2)" }}>
+                    {testResult.error ? (
+                      <span style={{ color: "#b45309" }}>{testResult.error}</span>
+                    ) : (
+                      <div className="space-y-1">
+                        <p style={{ color: "var(--color-text-secondary)" }}>
+                          Sample: <b>{sampleLabel(selected.target, testResult.sample)}</b> ·{" "}
+                          {testResult.matched
+                            ? <span style={{ color: "#15803d", fontWeight: 700 }}>conditions MATCH ✓</span>
+                            : <span style={{ color: "#b91c1c", fontWeight: 700 }}>conditions do not match ✗</span>}
+                        </p>
+                        {testResult.matched && (
+                          <p style={{ color: "var(--color-text-muted)" }}>Would run: {testResult.actions.map((a) => a.type).join(", ") || "—"}</p>
+                        )}
+                        <p className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                          Dry run — no records changed. Save the rule so it runs automatically.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {showRuns && selectedRuns.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {selectedRuns.slice(0, 8).map((r) => {
+                      const st = RUN_STATUS_STYLE[r.status] || RUN_STATUS_STYLE.skipped;
+                      const StIcon = st.icon;
+                      return (
+                        <div key={r.id} className="flex items-center gap-2 text-[11px] px-2 py-1.5 rounded-lg" style={{ background: "var(--color-surface-2)" }}>
+                          <span className="inline-flex items-center gap-1 font-700 px-1.5 py-0.5 rounded" style={{ background: st.bg, color: st.color }}>
+                            <StIcon size={11} /> {st.label}
+                          </span>
+                          <span style={{ color: "var(--color-text-muted)" }}>{eventLabel(r.target, r.event)}</span>
+                          {r.error && <span className="truncate" style={{ color: "#b91c1c" }} title={r.error}>· {r.error}</span>}
+                          <span className="ml-auto shrink-0" style={{ color: "var(--color-text-muted)" }}>{new Date(r.created_at).toLocaleString()}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
         </div>
       )}
     </div>
