@@ -26,6 +26,26 @@ function splitName(full) {
   return { first: parts[0] || '', last: parts.slice(1).join(' ') }
 }
 
+const slug = (s) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+
+// Build a lookup so posted custom-module field names resolve to their real
+// nested storage location: custom_data[moduleId][fieldId]. Keys accepted:
+// the generated api_name (slug of label), the raw label, and the field id.
+function buildModuleFieldMap(settings, page) {
+  const map = {}
+  for (const m of (settings?.modules || [])) {
+    if (m.page !== page) continue
+    for (const f of (m.fields || [])) {
+      const target = { moduleId: m.id, fieldId: f.id }
+      const reg = (k) => { if (k && !(k in map)) map[k] = target }
+      reg(slug(f.label))
+      reg(String(f.label || '').toLowerCase().trim())
+      reg(f.id)
+    }
+  }
+  return map
+}
+
 export async function POST(req) {
   try {
     // Check service key first
@@ -59,14 +79,27 @@ export async function POST(req) {
 
     // Map fields
     const lead = { organization_id: org.id, stage: body.stage || 'New' }
-    const custom = {}
+    const custom = {}                 // flat custom_data keys
+    const moduleData = {}             // custom_data[moduleId][fieldId]
+    const moduleFieldMap = buildModuleFieldMap(org.settings, 'leads')
 
     for (const [k, v] of Object.entries(body)) {
       if (k === 'name' || k === 'notes') continue
-      if (DIRECT_FIELDS.has(k)) lead[k] = v
-      else custom[k] = v
+      if (DIRECT_FIELDS.has(k)) { lead[k] = v; continue }
+      // Route custom-module field names into their nested location.
+      const hit = moduleFieldMap[k] || moduleFieldMap[slug(k)] || moduleFieldMap[String(k).toLowerCase().trim()]
+      if (hit) {
+        (moduleData[hit.moduleId] ||= {})[hit.fieldId] = v
+      } else {
+        custom[k] = v               // unknown → flat custom_data
+      }
     }
-    if (Object.keys(custom).length) lead.custom_data = custom
+
+    const custom_data = { ...custom }
+    for (const [mid, fields] of Object.entries(moduleData)) {
+      custom_data[mid] = { ...(custom_data[mid] || {}), ...fields }
+    }
+    if (Object.keys(custom_data).length) lead.custom_data = custom_data
 
     if (!lead.first_name && !lead.phone && !lead.email) {
       return json({ error: 'Provide at least one of: first_name, phone, email' }, 422)
