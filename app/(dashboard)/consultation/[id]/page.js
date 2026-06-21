@@ -26,6 +26,7 @@ import AppointmentList from '@/components/crm/AppointmentList'
 import BookAppointmentForm from '@/components/crm/BookAppointmentForm'
 import TaskList from '@/components/crm/TaskList'
 import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
+import MedicalHistory from '@/components/crm/MedicalHistory'
 import { format, isFuture, isToday, isPast } from 'date-fns'
 import clsx from 'clsx'
 
@@ -520,6 +521,17 @@ export default function ConsultationDetailPage({ params }) {
                 <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No notes yet. Click Edit to add notes.</p>
               )}
             </Card>
+
+            {/* Medical History — same shared component, synced to the patient/lead record */}
+            <MedicalHistory
+              record={entity.data}
+              onPersist={async (custom_data) => {
+                const updated = entity.type === 'patient'
+                  ? await updatePatient(id, { custom_data })
+                  : await updateLead(id, { custom_data })
+                setEntity(prev => ({ ...prev, data: { ...prev.data, custom_data: updated.custom_data } }))
+              }}
+            />
           </div>
 
           {/* ── RIGHT ── */}
