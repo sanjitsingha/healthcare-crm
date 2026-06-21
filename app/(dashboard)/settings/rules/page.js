@@ -203,7 +203,7 @@ export default function RulesPage() {
       <aside className="w-64 shrink-0 border-r border-(--color-border) h-full flex flex-col" style={{ background: "var(--color-surface)" }}>
         <div className="p-4 border-b border-(--color-border) flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-base font-700 tracking-tight" style={{ color: "var(--color-text-primary)" }}>Rules</h2>
+            <h2 className="text-base font-700 tracking-tight" style={{ color: "var(--color-text-primary)" }}>Workflow Rules</h2>
             <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>Automation</p>
           </div>
           <div className="relative">
@@ -272,7 +272,7 @@ export default function RulesPage() {
       <div className="flex-1 min-w-0 h-full overflow-y-auto p-6 pb-16">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
-            <p className="text-sm font-600" style={{ color: "var(--color-text-primary)" }}>Automation Rules</p>
+            <p className="text-sm font-600" style={{ color: "var(--color-text-primary)" }}>Workflow Rules</p>
             <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
               Snap together blocks — WHEN an event happens, IF conditions match, DO actions. Runs on the server.
               {saving ? " · Saving…" : dirty ? " · Unsaved changes" : savedAt ? " · Saved" : ""}
