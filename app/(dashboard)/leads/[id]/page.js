@@ -81,7 +81,6 @@ import {
   subMonths,
   isSameDay,
   isSameMonth,
-  subDays,
   addDays,
 } from "date-fns";
 import clsx from "clsx";
@@ -1434,19 +1433,9 @@ export default function LeadDetailPage({ params }) {
       });
       setAppointments((prev) => [appt, ...prev]);
 
-      // Auto-task: reminder 5 days before appointment
+      // Reminder tasks are now configured via Settings → Workflow Rules
+      // (Appointment booked → create task, N days before scheduled_at).
       const apptDate = new Date(data.scheduled_at);
-      const reminderDate = subDays(apptDate, 5);
-      const reminderTask = await createTask({
-        title: `Appointment Reminder — ${data.name || displayName} on ${format(apptDate, "MMM d, yyyy")}`,
-        priority: "High",
-        due_date: reminderDate.toISOString(),
-        status: "Pending",
-        organization_id: orgId,
-        entity_type: "lead",
-        entity_id: id,
-      });
-      setTasks((prev) => [reminderTask, ...prev]);
 
       await logActivity(
         "meeting",

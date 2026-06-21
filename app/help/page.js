@@ -225,7 +225,7 @@ export default function HelpPage() {
             <p className="font-700 text-sm mb-2" style={{ color: 'var(--color-text-primary)' }}>Booking an Appointment</p>
             <div className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} /><span>From the <strong>Appointments page</strong> — click "Book Appointment", select patient, link to lead (optional), pick date/time, assign doctor.</span></div>
             <div className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} /><span>From a <strong>Lead detail page</strong> — scroll to Appointments card, click "Book Appointment". Patient info is auto-filled. If no patient exists, one is created on save.</span></div>
-            <div className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} /><span>An <strong>auto reminder task</strong> is created 5 days before the appointment date, visible in Tasks.</span></div>
+            <div className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} /><span><strong>Reminder tasks</strong> are configured in Settings → Workflow Rules (e.g. "Appointment booked → create task, 5 days before the appointment").</span></div>
             <div className="flex gap-2"><ArrowRight size={12} className="shrink-0 mt-0.5" style={{ color: 'var(--color-brand)' }} /><span><strong>Reschedule</strong> any booked/confirmed appointment directly from the lead's Appointments card.</span></div>
           </div>
           <Tip>Add your doctors in Settings → People → Doctors. They will appear in the doctor dropdown on every booking form.</Tip>
@@ -264,7 +264,7 @@ export default function HelpPage() {
                 Tasks created from a lead or patient detail page are <strong>linked</strong> to that entity. The task card shows a footer strip with the lead/patient name — clicking it navigates directly to their detail page.
               </p>
               <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-                <strong>Appointment reminder tasks</strong> are auto-created 5 days before each booked appointment with High priority. They appear in the lead's Tasks tab and the global Tasks page.
+                <strong>Appointment reminder tasks</strong> are set up in Settings → Workflow Rules — add an "Appointment booked" rule with a "create task" action scheduled a chosen number of days before the appointment. They appear in the lead/patient Tasks tab and the global Tasks page.
               </p>
             </div>
           </div>
