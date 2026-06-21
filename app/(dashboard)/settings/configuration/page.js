@@ -1008,30 +1008,71 @@ export default function ConfigurationPage() {
 
       {/* ── Tab: API Names ───────────────────────────────────── */}
       {tab === 'api-names' && (() => {
-        // Merge all custom fields from all entities — deduplicated by api_name
+        const systemRows = SYSTEM_FIELDS[entity] || []
+
+        // Auto-derive custom-module fields for the selected page (live from
+        // org.settings.modules). API names are generated from the field label,
+        // de-duplicated against system + earlier module fields.
+        const used = new Set(systemRows.map(f => f.api_name))
+        const moduleRows = []
+        for (const m of (localSettings.modules || []).filter(mod => mod.page === entity)) {
+          for (const f of (m.fields || [])) {
+            let base = toApiName(f.label || '') || 'field'
+            let name = base, n = 2
+            while (used.has(name)) name = `${base}_${n++}`
+            used.add(name)
+            moduleRows.push({
+              key: `${m.id}:${f.id}`,
+              display: f.label || '(unnamed)',
+              api_name: name,
+              type: f.type || 'text',
+              note: `Module: ${m.name}${m.active === false ? ' · inactive' : ''}`,
+              storage: `custom_data.${m.id}.${f.id}`,
+            })
+          }
+        }
+
+        // Custom fields (settings.api_fields) — shared across all pages.
         const allCustom = Object.values(apiFieldsMap)
           .flat()
           .filter((f, i, arr) => arr.findIndex(x => x.api_name === f.api_name) === i)
 
-        const systemRows = SYSTEM_FIELDS[entity] || []
+        const counts = [
+          `${systemRows.length} system`,
+          moduleRows.length ? `${moduleRows.length} module` : null,
+          allCustom.length ? `${allCustom.length} custom` : null,
+        ].filter(Boolean).join(' · ')
+
+        const sectionRow = (label) => (
+          <tr>
+            <td colSpan={4} className="px-3 py-1.5" style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+              <span className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+            </td>
+          </tr>
+        )
+        const fieldRow = (f, tint) => (
+          <tr key={f.key || f.api_name} style={{ borderTop: '1px solid var(--color-border)', background: tint || 'transparent' }}>
+            <td className="px-3 py-2.5 font-500" style={{ color: 'var(--color-text-primary)' }}>{f.display}</td>
+            <td className="px-3 py-2.5 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
+            <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
+            <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.note || 'Stored in custom_data'}</td>
+          </tr>
+        )
 
         return (
           <Card className="p-5">
             <SectionHead icon={Lock} title="API Names"
-              description="Use these field names when sending data via the public API. Custom fields are shared across all pages." />
+              description="Field names for the public API. System fields are fixed; custom-module and custom fields are generated automatically and update as you add them." />
 
             {/* Dropdown entity selector */}
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-4 flex-wrap">
               <label className="text-xs font-600 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>Select page</label>
               <select value={entity} onChange={e => setEntity(e.target.value)}
                 className="px-3 py-2 text-sm rounded-lg border border-(--color-border) outline-none"
                 style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-primary)', minWidth: 200 }}>
                 {ENTITIES.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
               </select>
-              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                {systemRows.length} system field{systemRows.length !== 1 ? 's' : ''}
-                {allCustom.length > 0 && ` · ${allCustom.length} custom field${allCustom.length !== 1 ? 's' : ''}`}
-              </span>
+              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{counts} field{used.size !== 1 ? 's' : ''}</span>
             </div>
 
             {/* Fields table */}
@@ -1055,29 +1096,23 @@ export default function ConfigurationPage() {
                     </tr>
                   ))}
 
-                  {allCustom.length > 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-1.5" style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
-                        <span className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Custom fields — available on all pages</span>
-                      </td>
-                    </tr>
-                  )}
+                  {moduleRows.length > 0 && sectionRow(`Custom module fields — ${entity}`)}
+                  {moduleRows.map(f => fieldRow(f, '#fef3c7' + '55'))}
 
-                  {allCustom.map(f => (
-                    <tr key={f.api_name} style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-brand-50)' + '33' }}>
-                      <td className="px-3 py-2.5 font-500" style={{ color: 'var(--color-text-primary)' }}>{f.display}</td>
-                      <td className="px-3 py-2.5 font-mono font-600" style={{ color: 'var(--color-brand)' }}>{f.api_name}</td>
-                      <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.type}</td>
-                      <td className="px-3 py-2.5" style={{ color: 'var(--color-text-muted)' }}>{f.note || 'Stored in custom_data'}</td>
-                    </tr>
-                  ))}
+                  {allCustom.length > 0 && sectionRow('Custom fields — available on all pages')}
+                  {allCustom.map(f => fieldRow(f, 'var(--color-brand-50)' + '33'))}
                 </tbody>
               </table>
             </div>
 
-            {allCustom.length === 0 && (
+            {moduleRows.length === 0 && allCustom.length === 0 && (
               <p className="mt-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-                No custom fields yet. Custom fields added anywhere in the CRM will appear here automatically.
+                Only system fields so far. Custom modules (Settings → Modules) and custom fields appear here automatically with generated API names.
+              </p>
+            )}
+            {moduleRows.length > 0 && (
+              <p className="mt-3 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                Module fields are stored under <code className="font-mono">custom_data.&lt;module&gt;.&lt;field&gt;</code>. Tell me if you want the public API to accept these names directly.
               </p>
             )}
           </Card>
