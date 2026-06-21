@@ -914,7 +914,8 @@ export default function LeadDetailPage({ params }) {
         entityName: lead?.title,
         description: "Lead profile updated",
       });
-      await applyRules("lead_updated", { ...before, ...updated });
+      // Pass the pre-edit snapshot as `prev` so "field changed" conditions work.
+      await applyRules("lead_updated", null, before);
     } catch (e) {
       toast({ type: "error", title: "Error", message: e.message });
     } finally {
@@ -943,12 +944,11 @@ export default function LeadDetailPage({ params }) {
         entityName: lead?.title,
         description: "Lead info updated",
       });
-      const fresh = { ...before, ...updated };
-      await applyRules("lead_updated", fresh);
+      await applyRules("lead_updated", null, before);
       if (updated.source !== before?.source)
-        await applyRules("source_changed", fresh);
+        await applyRules("source_changed", null, before);
       if (updated.priority !== before?.priority)
-        await applyRules("priority_changed", fresh);
+        await applyRules("priority_changed", null, before);
     } catch (e) {
       toast({ type: "error", title: "Error", message: e.message });
     } finally {
@@ -996,10 +996,8 @@ export default function LeadDetailPage({ params }) {
         before: { assigned_to: prevMember?.name || lead.assigned_to },
         after: { assigned_to: member?.name || memberId || null },
       });
-      await applyRules(memberId ? "lead_assigned" : "lead_unassigned", {
-        ...lead,
-        assigned_to: updated.assigned_to,
-      });
+      // `lead` is still the pre-change snapshot in this closure → pass as prev.
+      await applyRules(memberId ? "lead_assigned" : "lead_unassigned", null, lead);
     } catch (err) {
       toast({ type: "error", title: "Error", message: err.message });
     }
@@ -1027,7 +1025,8 @@ export default function LeadDetailPage({ params }) {
         before: { stage: prevStage },
         after: { stage },
       });
-      await applyRules("stage_changed", null, { stage: prevStage });
+      // `lead` is still the pre-change snapshot in this closure → pass as prev.
+      await applyRules("stage_changed", null, lead);
     } catch (err) {
       toast({ type: "error", title: "Error", message: err.message });
     }

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import {
-  Plug, Globe, Webhook, MessageCircle, BookOpen,
+  Plug, Globe, Webhook, MessageCircle, Bot, BookOpen,
   Check, Copy, Trash2, Link2, RefreshCw, ChevronDown,
   Settings2, Eye, EyeOff,
 } from 'lucide-react'
@@ -100,6 +100,7 @@ const LEAD_FIELD_OPTIONS = [
 const TABS = [
   { id: 'integrations', label: 'Configuration', icon: Settings2 },
   { id: 'messaging',    label: 'WhatsApp',      icon: MessageCircle },
+  { id: 'telegram',     label: 'Telegram',      icon: Bot },
 ]
 
 // ── WhatsApp provider catalog (outbound) ───────────────────────
@@ -390,6 +391,16 @@ export default function ConfigurationPage() {
   const [testBusy, setTestBusy] = useState(false)
   const [testResult, setTestResult] = useState(null)
 
+  // Telegram
+  const [tg, setTg]                   = useState(() => localSettings.telegram || { enabled: false })
+  const [tgBusy, setTgBusy]           = useState(false)
+  const [tgReveal, setTgReveal]       = useState(false)
+  const [tgTest, setTgTest]           = useState({ chatId: '', text: '' })
+  const [tgTestBusy, setTgTestBusy]   = useState(false)
+  const [tgTestResult, setTgTestResult] = useState(null)
+  const [tgVerifying, setTgVerifying] = useState(false)
+  const [tgBotInfo, setTgBotInfo]     = useState(null)
+
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
   const saveSettings = async (patch) => {
@@ -420,6 +431,45 @@ export default function ConfigurationPage() {
     const ok = await showConfirm({ title: 'Remove this integration?', message: 'The webhook URL will stop working.', confirmLabel: 'Remove' })
     if (!ok) return
     persist(integrations.filter(i => i.id !== id))
+  }
+
+  // ── Telegram handlers ─────────────────────────────────────────
+  const handleSaveTg = async () => {
+    setTgBusy(true)
+    try { await saveSettings({ telegram: tg }); toast({ type: 'success', title: 'Telegram settings saved' }) }
+    catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setTgBusy(false) }
+  }
+  const handleVerifyTg = async () => {
+    setTgVerifying(true); setTgBotInfo(null)
+    try {
+      await saveSettings({ telegram: tg })
+      const res = await fetch('/api/telegram/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      setTgBotInfo(data)
+      if (data.botOk) toast({ type: 'success', title: `Connected: @${data.bot?.username}` })
+      else toast({ type: 'error', title: data.error || 'Verification failed' })
+    } catch (err) { setTgBotInfo({ error: err.message }) }
+    finally { setTgVerifying(false) }
+  }
+  const handleSendTgTest = async () => {
+    const targetId = tgTest.chatId.trim() || tg.default_chat_id
+    if (!targetId) { toast({ type: 'error', title: 'Enter a chat ID or set a default' }); return }
+    setTgTestBusy(true); setTgTestResult(null)
+    try {
+      await saveSettings({ telegram: tg })
+      const res = await fetch('/api/telegram/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, chatId: targetId, text: tgTest.text.trim() || 'Test message from Healthcare CRM 👋' }),
+      })
+      const data = await res.json().catch(() => ({ ok: false, error: 'Unreadable response' }))
+      setTgTestResult(data)
+      if (data.ok) toast({ type: 'success', title: 'Test message sent' })
+    } catch (err) { setTgTestResult({ ok: false, error: err.message }) }
+    finally { setTgTestBusy(false) }
   }
 
   // ── WhatsApp handlers ────────────────────────────────────────
@@ -520,6 +570,194 @@ export default function ConfigurationPage() {
             </div>
           </>
         )}
+
+        {/* Telegram tab */}
+        {tab === 'telegram' && (() => {
+          const tgReady = !!tg.bot_token?.trim()
+          const maskToken = (t) => t ? '••••' + String(t).slice(-8) : '{BOT_TOKEN}'
+          const status = tg.enabled && tgReady
+            ? { label: 'CONNECTED',         dot: '#22c55e', color: '#15803d', bg: '#dcfce7' }
+            : tgReady
+              ? { label: 'READY · DISABLED', dot: '#f59e0b', color: '#b45309', bg: '#fef3c7' }
+              : { label: 'NOT CONFIGURED',   dot: '#94a3b8', color: '#64748b', bg: 'var(--color-surface-2)' }
+          return (
+            <Card className="p-0 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#e0f2fe' }}>
+                    <Bot size={15} style={{ color: '#0369a1' }} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-700 leading-tight" style={{ color: 'var(--color-text-primary)' }}>Telegram Bot</p>
+                    <p className="text-[11px] font-mono leading-tight" style={{ color: 'var(--color-text-muted)' }}>api.telegram.org/bot</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-800 px-2 py-1 rounded-full tracking-wider shrink-0" style={{ background: status.bg, color: status.color }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: status.dot }} />
+                  {status.label}
+                </span>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Controls row */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={() => setTgReveal(v => !v)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-(--color-border) text-[11px] font-600 hover:bg-(--color-surface-2) transition-colors" style={{ color: 'var(--color-text-muted)' }}>
+                    {tgReveal ? <EyeOff size={12} /> : <Eye size={12} />}{tgReveal ? 'Hide' : 'Reveal'} secrets
+                  </button>
+                  <div className="flex-1" />
+                  <label className="inline-flex items-center gap-2 text-[11px] font-600" style={{ color: 'var(--color-text-muted)' }}>
+                    Enabled
+                    <Switch checked={!!tg.enabled} onChange={() => setTg(t => ({ ...t, enabled: !t.enabled }))} />
+                  </label>
+                  <Button size="sm" onClick={handleSaveTg} disabled={tgBusy}>{tgBusy ? 'Saving…' : 'Save'}</Button>
+                </div>
+
+                {/* Config fields */}
+                <div className="rounded-lg border border-(--color-border) divide-y divide-(--color-border) overflow-hidden">
+                  {[
+                    { key: 'bot_token',       label: 'bot_token',       secret: true,  required: true,  placeholder: '1234567890:ABCdefGHijKLMnoPQRsTUVwxYZ' },
+                    { key: 'default_chat_id', label: 'default_chat_id', secret: false, required: false, placeholder: '-1001234567890 or @yourchannel' },
+                  ].map(f => (
+                    <div key={f.key} className="flex items-stretch" style={{ background: 'var(--color-surface)' }}>
+                      <div className="w-44 shrink-0 flex items-center gap-1 px-3 py-2.5 border-r border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                        <code className="text-[11px] font-700" style={{ color: 'var(--color-brand)' }}>{f.label}</code>
+                        {f.required && <span style={{ color: '#dc2626' }}>*</span>}
+                      </div>
+                      <input
+                        type={f.secret && !tgReveal ? 'password' : 'text'}
+                        value={tg[f.key] || ''}
+                        onChange={e => setTg(t => ({ ...t, [f.key]: e.target.value }))}
+                        placeholder={f.placeholder}
+                        className="flex-1 px-3 py-2.5 text-[11px] font-mono outline-none bg-transparent"
+                        style={{ color: 'var(--color-text-primary)' }} />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Live endpoint console */}
+                <div className="rounded-lg overflow-hidden border border-(--color-border) text-[11px]" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ background: '#1e293b' }}>
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#ef4444' }} />
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#f59e0b' }} />
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#22c55e' }} />
+                    <span className="ml-2 text-[10px] uppercase tracking-widest" style={{ color: '#94a3b8' }}>outbound request</span>
+                  </div>
+                  <div className="px-3 py-2.5 space-y-1 overflow-x-auto" style={{ background: '#0f172a' }}>
+                    <div style={{ color: '#e2e8f0' }}>
+                      <span style={{ color: '#38bdf8' }}>POST</span>{' '}
+                      https://api.telegram.org/bot<span style={{ color: '#fbbf24' }}>{maskToken(tg.bot_token)}</span>/sendMessage
+                    </div>
+                    <div style={{ color: '#64748b' }}>Content-Type: application/json</div>
+                    <div style={{ color: '#94a3b8' }}>
+                      {'{'} <span style={{ color: '#7dd3fc' }}>&quot;chat_id&quot;</span>: <span style={{ color: '#86efac' }}>&quot;{tg.default_chat_id || '{CHAT_ID}'}&quot;</span>,
+                    </div>
+                    <div style={{ color: '#94a3b8' }}>{'  '}<span style={{ color: '#7dd3fc' }}>&quot;text&quot;</span>: <span style={{ color: '#86efac' }}>&quot;Appointment reminder: Dr. Sharma at 10:30 AM&quot;</span>,</div>
+                    <div style={{ color: '#94a3b8' }}>{'  '}<span style={{ color: '#7dd3fc' }}>&quot;parse_mode&quot;</span>: <span style={{ color: '#86efac' }}>&quot;HTML&quot;</span> {'}'}</div>
+                  </div>
+                </div>
+
+                {/* Setup guide */}
+                <div className="rounded-lg border border-(--color-border) overflow-hidden">
+                  <div className="px-3 py-2 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                    <p className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Setup guide</p>
+                  </div>
+                  <div className="px-3 py-3 space-y-2.5" style={{ background: 'var(--color-surface)' }}>
+                    {[
+                      { n: 1, text: 'Open Telegram → search @BotFather → send /newbot' },
+                      { n: 2, text: 'Enter a display name, then a username ending in "bot" (e.g. myClinicBot)' },
+                      { n: 3, text: 'BotFather replies with your token — paste it into bot_token above' },
+                      { n: 4, text: 'Send any message to your bot on Telegram to register your chat session' },
+                      { n: 5, text: 'Click "Get Updates" below — your chat ID will appear; click it to auto-fill' },
+                      { n: 6, text: 'For group/channel: add the bot as admin, then send a message and click Get Updates' },
+                    ].map(s => (
+                      <div key={s.n} className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-800 shrink-0 mt-0.5" style={{ background: '#e0f2fe', color: '#0369a1' }}>{s.n}</span>
+                        <p className="text-[11px] leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>{s.text}</p>
+                      </div>
+                    ))}
+                    <div className="mt-2 px-3 py-2 rounded-lg text-[11px] leading-relaxed" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>
+                      <span className="font-700" style={{ color: 'var(--color-brand)' }}>Tip:</span> Use <code style={{ color: 'var(--color-brand)' }}>HTML</code> parse_mode for rich messages —{' '}
+                      <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>, <code>&lt;a href=&quot;...&quot;&gt;link&lt;/a&gt;</code>.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Test section */}
+                <div className="pt-3 border-t border-(--color-border)">
+                  <p className="text-[10px] font-700 uppercase tracking-wide mb-2" style={{ color: 'var(--color-text-muted)' }}>Test send</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input value={tgTest.chatId} onChange={e => setTgTest(t => ({ ...t, chatId: e.target.value }))}
+                      placeholder="Chat ID / @channel"
+                      className="w-44 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono outline-none"
+                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    <input value={tgTest.text} onChange={e => setTgTest(t => ({ ...t, text: e.target.value }))}
+                      placeholder="Message text (leave blank for default)"
+                      className="flex-1 min-w-40 px-2.5 py-1.5 rounded-lg border text-[11px] outline-none"
+                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                    <Button variant="secondary" size="sm" onClick={handleVerifyTg} disabled={tgVerifying || !tg.bot_token?.trim()}>
+                      {tgVerifying ? '…' : 'Get Updates'}
+                    </Button>
+                    <Button size="sm" onClick={handleSendTgTest} disabled={tgTestBusy || !tgReady}>{tgTestBusy ? '…' : 'Send Test'}</Button>
+                  </div>
+
+                  {/* Bot info / chat list from getUpdates */}
+                  {tgBotInfo && (
+                    <div className="mt-2.5 text-[11px] font-mono space-y-1.5">
+                      {tgBotInfo.botOk ? (
+                        <div className="inline-flex items-center gap-1.5 font-700 px-2 py-1 rounded-md" style={{ background: '#dcfce7', color: '#15803d' }}>
+                          ✓ @{tgBotInfo.bot?.username} — {tgBotInfo.bot?.first_name}
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 font-700 px-2 py-1 rounded-md" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                          ✗ {String(tgBotInfo.error || 'Invalid token')}
+                        </div>
+                      )}
+                      {tgBotInfo.chats?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: 'var(--color-text-muted)' }}>recent chat IDs — click to use:</p>
+                          <div className="rounded-lg border border-(--color-border) divide-y divide-(--color-border) overflow-hidden">
+                            {tgBotInfo.chats.map((c, i) => (
+                              <button key={i} type="button"
+                                onClick={() => { setTg(t => ({ ...t, default_chat_id: String(c.id) })); setTgTest(t => ({ ...t, chatId: String(c.id) })) }}
+                                className="flex items-center gap-3 w-full px-3 py-2 text-left hover:bg-(--color-surface-2) transition-colors">
+                                <code className="text-[11px] shrink-0" style={{ color: 'var(--color-brand)' }}>{c.id}</code>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-muted)' }}>{c.type}</span>
+                                <span className="text-[11px] truncate" style={{ color: 'var(--color-text-secondary)' }}>{c.title || c.first_name || '(unknown)'}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {tgBotInfo.botOk && tgBotInfo.chats?.length === 0 && (
+                        <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                          No recent messages yet. Send a message to your bot on Telegram first, then click Get Updates again.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Test send result */}
+                  {tgTestResult && (
+                    <div className="mt-2 text-[11px] font-mono">
+                      <span className="inline-flex items-center gap-1 font-700 px-1.5 py-0.5 rounded"
+                        style={{ background: tgTestResult.ok ? '#dcfce7' : '#fee2e2', color: tgTestResult.ok ? '#15803d' : '#b91c1c' }}>
+                        {tgTestResult.ok ? '✓ 200' : `✗ ${tgTestResult.status || 'ERR'}`}
+                      </span>
+                      <details className="mt-1.5">
+                        <summary className="cursor-pointer text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>response</summary>
+                        <pre className="mt-1 whitespace-pre-wrap break-all px-2.5 py-2 rounded-lg" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)' }}>
+                          {JSON.stringify(tgTestResult.response ?? tgTestResult.error ?? tgTestResult, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )
+        })()}
 
         {/* WhatsApp tab */}
         {tab === 'messaging' && (() => {

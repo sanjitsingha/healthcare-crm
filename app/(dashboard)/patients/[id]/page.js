@@ -235,7 +235,9 @@ export default function PatientDetailPage({ params }) {
       if (before.status !== updated.status) await logActivity('status_change', `Status changed to ${updated.status}`)
       logAudit({ action: AUDIT.PATIENT_EDIT, entityType: 'patient', entityId: id, entityName: fullName, description: 'Patient profile updated' })
       setProfileEditing(false)
-      if (before.status !== updated.status) await applyRules('status_changed', { status: before.status })
+      // Pass the pre-edit snapshot as `prev` so "field changed" conditions work.
+      await applyRules('patient_updated', before)
+      if (before.status !== updated.status) await applyRules('status_changed', before)
     } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
     finally { setProfileSaving(false) }
   }
