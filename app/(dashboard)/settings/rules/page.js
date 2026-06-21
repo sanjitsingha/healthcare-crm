@@ -198,76 +198,58 @@ export default function RulesPage() {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <Card className="p-5">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--color-brand-50)" }}>
-              <Blocks size={16} style={{ color: "var(--color-brand)" }} />
-            </div>
-            <div>
-              <p className="text-sm font-600" style={{ color: "var(--color-text-primary)" }}>Automation Rules</p>
-              <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                Snap together blocks — WHEN an event happens, IF conditions match, DO actions. Runs on the server.
-                {saving ? " · Saving…" : dirty ? " · Unsaved changes" : savedAt ? " · Saved" : ""}
-              </p>
-            </div>
+    <div className="flex -m-6 -mb-16 h-screen" style={{ background: "var(--color-bg)" }}>
+      {/* ── Left flush rail: saved rules (like the Integrations side nav) ── */}
+      <aside className="w-64 shrink-0 border-r border-(--color-border) h-full flex flex-col" style={{ background: "var(--color-surface)" }}>
+        <div className="p-4 border-b border-(--color-border) flex items-start justify-between gap-2">
+          <div>
+            <h2 className="text-base font-700 tracking-tight" style={{ color: "var(--color-text-primary)" }}>Rules</h2>
+            <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>Automation</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              {addOpen && <div className="fixed inset-0 z-10" onClick={() => setAddOpen(false)} />}
-              <Button size="sm" variant="secondary" className="relative z-20" onClick={() => setAddOpen((o) => !o)}>
-                <Plus size={14} /> Add Rule
-                <ChevronDown size={13} style={{ transform: addOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
-              </Button>
-              {addOpen && (
-                <div className="absolute top-full right-0 mt-1.5 w-48 rounded-xl border border-(--color-border) overflow-hidden z-20"
-                  style={{ background: "var(--color-surface)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
-                  {RULE_TARGETS.map(({ value }) => {
-                    const meta = TARGET_META[value];
-                    const Icon = meta.icon;
-                    return (
-                      <button key={value} type="button"
-                        onClick={() => { addRule(value); setAddOpen(false); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)">
-                        <Icon size={14} style={{ color: meta.color }} />
-                        <span style={{ color: "var(--color-text-primary)" }}>{meta.ruleLabel}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>{saving ? "Saving…" : "Save"}</Button>
+          <div className="relative">
+            {addOpen && <div className="fixed inset-0 z-10" onClick={() => setAddOpen(false)} />}
+            <Button size="sm" variant="secondary" className="relative z-20" onClick={() => setAddOpen((o) => !o)}>
+              <Plus size={14} /> Add
+              <ChevronDown size={13} style={{ transform: addOpen ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+            </Button>
+            {addOpen && (
+              <div className="absolute top-full right-0 mt-1.5 w-48 rounded-xl border border-(--color-border) overflow-hidden z-20"
+                style={{ background: "var(--color-surface)", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+                {RULE_TARGETS.map(({ value }) => {
+                  const meta = TARGET_META[value];
+                  const Icon = meta.icon;
+                  return (
+                    <button key={value} type="button"
+                      onClick={() => { addRule(value); setAddOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-600 text-left transition-colors hover:bg-(--color-surface-2)">
+                      <Icon size={14} style={{ color: meta.color }} />
+                      <span style={{ color: "var(--color-text-primary)" }}>{meta.ruleLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-      </Card>
 
-      {loading ? (
-        <div className="flex justify-center py-12"><Spinner size={28} /></div>
-      ) : rules.length === 0 ? (
-        <div className="py-20 text-center border border-dashed rounded-2xl border-(--color-border)">
-          <Blocks size={32} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-500" style={{ color: "var(--color-text-muted)" }}>No rules yet.</p>
-          <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
-            Add a Lead, Patient, Appointment, Task, or Consultation rule to start snapping blocks.
-          </p>
-        </div>
-      ) : (
-        <div className="flex gap-4 items-start">
-          {/* Master: rule list */}
-          <div className="w-60 shrink-0 space-y-1.5">
-            {rules.map((r) => {
+        <nav className="flex-1 overflow-y-auto p-2 space-y-1.5">
+          {loading ? (
+            <div className="flex justify-center py-8"><Spinner size={22} /></div>
+          ) : rules.length === 0 ? (
+            <p className="text-xs text-center px-3 py-8" style={{ color: "var(--color-text-muted)" }}>
+              No rules yet. Click <b>Add</b> to create one.
+            </p>
+          ) : (
+            rules.map((r) => {
               const meta = TARGET_META[r.target] || TARGET_META.lead;
               const Icon = meta.icon;
               const active = r.id === selectedId;
               return (
                 <button key={r.id} type="button" onClick={() => { setSelectedId(r.id); setTestResult(null); }}
-                  className="w-full text-left rounded-xl border p-3 transition-all"
+                  className="w-full text-left rounded-lg border p-2.5 transition-all"
                   style={active
                     ? { borderColor: "var(--color-brand)", background: "var(--color-brand-50)" }
-                    : { borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
+                    : { borderColor: "transparent", background: "transparent" }}>
                   <div className="flex items-center gap-2">
                     <Icon size={14} style={{ color: meta.color, flexShrink: 0 }} />
                     <span className="flex-1 min-w-0 text-sm font-600 truncate" style={{ color: "var(--color-text-primary)" }}>
@@ -281,12 +263,36 @@ export default function RulesPage() {
                   </p>
                 </button>
               );
-            })}
-          </div>
+            })
+          )}
+        </nav>
+      </aside>
 
-          {/* Detail: selected rule */}
-          {selected && (
-            <div className="flex-1 min-w-0 space-y-3">
+      {/* ── Right content: selected rule ── */}
+      <div className="flex-1 min-w-0 h-full overflow-y-auto p-6 pb-16">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-sm font-600" style={{ color: "var(--color-text-primary)" }}>Automation Rules</p>
+            <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+              Snap together blocks — WHEN an event happens, IF conditions match, DO actions. Runs on the server.
+              {saving ? " · Saving…" : dirty ? " · Unsaved changes" : savedAt ? " · Saved" : ""}
+            </p>
+          </div>
+          <Button size="sm" onClick={handleSave} disabled={saving || !dirty}>{saving ? "Saving…" : "Save"}</Button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-12"><Spinner size={28} /></div>
+        ) : rules.length === 0 ? (
+          <div className="py-20 text-center border border-dashed rounded-2xl border-(--color-border)">
+            <Blocks size={32} className="mx-auto mb-3 opacity-20" />
+            <p className="text-sm font-500" style={{ color: "var(--color-text-muted)" }}>No rules yet.</p>
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+              Click <b>Add</b> in the left panel to create a Lead, Patient, Appointment, Task, or Consultation rule.
+            </p>
+          </div>
+        ) : selected ? (
+            <div className="space-y-3">
               <Card className="p-4">
                 <div className="flex items-center gap-3 flex-wrap">
                   <Input
@@ -377,9 +383,8 @@ export default function RulesPage() {
                 )}
               </Card>
             </div>
-          )}
-        </div>
-      )}
+        ) : null}
+      </div>
     </div>
   );
 }
