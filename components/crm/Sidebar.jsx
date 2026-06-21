@@ -76,7 +76,7 @@ const navGroups = [
   },
   {
     label: "Tools",
-    items: [{ href: "/automation", icon: Zap, label: "WhatsApp Automations", permission: "automation" }],
+    items: [{ href: "/automation", icon: Zap, label: "Automation", permission: "automation" }],
   },
 ];
 
