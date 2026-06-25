@@ -215,6 +215,13 @@ async function fetchSample(target, orgId) {
   return null
 }
 
+// Internal columns hidden from the field pickers.
+const FIELD_NOISE = new Set([
+  'id', 'organization_id', 'created_at', 'updated_at', 'patient_code',
+  'custom_data', 'search_vector', 'search_tsv', 'deleted_at',
+])
+const TARGET_PAGE = { lead: 'leads', patient: 'patients' }
+
 // ── Page ───────────────────────────────────────────────────────────────
 export default function RulesPage() {
   const { org, orgId } = useOrg()
@@ -229,6 +236,7 @@ export default function RulesPage() {
   const [testing,    setTesting]    = useState(false)
   const [testResult, setTestResult] = useState(null)
   const [showRuns,   setShowRuns]   = useState(false)
+  const [colsByTarget, setColsByTarget] = useState({})   // real DB columns per target
 
   const stages    = (org?.settings?.lead_stages || DEFAULT_STAGES).map(s => typeof s === 'string' ? s : s.name)
   const staffList = org?.settings?.staff_members || []
@@ -250,6 +258,40 @@ export default function RulesPage() {
   const selected     = rules.find(r => r.id === selectedId) || null
   const selectedRuns = runs.filter(x => x.rule_id === selectedId)
   const tagsFor = target => (tags||[]).filter(t => target==='lead' ? t.page==='leads' : t.page==='patients'||!t.page)
+
+  // Lazily fetch the real DB columns for a target the first time a field-trigger
+  // rule needs them (reads one sample row → its scalar column names).
+  const isFieldTrig = selected && (selected.event === 'field_updated' || selected.event === 'field_entered')
+  useEffect(() => {
+    if (!orgId || !selected || !isFieldTrig) return
+    const t = selected.target
+    if (colsByTarget[t]) return
+    let cancelled = false
+    fetchSample(t, orgId).then(s => {
+      if (cancelled) return
+      const keys = s
+        ? Object.keys(s).filter(k => !FIELD_NOISE.has(k) && (s[k] === null || typeof s[k] !== 'object'))
+        : []
+      setColsByTarget(c => ({ ...c, [t]: keys.length ? keys : (RULE_FIELDS[t] || []) }))
+    }).catch(() => setColsByTarget(c => ({ ...c, [t]: RULE_FIELDS[t] || [] })))
+    return () => { cancelled = true }
+  }, [orgId, selected?.target, isFieldTrig, colsByTarget])
+
+  // Custom module fields configured for this target (stored on org.settings.modules).
+  const customFieldsFor = target => {
+    const page = TARGET_PAGE[target]
+    if (!page) return []
+    return (org?.settings?.modules || [])
+      .filter(m => m.page === page)
+      .flatMap(m => (m.fields || []).map(f => ({ value: 'custom:' + f.id, label: `${f.label || f.id} (custom)` })))
+  }
+  // Full watch list = real DB columns (or fallback) + custom fields, de-duped.
+  const watchOptionsFor = target => {
+    const std = (colsByTarget[target] || RULE_FIELDS[target] || []).map(c => ({ value: c, label: c }))
+    const seen = new Set()
+    return [...std, ...customFieldsFor(target)].filter(o => (seen.has(o.value) ? false : seen.add(o.value)))
+  }
+  const fieldLabelFor = (target, value) => watchOptionsFor(target).find(o => o.value === value)?.label || value
 
   const patch      = p => { setRules(prev => prev.map(r => r.id===selectedId ? {...r,...p} : r)); setDirty(true) }
   const addCond    = ()    => patch({ conditions: [...(selected.conditions||[]), blankCond()] })
@@ -437,58 +479,65 @@ export default function RulesPage() {
                     )})()}
                     <span className="text-[11px] ml-auto" style={{color:'var(--color-text-muted)'}}>Set when rule was created</span>
                   </div>
-                  {/* Event row */}
-                  <div className="flex items-center gap-4 px-4 py-3">
-                    <span className="text-xs font-600 w-16 shrink-0" style={{color:'var(--color-text-muted)'}}>Event</span>
-                    <select value={selected.event} onChange={e=>patch({event:e.target.value})}
-                      className={`${fs} flex-1 font-500`} style={fb}>
-                      {(RULE_EVENTS[selected.target]||[]).map(ev=>(
-                        <option key={ev.value} value={ev.value}>{ev.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Field-update trigger config (Zoho-style: any field / specific field) */}
-                  {(selected.event === 'field_updated' || selected.event === 'field_entered') && (
-                    <>
-                      <div className="flex items-center gap-4 px-4 py-3 border-t border-(--color-border)">
-                        <span className="text-xs font-600 w-16 shrink-0" style={{color:'var(--color-text-muted)'}}>Fields</span>
-                        <select value={selected.trigger_field_mode||'any'} onChange={e=>patch({trigger_field_mode:e.target.value})}
-                          className={`${fs} font-500`} style={fb}>
-                          <option value="any">Any field</option>
-                          <option value="specific">Specific field(s)</option>
+                  {/* Event row — field-trigger mode selector sits to the right */}
+                  {(() => {
+                    const isFieldTrig = selected.event === 'field_updated' || selected.event === 'field_entered'
+                    return (
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <span className="text-xs font-600 w-16 shrink-0" style={{color:'var(--color-text-muted)'}}>Event</span>
+                        <select value={selected.event} onChange={e=>patch({event:e.target.value})}
+                          className={`${fs} flex-1 font-500`} style={fb}>
+                          {(RULE_EVENTS[selected.target]||[]).map(ev=>(
+                            <option key={ev.value} value={ev.value}>{ev.label}</option>
+                          ))}
                         </select>
-                        <span className="text-[11px]" style={{color:'var(--color-text-muted)'}}>
-                          {selected.event==='field_entered'
-                            ? 'runs when the field goes from empty to filled'
-                            : 'runs when the field value changes'}
-                        </span>
+                        {isFieldTrig && (
+                          <select value={selected.trigger_field_mode||'any'} onChange={e=>patch({trigger_field_mode:e.target.value})}
+                            className={`${fs} shrink-0 font-700`}
+                            style={{ ...fb, color:'#b45309', background:'#fffbeb', borderColor:'#f59e0b55' }}>
+                            <option value="any">Any field</option>
+                            <option value="specific">Specific field(s)</option>
+                          </select>
+                        )}
                       </div>
-                      {(selected.trigger_field_mode==='specific') && (
-                        <div className="flex items-start gap-4 px-4 py-3 border-t border-(--color-border)">
-                          <span className="text-xs font-600 w-16 shrink-0 mt-1.5" style={{color:'var(--color-text-muted)'}}>Watch</span>
-                          <div className="flex-1 flex flex-wrap gap-1.5">
-                            {(RULE_FIELDS[selected.target]||[]).map(f => {
-                              const on = (selected.trigger_fields||[]).includes(f)
-                              return (
-                                <button key={f} type="button"
-                                  onClick={()=>{ const cur=selected.trigger_fields||[]; patch({ trigger_fields: on?cur.filter(x=>x!==f):[...cur,f] }) }}
-                                  className="px-2.5 py-1 rounded-full text-xs font-600 border transition-colors"
-                                  style={on
-                                    ? { background:'#f59e0b', borderColor:'#f59e0b', color:'white' }
-                                    : { background:'var(--color-surface)', borderColor:'var(--color-border)', color:'var(--color-text-secondary)' }}>
-                                  {f}
-                                </button>
-                              )
-                            })}
-                            {!(selected.trigger_fields||[]).length && (
-                              <span className="text-[11px] mt-1.5" style={{color:'var(--color-text-muted)'}}>Select one or more fields to watch.</span>
-                            )}
-                          </div>
+                    )
+                  })()}
+
+                  {/* Field chooser — dropdown to add fields + removable selected pills */}
+                  {(selected.event === 'field_updated' || selected.event === 'field_entered') && selected.trigger_field_mode === 'specific' && (() => {
+                    const opts = watchOptionsFor(selected.target)
+                    const picked = selected.trigger_fields || []
+                    return (
+                      <div className="flex items-start gap-3 px-4 py-3 border-t border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
+                        <span className="text-xs font-600 w-16 shrink-0 mt-2" style={{color:'var(--color-text-muted)'}}>Watch</span>
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <select value="" onChange={e=>{ const v=e.target.value; if(!v) return; if(!picked.includes(v)) patch({ trigger_fields:[...picked, v] }) }}
+                            className={`${fs} w-full`} style={fb}>
+                            <option value="">{opts.length ? 'Select a field to watch…' : 'Loading fields…'}</option>
+                            {opts.filter(o=>!picked.includes(o.value)).map(o=>(
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          {picked.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {picked.map(v=>(
+                                <span key={v} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-600"
+                                  style={{ background:'#fef3c7', color:'#b45309' }}>
+                                  {fieldLabelFor(selected.target, v)}
+                                  <button type="button" onClick={()=>patch({ trigger_fields: picked.filter(x=>x!==v) })}
+                                    className="rounded-full hover:bg-amber-200/60 transition-colors p-0.5"><X size={11}/></button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px]" style={{color:'var(--color-text-muted)'}}>
+                              No fields selected — pick one above{selected.event==='field_entered' ? ' to fire on an empty → filled change.' : '.'}
+                            </p>
+                          )}
                         </div>
-                      )}
-                    </>
-                  )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </Step>
 

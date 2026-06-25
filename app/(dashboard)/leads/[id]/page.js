@@ -61,6 +61,7 @@ import Link from "next/link";
 import Timeline from "@/components/crm/Timeline";
 import { CustomModuleCard } from "@/components/crm/CustomModule";
 import FollowupTable from "@/components/crm/FollowupTable";
+import { avatarColor } from "@/lib/avatarColor";
 import AppointmentList from "@/components/crm/AppointmentList";
 import BookAppointmentForm from "@/components/crm/BookAppointmentForm";
 import TaskList from "@/components/crm/TaskList";
@@ -2098,8 +2099,8 @@ export default function LeadDetailPage({ params }) {
                     <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center text-base font-800 shrink-0"
                       style={{
-                        background: "var(--color-brand-50)",
-                        color: "var(--color-brand)",
+                        background: avatarColor(displayName),
+                        color: "#fff",
                       }}
                     >
                       {(displayName[0] || "?").toUpperCase()}

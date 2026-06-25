@@ -23,6 +23,7 @@ import Timeline from '@/components/crm/Timeline'
 import { CustomModuleCard, CustomModuleTable } from '@/components/crm/CustomModule'
 import MedicalHistory from '@/components/crm/MedicalHistory'
 import FollowupTable from '@/components/crm/FollowupTable'
+import { avatarColor } from '@/lib/avatarColor'
 import VisitsTable from '@/components/crm/VisitsTable'
 import AppointmentList from '@/components/crm/AppointmentList'
 import BookAppointmentForm from '@/components/crm/BookAppointmentForm'
@@ -825,7 +826,7 @@ export default function PatientDetailPage({ params }) {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p>{patient.patient_code && <p className="text-[11px] font-600 font-mono mt-0.5" style={{ color: 'var(--color-brand)' }}>{patient.patient_code}</p>}<div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
+                  <div className="flex items-center gap-3 mb-5"><div className="w-14 h-14 rounded-xl flex items-center justify-center text-lg font-800" style={{ background: avatarColor(fullName), color: '#fff' }}>{initials || <User size={22} />}</div><div><p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>{fullName}</p>{patient.patient_code && <p className="text-[11px] font-600 font-mono mt-0.5" style={{ color: 'var(--color-brand)' }}>{patient.patient_code}</p>}<div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: statusS.bg, color: statusS.color }}>{patient.status || 'Active'}</span>{patient.gender && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{patient.gender}</span>}{age != null && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{age} yrs</span>}</div></div></div>
                   <div className="mb-4">
                     <div className="flex flex-wrap items-center gap-1.5">
                       {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {

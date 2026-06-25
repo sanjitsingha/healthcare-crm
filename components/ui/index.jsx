@@ -257,7 +257,7 @@ export function Switch({ checked = false, onChange, size = 'md', title, disabled
 }
 
 // ── Stat Card ─────────────────────────────────────────────────
-export function StatCard({ label, value, icon: Icon, color = 'brand', trend }) {
+export function StatCard({ label, value, icon: Icon, color = 'brand', trend, trendLabel = 'this month' }) {
   const colorMap = {
     brand: { bg: 'var(--color-brand-50)', icon: 'var(--color-brand)', text: 'var(--color-brand)' },
     blue:  { bg: '#eff6ff', icon: '#2563eb', text: '#2563eb' },
@@ -276,7 +276,7 @@ export function StatCard({ label, value, icon: Icon, color = 'brand', trend }) {
         <p className="text-2xl font-700" style={{ color: 'var(--color-text-primary)' }}>{value}</p>
         {trend !== undefined && (
           <p className="text-xs mt-0.5" style={{ color: trend >= 0 ? '#059669' : '#dc2626' }}>
-            {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}% this month
+            {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}% {trendLabel}
           </p>
         )}
       </div>

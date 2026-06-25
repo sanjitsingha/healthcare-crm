@@ -400,6 +400,7 @@ export default function ConfigurationPage() {
   const [tgTestResult, setTgTestResult] = useState(null)
   const [tgVerifying, setTgVerifying] = useState(false)
   const [tgBotInfo, setTgBotInfo]     = useState(null)
+  const [tgHookBusy, setTgHookBusy]   = useState(false)
 
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -454,6 +455,24 @@ export default function ConfigurationPage() {
       else toast({ type: 'error', title: data.error || 'Verification failed' })
     } catch (err) { setTgBotInfo({ error: err.message }) }
     finally { setTgVerifying(false) }
+  }
+  const handleEnableWebhook = async () => {
+    setTgHookBusy(true)
+    try {
+      await saveSettings({ telegram: tg })
+      const res = await fetch('/api/telegram/set-webhook', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId, origin: window.location.origin }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok) {
+        setTg(data.telegram || (t => ({ ...t, webhook_enabled: true, bot_username: data.bot_username })))
+        toast({ type: 'success', title: 'Auto-connect enabled', message: `@${data.bot_username} webhook is live.` })
+      } else {
+        toast({ type: 'error', title: 'Could not enable', message: data.error || 'Failed to register webhook.' })
+      }
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setTgHookBusy(false) }
   }
   const handleSendTgTest = async () => {
     const targetId = tgTest.chatId.trim() || tg.default_chat_id
@@ -612,6 +631,28 @@ export default function ConfigurationPage() {
                     <Switch checked={!!tg.enabled} onChange={() => setTg(t => ({ ...t, enabled: !t.enabled }))} />
                   </label>
                   <Button size="sm" onClick={handleSaveTg} disabled={tgBusy}>{tgBusy ? 'Saving…' : 'Save'}</Button>
+                </div>
+
+                {/* Auto-connect (webhook) — enables per-contact messaging from lead/patient pages */}
+                <div className="rounded-lg border border-(--color-border) p-3" style={{ background: 'var(--color-surface)' }}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-700" style={{ color: 'var(--color-text-primary)' }}>Per-contact messaging (auto-connect)</p>
+                      <p className="text-[11px] leading-5 mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                        Registers a webhook so leads &amp; patients can connect via a deep link — then you can message them from their page.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {tg.webhook_enabled && tg.bot_username && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-700 px-2 py-1 rounded-full" style={{ background: '#dcfce7', color: '#15803d' }}>
+                          ✓ @{tg.bot_username}
+                        </span>
+                      )}
+                      <Button size="sm" variant="secondary" onClick={handleEnableWebhook} disabled={tgHookBusy || !tgReady}>
+                        {tgHookBusy ? 'Enabling…' : tg.webhook_enabled ? 'Re-sync webhook' : 'Enable auto-connect'}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Config fields */}

@@ -15,9 +15,10 @@ import {
   UserRound,
   CalendarDays,
   CreditCard,
+  Landmark,
+  ArrowLeftRight,
   Zap,
   Settings,
-  CircleHelp,
   MessageSquare,
   ChevronsLeft,
   ChevronsRight,
@@ -70,7 +71,7 @@ const navGroups = [
     label: "Operations",
     items: [
       { href: "/tasks",    icon: CheckSquare, label: "Tasks",             permission: "tasks" },
-      { href: "/billing",  icon: CreditCard,  label: "Billing & Finance", permission: "billing" },
+      { type: "billing",   permission: "billing" },
       { href: "/pharmacy", icon: Pill,        label: "Pharmacy",          permission: "pharmacy" },
     ],
   },
@@ -83,6 +84,12 @@ const navGroups = [
 const LEADS_SUB = [
   { href: "/leads", icon: ListFilter, label: "All Leads" },
   { href: "/leads/pipeline", icon: Kanban, label: "Lead Pipeline" },
+];
+
+const BILLING_SUB = [
+  { href: "/billing", icon: CreditCard, label: "Invoices" },
+  { href: "/billing/transactions", icon: ArrowLeftRight, label: "Transactions" },
+  { href: "/billing/setup", icon: Landmark, label: "Setup", permission: "settings.organization" },
 ];
 
 function OrgLogo({ logoUrl, orgName }) {
@@ -128,6 +135,11 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
   );
   const leadsExpanded = leadsOpen || pathname.startsWith("/leads");
 
+  const [billingOpen, setBillingOpen] = useState(() =>
+    pathname.startsWith("/billing"),
+  );
+  const billingExpanded = billingOpen || pathname.startsWith("/billing");
+
   // Inline sidebar search
   const [searchQuery, setSearchQuery] = useState("")
   const [searchOpen, setSearchOpen]   = useState(false)
@@ -165,6 +177,11 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
           if (hasPermission("leads")) {
             LEADS_SUB.forEach(s => items.push({ ...s, group: "Sales" }))
           }
+        } else if (item.type === "billing") {
+          if (hasPermission("billing")) {
+            BILLING_SUB.filter(s => !s.permission || hasPermission(s.permission))
+              .forEach(s => items.push({ ...s, group: "Operations" }))
+          }
         } else if (item.href && (!item.permission || hasPermission(item.permission))) {
           items.push({ ...item, group: group.label })
         }
@@ -174,7 +191,6 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
       items.push({ href: "/settings", icon: Settings, label: "Settings", group: "Settings" })
     }
     items.push({ href: "/status",  icon: Radio,        label: "System Status", group: "Other" })
-    items.push({ href: "/help",    icon: CircleHelp,   label: "Help",          group: "Other" })
     return items
   }, [hasPermission])
 
@@ -272,6 +288,81 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
         {leadsExpanded && (
           <div className="mt-0.5 ml-3 space-y-0.5">
             {LEADS_SUB.map(({ href, icon: Icon, label }) => {
+              const active = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2.5 pr-2.5 py-2 text-xs font-500 transition-colors"
+                  style={
+                    active
+                      ? {
+                          borderLeft: "2px solid var(--color-brand)",
+                          color: "var(--color-brand)",
+                          paddingLeft: "10px",
+                        }
+                      : {
+                          borderLeft: "2px solid transparent",
+                          color: "var(--color-text-secondary)",
+                          paddingLeft: "10px",
+                        }
+                  }
+                >
+                  <Icon size={14} />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderBillingNav = () => {
+    if (collapsed) {
+      return (
+        <Link
+          key="billing"
+          href="/billing"
+          onClick={() => setMobileOpen(false)}
+          title="Billing & Finance"
+          className={navLinkClass(isActive("/billing"))}
+          style={navLinkStyle(isActive("/billing"))}
+        >
+          <CreditCard size={17} />
+        </Link>
+      );
+    }
+
+    return (
+      <div key="billing">
+        <button
+          type="button"
+          onClick={() => setBillingOpen((o) => !o)}
+          className={clsx(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+            isActive("/billing") ? "text-white" : "hover:bg-(--color-brand-50)",
+          )}
+          style={
+            isActive("/billing")
+              ? { background: "var(--color-brand)", color: "white" }
+              : { color: "var(--color-text-secondary)" }
+          }
+        >
+          <CreditCard size={17} />
+          <span className="flex-1 text-left">Billing & Finance</span>
+          <ChevronDown
+            size={14}
+            className="opacity-60 transition-transform duration-200"
+            style={{ transform: billingExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          />
+        </button>
+
+        {billingExpanded && (
+          <div className="mt-0.5 ml-3 space-y-0.5">
+            {BILLING_SUB.filter((s) => !s.permission || hasPermission(s.permission)).map(({ href, icon: Icon, label }) => {
               const active = pathname === href;
               return (
                 <Link
@@ -481,7 +572,9 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
             )}
             <div className="space-y-0.5">
               {visibleItems.map((item) =>
-                item.type === "leads" ? renderLeadsNav() : renderNavLink(item),
+                item.type === "leads" ? renderLeadsNav()
+                  : item.type === "billing" ? renderBillingNav()
+                  : renderNavLink(item),
               )}
             </div>
           </div>
@@ -491,19 +584,6 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
 
       {/* Bottom: settings */}
       <div className="px-2 pb-4 border-t border-(--color-border) pt-3 space-y-1">
-        <Link
-          href="/help"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setMobileOpen(false)}
-          title={collapsed ? "Help" : undefined}
-          className={navLinkClass(false)}
-          style={navLinkStyle(false)}
-        >
-          <CircleHelp size={16} />
-          {!collapsed && "Help"}
-        </Link>
-
         <Link
           href="/feedback"
           target="_blank"

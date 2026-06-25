@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Telegram Bot API Help</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f5f7fb;
+        color: #14213d;
+      }
+      .container {
+        max-width: 840px;
+        margin: 40px auto;
+        padding: 24px;
+      }
+      .card {
+        background: #fff;
+        border-radius: 14px;
+        padding: 24px;
+        box-shadow: 0 10px 30px rgba(20, 33, 61, 0.08);
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      ol li { margin-bottom: 10px; }
+      .actions a {
+        text-decoration: none;
+        background: #2563eb;
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 8px;
+        display: inline-block;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <h1>How to connect the Telegram Bot API</h1>
+        <p>Use the steps below to connect a Telegram bot for reminders, alerts, and CRM updates.</p>
+
+        <ol>
+          <li>Open Telegram and search for <strong>@BotFather</strong>.</li>
+          <li>Start a chat and create a new bot with the command <code>/newbot</code>.</li>
+          <li>Choose a name and a unique username for your bot, then copy the bot token that BotFather gives you.</li>
+          <li>Paste the token into your CRM integration settings under <strong>Telegram</strong>.</li>
+          <li>Optionally set a webhook or API base URL if your deployment needs direct delivery to your server.</li>
+          <li>Test the connection by sending a message to the bot from Telegram and confirming it appears in your CRM.</li>
+        </ol>
+
+        <p><strong>Important:</strong> Keep your bot token secret. Do not expose it in client-side code or public repositories.</p>
+
+        <div class="actions">
+          <a href="./integration.html">Back to integrations</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

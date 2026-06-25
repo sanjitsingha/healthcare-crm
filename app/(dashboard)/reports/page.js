@@ -283,6 +283,67 @@ function PersonDropdown({ people, value, setValue }) {
   )
 }
 
+// Resolve a { since, until, label } window from a range key + custom dates.
+function resolveWindow(rangeKey, custom) {
+  if (rangeKey === 'custom' && custom.start && custom.end) {
+    return {
+      since: startOfDay(new Date(custom.start)), until: endOfDay(new Date(custom.end)),
+      label: `${format(new Date(custom.start), 'd MMM')} – ${format(new Date(custom.end), 'd MMM')}`,
+    }
+  }
+  const r = RANGES.find(x => x.key === rangeKey) || RANGES[1]
+  return { since: r.days ? startOfDay(subDays(new Date(), r.days - 1)) : null, until: endOfDay(new Date()), label: r.label }
+}
+
+// ── Metrics (pure) — computed for a given window + person ─────
+function computeMetrics(data, since, until, person, people, org) {
+  const isOrg = person === 'org'
+  const personObj = people.find(p => p.id === person) || people[0] || { id: 'org', name: 'Organization' }
+  const within = (d) => { if (!d) return false; const t = new Date(d); if (since && t < since) return false; if (until && t > until) return false; return true }
+  const owns = (assignedId) => isOrg || assignedId === person
+
+  const leads = data.leads.filter(l => within(l.created_at) && owns(l.assigned_to))
+  const patients = data.patients.filter(p => within(p.created_at) && owns(p.assigned_to))
+  const appts = data.appts.filter(a => within(a.scheduled_at) && (isOrg || a.doctor_id === person))
+  const followups = data.followups.filter(f => within(f.created_at) && (isOrg || f.caller_name === personObj.name))
+  const payments = data.payments.filter(p => within(p.payment_date || p.created_at))
+
+  const converted = leads.filter(l => l.stage === 'Converted').length
+  const revenue = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const convRate = leads.length ? Math.round((converted / leads.length) * 100) : 0
+
+  const byStage = STAGES.map(s => ({ label: s, value: leads.filter(l => l.stage === s).length, color: STAGE_COLOR[s] }))
+
+  const srcMap = {}
+  leads.forEach(l => { const s = l.source || 'Other'; srcMap[s] = (srcMap[s] || 0) + 1 })
+  const bySource = Object.entries(srcMap).sort((a, b) => b[1] - a[1]).map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] }))
+
+  const apptStatus = ['booked', 'confirmed', 'completed', 'cancelled']
+    .map(s => ({ label: s[0].toUpperCase() + s.slice(1), value: appts.filter(a => a.status === s).length, color: APPT_COLOR[s] }))
+
+  const outMap = {}
+  followups.forEach(f => { if (f.outcome) outMap[f.outcome] = (outMap[f.outcome] || 0) + 1 })
+  const outcomes = Object.entries(outMap).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] }))
+
+  const staff = org?.settings?.staff_members || []
+  const nameOf = (id) => staff.find(s => s.id === id)?.name || (id ? 'Other' : 'Unassigned')
+  const teamMap = {}
+  leads.forEach(l => { const n = nameOf(l.assigned_to); teamMap[n] = (teamMap[n] || 0) + 1 })
+  const team = Object.entries(teamMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] }))
+
+  const end = until || new Date()
+  const start = since || new Date(Math.min(...(data.leads.length ? data.leads.map(l => +new Date(l.created_at)) : [+end])))
+  const spanDays = Math.max(1, Math.round((end - start) / 86400000))
+  let buckets, fmt, same
+  if (spanDays <= 31) { buckets = eachDayOfInterval({ start, end }); fmt = 'd MMM'; same = isSameDay }
+  else if (spanDays <= 182) { buckets = eachWeekOfInterval({ start, end }); fmt = 'd MMM'; same = (a, b) => isSameWeek(a, b) }
+  else { buckets = eachMonthOfInterval({ start, end }); fmt = 'MMM yy'; same = isSameMonth }
+  const leadsSeries = buckets.map(b => ({ label: format(b, fmt), value: leads.filter(l => same(new Date(l.created_at), b)).length }))
+  const revenueSeries = buckets.map(b => ({ label: format(b, fmt), value: Math.round(payments.filter(p => same(new Date(p.payment_date || p.created_at), b)).reduce((s, p) => s + (Number(p.amount) || 0), 0)) }))
+
+  return { leads, patients, appts, followups, payments, converted, revenue, convRate, byStage, bySource, apptStatus, outcomes, team, leadsSeries, revenueSeries }
+}
+
 // ── Page ─────────────────────────────────────────────────────
 export default function ReportsPage() {
   const { orgId, org } = useOrg()
@@ -317,14 +378,10 @@ export default function ReportsPage() {
   }
   useEffect(load, [orgId])
 
-  // Resolve the active window.
+  // Resolve the active window (A).
   const { since, until, rangeLabel } = useMemo(() => {
-    if (rangeKey === 'custom' && custom.start && custom.end) {
-      return { since: startOfDay(new Date(custom.start)), until: endOfDay(new Date(custom.end)),
-        rangeLabel: `${format(new Date(custom.start), 'd MMM')} – ${format(new Date(custom.end), 'd MMM')}` }
-    }
-    const r = RANGES.find(x => x.key === rangeKey) || RANGES[1]
-    return { since: r.days ? startOfDay(subDays(new Date(), r.days - 1)) : null, until: endOfDay(new Date()), rangeLabel: r.label }
+    const w = resolveWindow(rangeKey, custom)
+    return { since: w.since, until: w.until, rangeLabel: w.label }
   }, [rangeKey, custom])
 
   const within = (d) => { if (!d) return false; const t = new Date(d); if (since && t < since) return false; if (until && t > until) return false; return true }
@@ -332,50 +389,7 @@ export default function ReportsPage() {
   const personObj = people.find(p => p.id === person) || people[0]
   const isOrg = person === 'org'
 
-  const m = useMemo(() => {
-    const owns = (assignedId) => isOrg || assignedId === person
-    const leads = data.leads.filter(l => within(l.created_at) && owns(l.assigned_to))
-    const patients = data.patients.filter(p => within(p.created_at) && owns(p.assigned_to))
-    const appts = data.appts.filter(a => within(a.scheduled_at) && (isOrg || a.doctor_id === person))
-    const followups = data.followups.filter(f => within(f.created_at) && (isOrg || f.caller_name === personObj.name))
-    const payments = data.payments.filter(p => within(p.payment_date || p.created_at)) // org-level (no owner field)
-
-    const converted = leads.filter(l => l.stage === 'Converted').length
-    const revenue = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
-    const convRate = leads.length ? Math.round((converted / leads.length) * 100) : 0
-
-    const byStage = STAGES.map(s => ({ label: s, value: leads.filter(l => l.stage === s).length, color: STAGE_COLOR[s] }))
-
-    const srcMap = {}
-    leads.forEach(l => { const s = l.source || 'Other'; srcMap[s] = (srcMap[s] || 0) + 1 })
-    const bySource = Object.entries(srcMap).sort((a, b) => b[1] - a[1]).map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] }))
-
-    const apptStatus = ['booked', 'confirmed', 'completed', 'cancelled']
-      .map(s => ({ label: s[0].toUpperCase() + s.slice(1), value: appts.filter(a => a.status === s).length, color: APPT_COLOR[s] }))
-
-    const outMap = {}
-    followups.forEach(f => { if (f.outcome) outMap[f.outcome] = (outMap[f.outcome] || 0) + 1 })
-    const outcomes = Object.entries(outMap).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] }))
-
-    const staff = org?.settings?.staff_members || []
-    const nameOf = (id) => staff.find(s => s.id === id)?.name || (id ? 'Other' : 'Unassigned')
-    const teamMap = {}
-    leads.forEach(l => { const n = nameOf(l.assigned_to); teamMap[n] = (teamMap[n] || 0) + 1 })
-    const team = Object.entries(teamMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value], i) => ({ label, value, color: PALETTE[i % PALETTE.length] }))
-
-    // time buckets
-    const end = until || new Date()
-    const start = since || new Date(Math.min(...(data.leads.length ? data.leads.map(l => +new Date(l.created_at)) : [+end])))
-    const spanDays = Math.max(1, Math.round((end - start) / 86400000))
-    let buckets, fmt, same
-    if (spanDays <= 31) { buckets = eachDayOfInterval({ start, end }); fmt = 'd MMM'; same = isSameDay }
-    else if (spanDays <= 182) { buckets = eachWeekOfInterval({ start, end }); fmt = 'd MMM'; same = (a, b) => isSameWeek(a, b) }
-    else { buckets = eachMonthOfInterval({ start, end }); fmt = 'MMM yy'; same = isSameMonth }
-    const leadsSeries = buckets.map(b => ({ label: format(b, fmt), value: leads.filter(l => same(new Date(l.created_at), b)).length }))
-    const revenueSeries = buckets.map(b => ({ label: format(b, fmt), value: Math.round(payments.filter(p => same(new Date(p.payment_date || p.created_at), b)).reduce((s, p) => s + (Number(p.amount) || 0), 0)) }))
-
-    return { leads, patients, appts, followups, payments, converted, revenue, convRate, byStage, bySource, apptStatus, outcomes, team, leadsSeries, revenueSeries }
-  }, [data, rangeKey, custom, person, org]) // eslint-disable-line
+  const m = useMemo(() => computeMetrics(data, since, until, person, people, org), [data, since, until, person, people, org])
 
   if (loading) return <div className="p-6 flex items-center justify-center h-[60vh]"><Spinner /></div>
 
@@ -392,7 +406,7 @@ export default function ReportsPage() {
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{personObj.name} · {rangeLabel}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button type="button" onClick={load} title="Refresh"
             className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
             <RefreshCw size={15} />

@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, Rocket, TrendingUp, Users, Calendar, Stethoscope, CheckSquare,
@@ -527,10 +527,7 @@ function DocBody({ id, go }) {
       return (
         <Doc eyebrow="More" title="Support Tickets"
           lead="Raise issues without leaving the app.">
-          <P>Use &quot;Raise a Complaint&quot; in the bottom bar to file a support ticket. Track its status from your tickets list.</P>
-          <div className="pt-4">
-            <P>Still stuck? Visit the <Link href="/help" className="font-700" style={{ color: 'var(--color-brand)' }}>Help Center</Link> for guided walkthroughs.</P>
-          </div>
+          <P>Use &quot;Raise a Complaint&quot; in the bottom bar to file a support ticket. Track its status from your tickets list, and our team will follow up.</P>
         </Doc>
       )
 
@@ -545,29 +542,23 @@ function PrevNext({ id, go }) {
   const prev = idx > 0 ? ALL[idx - 1] : null
   const next = idx < ALL.length - 1 ? ALL[idx + 1] : null
   return (
-    <div className="grid sm:grid-cols-2 gap-3 mt-14 pt-8 border-t border-(--color-border)">
+    <div className="flex items-center justify-between gap-4 mt-14 pt-6 border-t border-(--color-border)">
       {prev ? (
         <button type="button" onClick={() => go(prev.id)}
-          className="group flex items-center gap-3 p-4 rounded-2xl border text-left transition-all hover:-translate-y-0.5"
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-          <ArrowLeft size={18} className="shrink-0 transition-transform group-hover:-translate-x-0.5" style={{ color: 'var(--color-brand)' }} />
-          <span className="min-w-0">
-            <span className="block text-[11px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Previous</span>
-            <span className="block text-[14px] font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{prev.label}</span>
-          </span>
+          className="group w-fit inline-flex items-center gap-1.5 text-[13.5px] font-600 transition-colors"
+          style={{ color: 'var(--color-text-secondary)' }}>
+          <ArrowLeft size={15} className="transition-transform group-hover:-translate-x-0.5" style={{ color: 'var(--color-brand)' }} />
+          {prev.label}
         </button>
-      ) : <div />}
+      ) : <span />}
       {next ? (
         <button type="button" onClick={() => go(next.id)}
-          className="group flex items-center justify-end gap-3 p-4 rounded-2xl border text-right transition-all hover:-translate-y-0.5 sm:col-start-2"
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-          <span className="min-w-0">
-            <span className="block text-[11px] font-600 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Next</span>
-            <span className="block text-[14px] font-700 truncate" style={{ color: 'var(--color-text-primary)' }}>{next.label}</span>
-          </span>
-          <ArrowRight size={18} className="shrink-0 transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--color-brand)' }} />
+          className="group w-fit inline-flex items-center gap-1.5 text-[13.5px] font-600 transition-colors"
+          style={{ color: 'var(--color-text-secondary)' }}>
+          {next.label}
+          <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" style={{ color: 'var(--color-brand)' }} />
         </button>
-      ) : <div />}
+      ) : <span />}
     </div>
   )
 }
@@ -578,9 +569,31 @@ export default function DocsPage() {
   const [query, setQuery] = useState('')
   const contentRef = useRef(null)
 
-  // Switch topic and jump the reading pane back to the top.
+  // Deep linking: each topic has a URL hash (e.g. /docs#leads). Sync the active
+  // topic from the hash on load and on back/forward / manual hash edits.
+  useEffect(() => {
+    const fromHash = () => {
+      const h = window.location.hash.replace('#', '')
+      if (h && ALL_IDS.includes(h)) {
+        setActive(h)
+        contentRef.current?.scrollTo({ top: 0 })
+      }
+    }
+    fromHash()
+    window.addEventListener('hashchange', fromHash)
+    window.addEventListener('popstate', fromHash)
+    return () => {
+      window.removeEventListener('hashchange', fromHash)
+      window.removeEventListener('popstate', fromHash)
+    }
+  }, [])
+
+  // Switch topic, update the URL hash, and jump the reading pane back to the top.
   const go = (id) => {
     setActive(id)
+    if (window.location.hash !== `#${id}`) {
+      window.history.pushState(null, '', id === 'overview' ? '#' : `#${id}`)
+    }
     contentRef.current?.scrollTo({ top: 0 })
   }
 
@@ -611,7 +624,6 @@ export default function DocsPage() {
 
         <nav className="hidden md:flex items-center gap-1 ml-auto">
           <span className="text-[13px] font-600 px-3 py-1.5 rounded-lg" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>Documentation</span>
-          <Link href="/help" className="text-[13px] font-500 px-3 py-1.5 rounded-lg" style={{ color: 'var(--color-text-muted)' }}>Help Center</Link>
         </nav>
         <Link href="/login" className="text-[13px] font-600 px-4 py-2 rounded-xl text-white inline-flex items-center gap-1.5 shrink-0 md:ml-1" style={{ background: 'var(--color-brand)' }}>
           Open app <ArrowRight size={13} />

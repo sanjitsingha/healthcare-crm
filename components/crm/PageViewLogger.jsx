@@ -13,7 +13,6 @@ const EXACT = {
   '/appointments':        'Appointments',
   '/appointments/new':    'New Appointment Form',
   '/contacts':            'Contacts',
-  '/help':                'Help',
   '/settings':            'Settings',
   '/settings/account':    'Account Settings',
   '/settings/modules':    'Module Settings',
