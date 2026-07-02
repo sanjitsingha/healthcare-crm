@@ -278,8 +278,8 @@ export default function ConsultationPage() {
   const [filters, setFilters] = useState({ types: [], statuses: [], dateFrom: '', dateTo: '', custom: {} })
   const [activeCustom, setActiveCustom] = useState([])
 
-  const stages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#6366f1' } : s)
-  const stageColor = name => stages.find(s => s.name === name)?.color || '#6366f1'
+  const stages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
+  const stageColor = name => stages.find(s => s.name === name)?.color || '#135BFB'
 
   // Custom fields from both leads and patients modules
   const customModuleFields = useMemo(() => {

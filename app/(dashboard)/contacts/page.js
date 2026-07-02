@@ -320,8 +320,8 @@ export default function ContactsPage() {
   const [selected, setSelected] = useState(new Set())
   const [sort, setSort]         = useState({ field: 'created', dir: 'desc' })
 
-  const stages  = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#6366f1' } : s)
-  const stageColor = (name) => stages.find(s => s.name === name)?.color || '#6366f1'
+  const stages  = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
+  const stageColor = (name) => stages.find(s => s.name === name)?.color || '#135BFB'
 
   const customColumns = (org?.settings?.modules || [])
     .filter(m => m.active)
@@ -564,7 +564,7 @@ export default function ContactsPage() {
         return r.tags?.length ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {r.tags.slice(0, 3).map(tag => {
-              const tc = tag.color || '#6366f1'
+              const tc = tag.color || '#135BFB'
               return (
                 <span key={tag.id}
                   className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-[10px] font-600"

@@ -12,7 +12,7 @@ const LINE = '#e8efec' // soft divider color (lighter than --color-border)
 
 // Source → icon + chip colors
 const SOURCE_META = {
-  Billing:      { icon: ReceiptText, fg: '#4f46e5', bg: '#eef2ff' },
+  Billing:      { icon: ReceiptText, fg: '#135BFB', bg: '#eef2ff' },
   Pharmacy:     { icon: Pill,        fg: '#059669', bg: '#ecfdf5' },
   Consultation: { icon: Stethoscope, fg: '#2563eb', bg: '#eff6ff' },
   Appointment:  { icon: CalendarDays,fg: '#b45309', bg: '#fffbeb' },

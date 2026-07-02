@@ -40,9 +40,9 @@ const ACTION_ICON = {
 // Color per action kind — used for left-border accent on action cards
 const KIND_COLOR = {
   stage: '#7c3aed', status: '#7c3aed', priority: '#f59e0b', source: '#0891b2',
-  tag: '#8b5cf6', staff: '#10b981', number: '#6366f1', text: '#64748b',
+  tag: '#8b5cf6', staff: '#10b981', number: '#135BFB', text: '#64748b',
   task: '#2563eb', followup: '#0891b2', notify: '#ea580c',
-  field: '#6366f1', custom: '#0891b2', convert: '#15803d',
+  field: '#135BFB', custom: '#0891b2', convert: '#15803d',
 }
 
 const blankCond   = ()       => ({ id: uid(), field: '', op: '==', value: '' })
@@ -330,44 +330,78 @@ export default function RulesPage() {
     finally { setTesting(false) }
   }
 
-  return (
-    <div className="flex -m-6 -mb-16 h-screen" style={{ background:'var(--color-bg)' }}>
+  // ── section card wrapper ──────────────────────────────────────
+  const SectionCard = ({ accent, icon: Icon, iconBg, title, hint, children, footer }) => (
+    <div className="mb-6 rounded-2xl overflow-hidden"
+      style={{ border:'1px solid var(--color-border)', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+      {/* card header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-(--color-border)"
+        style={{ background:'var(--color-surface-2)', borderLeft:`4px solid ${accent}` }}>
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background:iconBg }}>
+          <Icon size={15} style={{color:accent}}/>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-700 leading-tight" style={{color:'var(--color-text-primary)'}}>{title}</p>
+          {hint && <p className="text-xs mt-0.5" style={{color:'var(--color-text-muted)'}}>{hint}</p>}
+        </div>
+      </div>
+      {/* card body */}
+      <div className="px-5 py-4" style={{ background:'var(--color-surface)' }}>{children}</div>
+      {footer && (
+        <div className="px-5 py-3 border-t border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
+          {footer}
+        </div>
+      )}
+    </div>
+  )
 
-      {/* ── Left rail ─────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 border-r border-(--color-border) h-full flex flex-col" style={{ background:'var(--color-surface)' }}>
-        {/* Header */}
-        <div className="px-4 py-4 border-b border-(--color-border) flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background:'var(--color-brand)', color:'white' }}>
-              <Zap size={14}/>
-            </div>
-            <div>
-              <p className="text-sm font-700 leading-tight" style={{ color:'var(--color-text-primary)' }}>Workflow Rules</p>
-              <p className="text-[11px]" style={{ color:'var(--color-text-muted)' }}>{rules.length} rule{rules.length!==1?'s':''}</p>
+  return (
+    <div className="flex -m-6 -mb-16 h-screen" style={{ background:'var(--color-surface-2)' }}>
+
+      {/* ── Left sidebar ──────────────────────────────────────────────── */}
+      <aside className="w-72 shrink-0 border-r border-(--color-border) h-full flex flex-col"
+        style={{ background:'var(--color-surface)' }}>
+
+        {/* Sidebar header */}
+        <div className="px-5 py-5 border-b border-(--color-border)">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                style={{ background:'var(--color-brand)', boxShadow:'0 2px 8px rgba(15,110,86,0.35)' }}>
+                <Zap size={15} className="text-white"/>
+              </div>
+              <div>
+                <p className="text-sm font-800 leading-tight" style={{color:'var(--color-text-primary)'}}>Workflow Rules</p>
+                <p className="text-[11px]" style={{color:'var(--color-text-muted)'}}>{rules.length} rule{rules.length!==1?'s':''}</p>
+              </div>
             </div>
           </div>
+
+          {/* New rule button + dropdown */}
           <div className="relative">
             {addOpen && <div className="fixed inset-0 z-10" onClick={()=>setAddOpen(false)}/>}
-            <button type="button" className="relative z-20 flex items-center gap-1 text-xs font-700 px-2.5 py-1.5 rounded-lg transition-colors hover:bg-(--color-surface-2)"
-              style={{ color:'var(--color-brand)', border:'1px solid var(--color-brand)20', background:'var(--color-brand-50)' }}
-              onClick={()=>setAddOpen(o=>!o)}>
-              <Plus size={13}/> New
+            <button type="button" onClick={()=>setAddOpen(o=>!o)}
+              className="btn btn-primary btn-md w-full">
+              <Plus size={14}/> New Rule
             </button>
             {addOpen && (
-              <div className="absolute top-full right-0 mt-1.5 w-48 rounded-xl overflow-hidden z-20"
-                style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', boxShadow:'0 12px 32px rgba(0,0,0,0.14)' }}>
-                <div className="px-3 py-2 border-b border-(--color-border)">
-                  <p className="text-[10px] font-700 uppercase tracking-wide" style={{ color:'var(--color-text-muted)' }}>Choose module</p>
+              <div className="absolute top-full left-0 right-0 mt-2 rounded-xl overflow-hidden z-20"
+                style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', boxShadow:'0 16px 40px rgba(0,0,0,0.16)' }}>
+                <div className="px-4 py-2.5 border-b border-(--color-border)">
+                  <p className="text-[10px] font-700 uppercase tracking-widest" style={{color:'var(--color-text-muted)'}}>Choose module</p>
                 </div>
                 {RULE_TARGETS.map(({value}) => {
                   const meta=TARGET_META[value]; const Icon=meta.icon
                   return (
                     <button key={value} type="button" onClick={()=>{addRule(value);setAddOpen(false)}}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left hover:bg-(--color-surface-2) transition-colors">
-                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background:meta.bg }}>
-                        <Icon size={12} style={{color:meta.color}}/>
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left transition-colors hover:bg-(--color-surface-2)">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{background:meta.bg}}>
+                        <Icon size={13} style={{color:meta.color}}/>
                       </div>
-                      <span className="font-500" style={{color:'var(--color-text-primary)'}}>{meta.ruleLabel}</span>
+                      <div>
+                        <p className="font-600 text-sm leading-tight" style={{color:'var(--color-text-primary)'}}>{meta.label}</p>
+                        <p className="text-[11px]" style={{color:'var(--color-text-muted)'}}>Rule for {meta.label.toLowerCase()} events</p>
+                      </div>
                     </button>
                   )
                 })}
@@ -377,285 +411,276 @@ export default function RulesPage() {
         </div>
 
         {/* Rules list */}
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav className="flex-1 overflow-y-auto py-3 space-y-1 px-3">
           {loading ? (
             <div className="flex justify-center py-10"><Spinner size={20}/></div>
           ) : rules.length===0 ? (
-            <div className="px-4 py-10 text-center">
-              <Zap size={24} className="mx-auto mb-2 opacity-20"/>
-              <p className="text-xs font-500" style={{color:'var(--color-text-muted)'}}>No rules yet</p>
-              <p className="text-[11px] mt-0.5" style={{color:'var(--color-text-muted)'}}>Click <b>New</b> to create one</p>
+            <div className="py-14 text-center">
+              <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{background:'var(--color-surface-2)'}}>
+                <Zap size={20} style={{color:'var(--color-text-muted)'}}/>
+              </div>
+              <p className="text-sm font-600" style={{color:'var(--color-text-primary)'}}>No rules yet</p>
+              <p className="text-xs mt-1" style={{color:'var(--color-text-muted)'}}>Click <b>New Rule</b> above to get started</p>
             </div>
           ) : rules.map(r => {
-            const meta=TARGET_META[r.target]||TARGET_META.lead
-            const Icon=meta.icon
+            const meta=TARGET_META[r.target]||TARGET_META.lead; const Icon=meta.icon
             const active=r.id===selectedId
             return (
               <button key={r.id} type="button"
                 onClick={()=>{setSelectedId(r.id);setTestResult(null)}}
-                className="w-full text-left px-4 py-3 transition-all relative"
-                style={active ? {
-                  borderLeft:'3px solid var(--color-brand)',
-                  background:'var(--color-brand-50)',
-                  paddingLeft:'calc(1rem - 3px)',
-                } : {
-                  borderLeft:'3px solid transparent',
-                }}>
+                className="w-full text-left px-3 py-3 rounded-xl transition-all"
+                style={active
+                  ? { background:'var(--color-brand-50)', border:'1px solid var(--color-brand)', boxShadow:'0 1px 4px rgba(15,110,86,0.12)' }
+                  : { background:'transparent', border:'1px solid transparent' }}>
                 <div className="flex items-center gap-2.5">
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background:active?meta.bg+'cc':meta.bg }}>
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{background:meta.bg}}>
                     <Icon size={12} style={{color:meta.color}}/>
                   </div>
-                  <span className="flex-1 min-w-0 text-sm font-600 truncate" style={{ color:'var(--color-text-primary)' }}>{r.name||'Untitled rule'}</span>
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background:r.enabled?'#22c55e':'#cbd5e1' }}/>
+                  <span className="flex-1 min-w-0 text-sm font-600 truncate" style={{color:'var(--color-text-primary)'}}>
+                    {r.name||'Untitled rule'}
+                  </span>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{background:r.enabled?'#22c55e':'#d1d5db'}}/>
                 </div>
-                <p className="text-[11px] mt-0.5 truncate pl-8" style={{ color:'var(--color-text-muted)' }}>
-                  {eventLabel(r.target, r.event)}
-                </p>
+                <div className="flex items-center gap-1.5 mt-1.5 pl-9">
+                  <span className="text-[10px] font-600 px-1.5 py-0.5 rounded-full" style={{background:meta.bg,color:meta.color}}>
+                    {meta.label}
+                  </span>
+                  <p className="text-[11px] truncate" style={{color:'var(--color-text-muted)'}}>
+                    {eventLabel(r.target, r.event)}
+                  </p>
+                </div>
               </button>
             )
           })}
         </nav>
       </aside>
 
-      {/* ── Right panel ──────────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 h-full overflow-y-auto flex flex-col">
+      {/* ── Right panel ───────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 h-full overflow-y-auto">
         {loading ? (
-          <div className="flex-1 flex items-center justify-center"><Spinner size={28}/></div>
+          <div className="h-full flex items-center justify-center"><Spinner size={28}/></div>
         ) : !selected ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 opacity-30">
-            <Zap size={40} style={{color:'var(--color-text-muted)'}}/>
-            <p className="text-sm" style={{color:'var(--color-text-muted)'}}>Select a rule or create a new one</p>
+          <div className="h-full flex flex-col items-center justify-center gap-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{background:'var(--color-surface-2)'}}>
+              <Zap size={28} style={{color:'var(--color-text-muted)',opacity:0.4}}/>
+            </div>
+            <div className="text-center">
+              <p className="text-base font-600" style={{color:'var(--color-text-primary)'}}>Select a rule to edit</p>
+              <p className="text-sm mt-1" style={{color:'var(--color-text-muted)'}}>Or create a new rule from the sidebar</p>
+            </div>
           </div>
         ) : (
-          <>
-            {/* ── Sticky top bar ── */}
-            <div className="sticky top-0 z-20 flex items-center gap-3 px-8 py-3 border-b border-(--color-border)"
-              style={{ background:'var(--color-surface)', backdropFilter:'blur(8px)' }}>
-              <input
-                value={selected.name}
-                onChange={e=>patch({name:e.target.value})}
-                placeholder="Rule name…"
-                className="flex-1 min-w-0 text-base font-700 bg-transparent outline-none"
-                style={{ color:'var(--color-text-primary)' }}
-              />
-              {/* status pill */}
-              <button type="button" onClick={()=>patch({enabled:!selected.enabled})}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-700 transition-all shrink-0"
-                style={selected.enabled
-                  ? { background:'#dcfce7', color:'#15803d' }
-                  : { background:'var(--color-surface-2)', color:'var(--color-text-muted)' }}>
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background:selected.enabled?'#22c55e':'#94a3b8' }}/>
-                {selected.enabled ? 'Active' : 'Inactive'}
-              </button>
-              <button type="button" onClick={()=>removeRule(selected.id)}
-                className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors shrink-0">
-                <Trash2 size={14}/>
-              </button>
-              {/* Save button */}
-              <button type="button" onClick={handleSave} disabled={saving||!dirty}
-                className="btn btn-primary btn-md shrink-0 disabled:opacity-50">
-                {saving ? <Spinner size={13}/> : dirty ? null : <Check size={13}/>}
-                {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
-              </button>
+          <div className="max-w-3xl mx-auto px-8 py-8">
+
+            {/* ── Top bar ── */}
+            <div className="flex items-start gap-4 mb-8">
+              {/* Rule name + meta */}
+              <div className="flex-1 min-w-0">
+                <input
+                  value={selected.name}
+                  onChange={e=>patch({name:e.target.value})}
+                  placeholder="Rule name…"
+                  className="w-full text-xl font-800 bg-transparent outline-none border-b-2 border-transparent transition-colors focus:border-(--color-brand) pb-1"
+                  style={{color:'var(--color-text-primary)'}}
+                />
+                {(() => { const meta=TARGET_META[selected.target]||TARGET_META.lead; const Icon=meta.icon; return (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-700" style={{background:meta.bg,color:meta.color}}>
+                      <Icon size={11}/>{meta.label}
+                    </span>
+                    <span className="text-xs" style={{color:'var(--color-text-muted)'}}>{eventLabel(selected.target, selected.event)}</span>
+                  </div>
+                )})()}
+              </div>
+
+              {/* Actions cluster */}
+              <div className="flex items-center gap-2 shrink-0 pt-1">
+                {/* Active toggle */}
+                <button type="button" onClick={()=>patch({enabled:!selected.enabled})}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-700 transition-all border"
+                  style={selected.enabled
+                    ? { background:'#dcfce7', color:'#15803d', borderColor:'#86efac' }
+                    : { background:'var(--color-surface-2)', color:'var(--color-text-muted)', borderColor:'var(--color-border)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{background:selected.enabled?'#22c55e':'#94a3b8'}}/>
+                  {selected.enabled ? 'Active' : 'Inactive'}
+                </button>
+                <button type="button" onClick={()=>removeRule(selected.id)}
+                  className="btn btn-danger btn-icon" title="Delete rule">
+                  <Trash2 size={14}/>
+                </button>
+                <button type="button" onClick={handleSave} disabled={saving||!dirty}
+                  className="btn btn-primary btn-md disabled:opacity-50">
+                  {saving ? <Spinner size={13}/> : <Check size={13}/>}
+                  {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
+                </button>
+              </div>
             </div>
 
-            {/* ── Stepper body ── */}
-            <div className="flex-1 px-8 py-8 max-w-2xl w-full">
+            {/* ── STEP 1: WHEN ── */}
+            <SectionCard accent="#f59e0b" icon={CalendarClock} iconBg="#fef3c7"
+              title="When should this rule trigger?"
+              hint="Choose the event that starts this rule.">
+              <div className="space-y-3">
+                {/* Event selector */}
+                <div className="flex items-center gap-4">
+                  <label className="text-xs font-700 uppercase tracking-wide w-20 shrink-0" style={{color:'var(--color-text-muted)'}}>Event</label>
+                  <select value={selected.event} onChange={e=>patch({event:e.target.value})}
+                    className={`${fs} flex-1 font-600`} style={fb}>
+                    {(RULE_EVENTS[selected.target]||[]).map(ev=>(
+                      <option key={ev.value} value={ev.value}>{ev.label}</option>
+                    ))}
+                  </select>
+                  {(selected.event==='field_updated'||selected.event==='field_entered') && (
+                    <select value={selected.trigger_field_mode||'any'} onChange={e=>patch({trigger_field_mode:e.target.value})}
+                      className={`${fs} font-700`}
+                      style={{background:'#fffbeb',color:'#b45309',borderColor:'#fcd34d'}}>
+                      <option value="any">Any field</option>
+                      <option value="specific">Specific field(s)</option>
+                    </select>
+                  )}
+                </div>
 
-              {/* STEP 1 — WHEN */}
-              <Step n="1" color="#f59e0b" label="When should this rule trigger?"
-                hint="Choose the module and the event that starts this rule.">
-                <div className="rounded-xl overflow-hidden" style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)' }}>
-                  {/* Module row */}
-                  <div className="flex items-center gap-4 px-4 py-3 border-b border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
-                    <span className="text-xs font-600 w-16 shrink-0" style={{color:'var(--color-text-muted)'}}>Module</span>
-                    {(() => { const meta=TARGET_META[selected.target]||TARGET_META.lead; const Icon=meta.icon; return (
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-700" style={{ background:meta.bg, color:meta.color }}>
-                        <Icon size={12}/>{meta.label}
-                      </div>
-                    )})()}
-                    <span className="text-[11px] ml-auto" style={{color:'var(--color-text-muted)'}}>Set when rule was created</span>
-                  </div>
-                  {/* Event row — field-trigger mode selector sits to the right */}
-                  {(() => {
-                    const isFieldTrig = selected.event === 'field_updated' || selected.event === 'field_entered'
-                    return (
-                      <div className="flex items-center gap-3 px-4 py-3">
-                        <span className="text-xs font-600 w-16 shrink-0" style={{color:'var(--color-text-muted)'}}>Event</span>
-                        <select value={selected.event} onChange={e=>patch({event:e.target.value})}
-                          className={`${fs} flex-1 font-500`} style={fb}>
-                          {(RULE_EVENTS[selected.target]||[]).map(ev=>(
-                            <option key={ev.value} value={ev.value}>{ev.label}</option>
-                          ))}
+                {/* Specific fields chooser */}
+                {(selected.event==='field_updated'||selected.event==='field_entered') && selected.trigger_field_mode==='specific' && (() => {
+                  const opts=watchOptionsFor(selected.target); const picked=selected.trigger_fields||[]
+                  return (
+                    <div className="flex items-start gap-4">
+                      <label className="text-xs font-700 uppercase tracking-wide w-20 shrink-0 mt-2" style={{color:'var(--color-text-muted)'}}>Watch</label>
+                      <div className="flex-1 space-y-2">
+                        <select value="" onChange={e=>{ const v=e.target.value; if(!v||picked.includes(v)) return; patch({trigger_fields:[...picked,v]}) }}
+                          className={`${fs} w-full`} style={fb}>
+                          <option value="">{opts.length?'Add a field to watch…':'Loading fields…'}</option>
+                          {opts.filter(o=>!picked.includes(o.value)).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
-                        {isFieldTrig && (
-                          <select value={selected.trigger_field_mode||'any'} onChange={e=>patch({trigger_field_mode:e.target.value})}
-                            className={`${fs} shrink-0 font-700`}
-                            style={{ ...fb, color:'#b45309', background:'#fffbeb', borderColor:'#f59e0b55' }}>
-                            <option value="any">Any field</option>
-                            <option value="specific">Specific field(s)</option>
-                          </select>
+                        {picked.length>0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {picked.map(v=>(
+                              <span key={v} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-xs font-600"
+                                style={{background:'#fef3c7',color:'#b45309'}}>
+                                {fieldLabelFor(selected.target,v)}
+                                <button type="button" onClick={()=>patch({trigger_fields:picked.filter(x=>x!==v)})}
+                                  className="rounded-full p-0.5 hover:bg-amber-200/60"><X size={10}/></button>
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
-                    )
-                  })()}
-
-                  {/* Field chooser — dropdown to add fields + removable selected pills */}
-                  {(selected.event === 'field_updated' || selected.event === 'field_entered') && selected.trigger_field_mode === 'specific' && (() => {
-                    const opts = watchOptionsFor(selected.target)
-                    const picked = selected.trigger_fields || []
-                    return (
-                      <div className="flex items-start gap-3 px-4 py-3 border-t border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
-                        <span className="text-xs font-600 w-16 shrink-0 mt-2" style={{color:'var(--color-text-muted)'}}>Watch</span>
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <select value="" onChange={e=>{ const v=e.target.value; if(!v) return; if(!picked.includes(v)) patch({ trigger_fields:[...picked, v] }) }}
-                            className={`${fs} w-full`} style={fb}>
-                            <option value="">{opts.length ? 'Select a field to watch…' : 'Loading fields…'}</option>
-                            {opts.filter(o=>!picked.includes(o.value)).map(o=>(
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
-                          {picked.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {picked.map(v=>(
-                                <span key={v} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-600"
-                                  style={{ background:'#fef3c7', color:'#b45309' }}>
-                                  {fieldLabelFor(selected.target, v)}
-                                  <button type="button" onClick={()=>patch({ trigger_fields: picked.filter(x=>x!==v) })}
-                                    className="rounded-full hover:bg-amber-200/60 transition-colors p-0.5"><X size={11}/></button>
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-[11px]" style={{color:'var(--color-text-muted)'}}>
-                              No fields selected — pick one above{selected.event==='field_entered' ? ' to fire on an empty → filled change.' : '.'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-              </Step>
-
-              {/* STEP 2 — CONDITIONS */}
-              <Step n="2" color="#7c3aed" label="Filter by conditions"
-                hint="Leave empty to run on every event, or add conditions to narrow the scope.">
-                <div className="rounded-xl overflow-hidden" style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)' }}>
-                  {/* Match toggle */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
-                    <span className="text-xs font-500" style={{color:'var(--color-text-muted)'}}>Run when</span>
-                    <select value={selected.condition_match||'all'} onChange={e=>patch({condition_match:e.target.value})}
-                      className="px-2 py-1 rounded-lg border border-(--color-border) text-xs font-700 outline-none" style={fb}>
-                      <option value="all">ALL</option>
-                      <option value="any">ANY</option>
-                    </select>
-                    <span className="text-xs font-500" style={{color:'var(--color-text-muted)'}}>of the following conditions match</span>
-                  </div>
-
-                  {/* Conditions table */}
-                  {(selected.conditions||[]).length > 0 ? (
-                    <table className="w-full text-sm" style={{ tableLayout:'fixed' }}>
-                      <colgroup>
-                        <col style={{width:'32%'}}/><col style={{width:'26%'}}/><col style={{width:'35%'}}/><col style={{width:'7%'}}/>
-                      </colgroup>
-                      <thead>
-                        <tr style={{ background:'var(--color-surface-2)', borderBottom:'1px solid var(--color-border)' }}>
-                          {['Field','Operator','Value',''].map(h=>(
-                            <th key={h} className="text-left px-3 py-2 text-[11px] font-700 uppercase tracking-wide" style={{color:'var(--color-text-muted)'}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selected.conditions||[]).map((cond,i) => {
-                          const needsVal = OP_NEEDS_VALUE[cond.op] !== false
-                          const opts     = needsVal && !FREEFORM_OPS.has(cond.op) ? fieldOptions(selected.target, cond.field, {stages}) : null
-                          return (
-                            <tr key={cond.id||i} className="group border-b border-(--color-border) last:border-0 hover:bg-(--color-brand-50) transition-colors">
-                              <td className="px-3 py-2">
-                                <select value={cond.field} onChange={e=>patchCond(i,{...cond,field:e.target.value,value:''})}
-                                  className={`${fs} w-full`} style={fb}>
-                                  <option value=''>Select field…</option>
-                                  {(RULE_FIELDS[selected.target]||[]).map(f=><option key={f} value={f}>{f}</option>)}
-                                </select>
-                              </td>
-                              <td className="px-2 py-2">
-                                <select value={cond.op} onChange={e=>patchCond(i,{...cond,op:e.target.value})}
-                                  className={`${fs} w-full`} style={fb}>
-                                  {RULE_OPS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                              </td>
-                              <td className="px-2 py-2">
-                                {needsVal ? (
-                                  opts ? (
-                                    <select value={cond.value} onChange={e=>patchCond(i,{...cond,value:e.target.value})}
-                                      className={`${fs} w-full`} style={fb}>
-                                      <option value=''>Select…</option>
-                                      {opts.map(o=><option key={o} value={o}>{o}</option>)}
-                                    </select>
-                                  ) : (
-                                    <input value={cond.value} onChange={e=>patchCond(i,{...cond,value:e.target.value})}
-                                      placeholder={cond.op==='between'?'min,max':cond.op==='in'?'a, b':'value'}
-                                      className={`${fs} w-full`} style={fb}/>
-                                  )
-                                ) : (
-                                  <span className="text-xs px-2" style={{color:'var(--color-text-muted)'}}>—</span>
-                                )}
-                              </td>
-                              <td className="px-2 py-2 text-center">
-                                <button type="button" onClick={()=>removeCond(i)}
-                                  className="p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100">
-                                  <X size={13}/>
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="flex items-center gap-3 px-4 py-4">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background:'#ede9fe' }}>
-                        <CheckSquare size={15} style={{color:'#7c3aed'}}/>
-                      </div>
-                      <div>
-                        <p className="text-sm font-500" style={{color:'var(--color-text-primary)'}}>No conditions added</p>
-                        <p className="text-xs mt-0.5" style={{color:'var(--color-text-muted)'}}>This rule will run on every <em>{eventLabel(selected.target, selected.event)}</em> event.</p>
-                      </div>
                     </div>
-                  )}
+                  )
+                })()}
+              </div>
+            </SectionCard>
 
-                  {/* Add row footer */}
-                  <div className="px-4 py-2.5 border-t border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
-                    <button type="button" onClick={addCond}
-                      className="inline-flex items-center gap-1.5 text-xs font-700 transition-colors hover:opacity-80"
-                      style={{color:'var(--color-brand)'}}>
-                      <Plus size={13}/> Add condition
-                    </button>
+            {/* ── STEP 2: CONDITIONS ── */}
+            <SectionCard accent="#7c3aed" icon={SlidersHorizontal} iconBg="#ede9fe"
+              title="Filter by conditions"
+              hint="Leave empty to run on every event, or narrow the scope."
+              footer={
+                <button type="button" onClick={addCond}
+                  className="inline-flex items-center gap-1.5 text-xs font-700 transition-colors"
+                  style={{color:'var(--color-brand)'}}>
+                  <Plus size={13}/> Add condition
+                </button>
+              }>
+              {/* Match mode */}
+              <div className="flex items-center gap-2 mb-4 pb-4 border-b border-(--color-border)">
+                <span className="text-xs font-500" style={{color:'var(--color-text-muted)'}}>Run when</span>
+                <select value={selected.condition_match||'all'} onChange={e=>patch({condition_match:e.target.value})}
+                  className="px-2.5 py-1.5 rounded-lg border border-(--color-border) text-xs font-700 outline-none" style={fb}>
+                  <option value="all">ALL</option>
+                  <option value="any">ANY</option>
+                </select>
+                <span className="text-xs font-500" style={{color:'var(--color-text-muted)'}}>of these conditions are met</span>
+              </div>
+
+              {(selected.conditions||[]).length===0 ? (
+                <div className="flex items-center gap-3 py-2 px-1">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{background:'#ede9fe'}}>
+                    <CheckSquare size={16} style={{color:'#7c3aed'}}/>
+                  </div>
+                  <div>
+                    <p className="text-sm font-600" style={{color:'var(--color-text-primary)'}}>No conditions — rule runs on every event</p>
+                    <p className="text-xs mt-0.5" style={{color:'var(--color-text-muted)'}}>Add a condition below to narrow when this rule fires.</p>
                   </div>
                 </div>
-              </Step>
+              ) : (
+                <div className="space-y-2">
+                  {(selected.conditions||[]).map((cond,i) => {
+                    const needsVal=OP_NEEDS_VALUE[cond.op]!==false
+                    const opts=needsVal&&!FREEFORM_OPS.has(cond.op)?fieldOptions(selected.target,cond.field,{stages}):null
+                    return (
+                      <div key={cond.id||i} className="group flex items-center gap-2 p-3 rounded-xl border transition-colors hover:border-(--color-brand)/40"
+                        style={{borderColor:'var(--color-border)',background:'var(--color-surface-2)'}}>
+                        <span className="text-[10px] font-800 w-5 text-center shrink-0" style={{color:'var(--color-text-muted)'}}>{i+1}</span>
+                        <select value={cond.field} onChange={e=>patchCond(i,{...cond,field:e.target.value,value:''})}
+                          className={`${fs} flex-1`} style={fb}>
+                          <option value=''>Select field…</option>
+                          {(RULE_FIELDS[selected.target]||[]).map(f=><option key={f} value={f}>{f}</option>)}
+                        </select>
+                        <select value={cond.op} onChange={e=>patchCond(i,{...cond,op:e.target.value})}
+                          className={`${fs} shrink-0`} style={fb}>
+                          {RULE_OPS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        {needsVal ? (
+                          opts ? (
+                            <select value={cond.value} onChange={e=>patchCond(i,{...cond,value:e.target.value})}
+                              className={`${fs} flex-1`} style={fb}>
+                              <option value=''>Select…</option>
+                              {opts.map(o=><option key={o} value={o}>{o}</option>)}
+                            </select>
+                          ) : (
+                            <input value={cond.value} onChange={e=>patchCond(i,{...cond,value:e.target.value})}
+                              placeholder={cond.op==='between'?'min,max':cond.op==='in'?'a, b':'value'}
+                              className={`${fs} flex-1`} style={fb}/>
+                          )
+                        ) : (
+                          <div className="flex-1 px-2 text-xs" style={{color:'var(--color-text-muted)'}}>—</div>
+                        )}
+                        <button type="button" onClick={()=>removeCond(i)}
+                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50"
+                          style={{color:'#ef4444'}}>
+                          <X size={13}/>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </SectionCard>
 
-              {/* STEP 3 — ACTIONS */}
-              <Step n="3" color="#2563eb" label="Perform these actions" hint="Actions run in order after conditions are met." last>
-                <div className="space-y-2.5">
-                  {(selected.actions||[]).length === 0 && (
-                    <p className="text-sm px-1" style={{color:'var(--color-text-muted)'}}>No actions added yet.</p>
-                  )}
-
-                  {(selected.actions||[]).map((action, i) => {
-                    const def  = (RULE_ACTIONS[selected.target]||[]).find(a=>a.value===action.type)
-                    const kind = def?.kind || 'text'
-                    const kColor = KIND_COLOR[kind] || '#64748b'
-                    const Icon = ACTION_ICON[action.type] || ClipboardList
+            {/* ── STEP 3: ACTIONS ── */}
+            <SectionCard accent="#2563eb" icon={Zap} iconBg="#dbeafe"
+              title="Perform these actions"
+              hint="Actions execute in order once conditions are satisfied."
+              footer={
+                <button type="button" onClick={addAct}
+                  className="inline-flex items-center gap-1.5 text-xs font-700 transition-colors"
+                  style={{color:'var(--color-brand)'}}>
+                  <Plus size={13}/> Add action
+                </button>
+              }>
+              {(selected.actions||[]).length===0 ? (
+                <div className="flex items-center gap-3 py-2 px-1">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{background:'#dbeafe'}}>
+                    <Zap size={16} style={{color:'#2563eb'}}/>
+                  </div>
+                  <p className="text-sm font-600" style={{color:'var(--color-text-primary)'}}>No actions yet — add one below</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(selected.actions||[]).map((action,i) => {
+                    const def=(RULE_ACTIONS[selected.target]||[]).find(a=>a.value===action.type)
+                    const kind=def?.kind||'text'; const kColor=KIND_COLOR[kind]||'#64748b'
+                    const Icon=ACTION_ICON[action.type]||ClipboardList
                     return (
                       <div key={action.id||i} className="rounded-xl overflow-hidden"
-                        style={{ border:'1px solid var(--color-border)', borderLeft:`3px solid ${kColor}`, background:'var(--color-surface)' }}>
-                        {/* Card header */}
-                        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
-                          <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-                            style={{ background: kColor + '18' }}>
-                            <Icon size={13} style={{color:kColor}}/>
+                        style={{border:`1px solid ${kColor}30`,boxShadow:`0 1px 4px ${kColor}10`}}>
+                        {/* action header */}
+                        <div className="flex items-center gap-3 px-4 py-3"
+                          style={{background:`${kColor}08`,borderBottom:`1px solid ${kColor}20`}}>
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                            style={{background:`${kColor}20`}}>
+                            <Icon size={14} style={{color:kColor}}/>
                           </div>
                           <select value={action.type}
                             onChange={e=>patchAct(i,{id:action.id,type:e.target.value,value:''})}
@@ -663,16 +688,18 @@ export default function RulesPage() {
                             style={{color:'var(--color-text-primary)'}}>
                             {(RULE_ACTIONS[selected.target]||[]).map(a=><option key={a.value} value={a.value}>{a.label}</option>)}
                           </select>
-                          <span className="text-[10px] font-600 px-2 py-0.5 rounded-full shrink-0" style={{ background:kColor+'15', color:kColor }}>
-                            {String(i+1).padStart(2,'0')}
+                          <span className="text-[10px] font-800 px-2 py-1 rounded-full shrink-0"
+                            style={{background:`${kColor}18`,color:kColor}}>
+                            #{i+1}
                           </span>
                           <button type="button" onClick={()=>removeAct(i)}
-                            className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0 ml-1">
+                            className="p-1.5 rounded-lg transition-colors hover:bg-red-50 shrink-0"
+                            style={{color:'#9ca3af'}}>
                             <X size={13}/>
                           </button>
                         </div>
-                        {/* Card fields */}
-                        <div className="px-4 py-1">
+                        {/* action fields */}
+                        <div className="px-4 py-1" style={{background:'var(--color-surface)'}}>
                           <ActionFields action={action} target={selected.target} stages={stages}
                             tags={tagsFor(selected.target)} staff={staffList}
                             onChange={u=>patchAct(i,u)}/>
@@ -680,74 +707,68 @@ export default function RulesPage() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+            </SectionCard>
 
-                  {/* Add action */}
-                  <button type="button" onClick={addAct}
-                    className="group w-full flex items-center justify-center gap-2 py-3.5 rounded-xl border-2 border-dashed transition-all"
-                    style={{ borderColor:'var(--color-border)', color:'var(--color-text-muted)' }}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor='var(--color-brand)';e.currentTarget.style.background='var(--color-brand-50)';e.currentTarget.style.color='var(--color-brand)'}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--color-border)';e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--color-text-muted)'}}>
-                    <Plus size={15}/>
-                    <span className="text-sm font-600">Add action</span>
+            {/* ── Test & History ── */}
+            <SectionCard accent="#16a34a" icon={Play} iconBg="#dcfce7"
+              title="Test & History"
+              hint="Dry-run this rule against a real record to verify it works.">
+              <div className="space-y-4">
+                {/* buttons */}
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={runTest} disabled={testing}
+                    className="btn btn-success btn-sm disabled:opacity-50">
+                    <Play size={12}/>{testing?'Testing…':'Test on latest record'}
                   </button>
-                </div>
-              </Step>
-
-              {/* ── Test & History ── */}
-              <div className="rounded-xl overflow-hidden" style={{ border:'1px solid var(--color-border)', background:'var(--color-surface)' }}>
-                <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-(--color-border)" style={{ background:'var(--color-surface-2)' }}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background:'#dcfce7' }}>
-                      <Play size={12} style={{color:'#16a34a'}}/>
-                    </div>
-                    <p className="text-sm font-700" style={{color:'var(--color-text-primary)'}}>Test &amp; History</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={runTest} disabled={testing}
-                      className="btn btn-secondary btn-sm disabled:opacity-50">
-                      <Play size={11}/>{testing?'Testing…':'Test on latest record'}
+                  {selectedRuns.length>0 && (
+                    <button type="button" onClick={()=>setShowRuns(s=>!s)}
+                      className="btn btn-secondary btn-sm">
+                      <History size={12}/>{selectedRuns.length} run{selectedRuns.length!==1?'s':''}
                     </button>
-                    {selectedRuns.length>0 && (
-                      <button type="button" onClick={()=>setShowRuns(s=>!s)}
-                        className="btn btn-secondary btn-sm">
-                        <History size={11}/>{selectedRuns.length} run{selectedRuns.length!==1?'s':''}
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
 
+                {/* test result */}
                 {testResult && (
-                  <div className="px-4 py-3 text-xs border-b border-(--color-border)"
-                    style={{ background: testResult.error ? '#fffbeb' : testResult.matched ? '#f0fdf4' : '#fff1f2' }}>
+                  <div className="rounded-xl p-4 text-xs"
+                    style={{background:testResult.error?'#fffbeb':testResult.matched?'#f0fdf4':'#fff1f2',
+                      border:`1px solid ${testResult.error?'#fcd34d':testResult.matched?'#86efac':'#fca5a5'}`}}>
                     {testResult.error
                       ? <p style={{color:'#b45309'}}>{testResult.error}</p>
-                      : <div className="space-y-0.5">
-                          <p className="font-500" style={{color:'var(--color-text-secondary)'}}>
-                            Tested on: <b>{sampleLabel(selected.target, testResult.sample)}</b>
+                      : <div className="space-y-1">
+                          <p className="font-600" style={{color:'var(--color-text-secondary)'}}>
+                            Tested on: <b>{sampleLabel(selected.target,testResult.sample)}</b>
                             {' · '}
                             {testResult.matched
                               ? <span style={{color:'#15803d',fontWeight:700}}>✓ Conditions matched</span>
-                              : <span style={{color:'#b91c1c',fontWeight:700}}>✗ Conditions did not match</span>}
+                              : <span style={{color:'#b91c1c',fontWeight:700}}>✗ Did not match</span>}
                           </p>
                           {testResult.matched && <p style={{color:'var(--color-text-muted)'}}>Would run: {testResult.actions.map(a=>a.type).join(', ')||'(no actions)'}</p>}
-                          <p style={{color:'var(--color-text-muted)'}}>Dry run — no records were changed.</p>
+                          <p style={{color:'var(--color-text-muted)'}}>Dry run — no records changed.</p>
                         </div>
                     }
                   </div>
                 )}
 
+                {/* run history */}
                 {showRuns && selectedRuns.length>0 && (
-                  <div className="divide-y divide-(--color-border)">
+                  <div className="rounded-xl overflow-hidden border border-(--color-border)">
                     {selectedRuns.slice(0,8).map(r => {
                       const st=RUN_STATUS[r.status]||RUN_STATUS.skipped; const StIcon=st.icon
                       return (
-                        <div key={r.id} className="flex items-center gap-2.5 text-xs px-4 py-2.5">
-                          <span className="inline-flex items-center gap-1 font-700 px-2 py-0.5 rounded-full shrink-0" style={{background:st.bg,color:st.color}}>
+                        <div key={r.id} className="flex items-center gap-3 text-xs px-4 py-2.5 border-b border-(--color-border) last:border-0"
+                          style={{background:'var(--color-surface)'}}>
+                          <span className="inline-flex items-center gap-1 font-700 px-2 py-0.5 rounded-full shrink-0"
+                            style={{background:st.bg,color:st.color}}>
                             <StIcon size={10}/>{st.label}
                           </span>
                           <span style={{color:'var(--color-text-muted)'}}>{eventLabel(r.target,r.event)}</span>
-                          {r.error && <span className="truncate" style={{color:'#b91c1c'}} title={r.error}>· {r.error}</span>}
-                          <span className="ml-auto shrink-0 font-mono text-[11px]" style={{color:'var(--color-text-muted)'}}>{new Date(r.created_at).toLocaleString()}</span>
+                          {r.error && <span className="truncate" style={{color:'#b91c1c'}}>· {r.error}</span>}
+                          <span className="ml-auto shrink-0 font-mono text-[11px]" style={{color:'var(--color-text-muted)'}}>
+                            {new Date(r.created_at).toLocaleString()}
+                          </span>
                         </div>
                       )
                     })}
@@ -755,16 +776,15 @@ export default function RulesPage() {
                 )}
 
                 {!testResult && !showRuns && (
-                  <div className="px-4 py-3">
-                    <p className="text-xs" style={{color:'var(--color-text-muted)'}}>
-                      Test evaluates conditions against your most recent {selected.target} record without making any changes.
-                      Run history appears after the rule has executed at least once.
-                    </p>
-                  </div>
+                  <p className="text-xs" style={{color:'var(--color-text-muted)'}}>
+                    Evaluates conditions against your most recent {selected.target} record — no changes are made.
+                    Run history appears once the rule has fired at least once.
+                  </p>
                 )}
               </div>
-            </div>
-          </>
+            </SectionCard>
+
+          </div>
         )}
       </div>
     </div>

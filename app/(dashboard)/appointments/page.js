@@ -243,7 +243,7 @@ function CalendarView({
                             style={{
                               background: isSelected
                                 ? "rgba(255,255,255,0.7)"
-                                : STATUS_STYLE[a.status]?.color || "#6366f1",
+                                : STATUS_STYLE[a.status]?.color || "#135BFB",
                             }}
                           />
                         ))}

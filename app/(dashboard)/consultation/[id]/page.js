@@ -350,8 +350,8 @@ export default function ConsultationDetailPage({ params }) {
   const phone  = d.phone || d.contacts?.phone || null
   const email  = d.email || d.contacts?.email || null
   const detail = isPatient ? (d.status || 'Active') : (d.stage || 'New')
-  const stages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#6366f1' } : s)
-  const detailColor = isPatient ? (detail === 'Active' ? '#15803d' : '#b91c1c') : (stages.find(s => s.name === detail)?.color || '#6366f1')
+  const stages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
+  const detailColor = isPatient ? (detail === 'Active' ? '#15803d' : '#b91c1c') : (stages.find(s => s.name === detail)?.color || '#135BFB')
   const history = isPatient && Array.isArray(d.medical_history) ? d.medical_history : []
 
   const RIGHT_TABS = [

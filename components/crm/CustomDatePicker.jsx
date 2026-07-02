@@ -15,7 +15,7 @@ const CAL_W = 256
 const CAL_H = 330
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-export default function CustomDatePicker({ value, onChange, popover = false, placeholder = 'Select date', monthOnly = false, compact = false }) {
+export default function CustomDatePicker({ value, onChange, popover = false, placeholder = 'Select date', monthOnly = false, compact = false, typeable = false }) {
   const selected = value
     ? new Date(String(value).length === 10 ? value + 'T12:00:00' : value)
     : null
@@ -23,8 +23,14 @@ export default function CustomDatePicker({ value, onChange, popover = false, pla
   const [mode, setMode]   = useState(monthOnly ? 'months' : 'days') // 'days' | 'months' | 'years'
   const [open, setOpen]   = useState(false)
   const [pos, setPos]     = useState({ top: 0, left: 0 })
+  const [text, setText]   = useState(selected ? format(selected, 'dd/MM/yyyy') : '')
   const btnRef = useRef(null)
   const popRef = useRef(null)
+
+  // Keep the typed text in sync when the value changes from outside (e.g. calendar pick)
+  useEffect(() => {
+    setText(value ? format(new Date(String(value).length === 10 ? value + 'T12:00:00' : value), 'dd/MM/yyyy') : '')
+  }, [value])
 
   const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
   const gridEnd   = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
@@ -47,6 +53,22 @@ export default function CustomDatePicker({ value, onChange, popover = false, pla
   const commitMonth = (mi) => {
     onChange(`${month.getFullYear()}-${pad(mi + 1)}-01`)
     setOpen(false)
+  }
+
+  // Typing: mask to dd/MM/yyyy and commit + move calendar once a full valid date is entered
+  const handleType = (e) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 8)   // ddmmyyyy
+    let out = raw
+    if (raw.length > 4)      out = `${raw.slice(0, 2)}/${raw.slice(2, 4)}/${raw.slice(4)}`
+    else if (raw.length > 2) out = `${raw.slice(0, 2)}/${raw.slice(2)}`
+    setText(out)
+    if (raw.length === 0) { onChange(''); return }
+    if (raw.length === 8) {
+      const dd = +raw.slice(0, 2), mm = +raw.slice(2, 4), yyyy = +raw.slice(4)
+      const d = new Date(yyyy, mm - 1, dd)
+      const valid = mm >= 1 && mm <= 12 && dd >= 1 && d.getDate() === dd && d.getMonth() === mm - 1 && d.getFullYear() === yyyy
+      if (valid) { onChange(`${yyyy}-${pad(mm)}-${pad(dd)}`); setMonth(startOfMonth(d)) }
+    }
   }
 
   const openCal = () => {
@@ -159,6 +181,35 @@ export default function CustomDatePicker({ value, onChange, popover = false, pla
 
   // Inline mode — always-visible calendar.
   if (!popover) return <div className="shrink-0">{calendar}</div>
+
+  // Typeable popover — editable dd/MM/yyyy input with a calendar toggle.
+  if (typeable && !monthOnly) return (
+    <>
+      <div ref={btnRef}
+        className={`w-full rounded-lg border flex items-center gap-2 ${compact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'}`}
+        style={{ borderColor: open ? 'var(--color-brand)' : 'var(--color-border)', background: 'var(--color-surface)', position: 'relative', zIndex: open ? 50 : 'auto' }}>
+        <input
+          value={text}
+          onChange={handleType}
+          onFocus={() => !open && openCal()}
+          onMouseDown={() => !open && openCal()}
+          placeholder={placeholder}
+          inputMode="numeric"
+          className="flex-1 min-w-0 bg-transparent outline-none"
+          style={{ color: 'var(--color-text-primary)' }}
+        />
+        <button type="button" onMouseDown={e => { e.preventDefault(); open ? setOpen(false) : openCal() }} className="shrink-0 flex items-center" title="Open calendar">
+          <Calendar size={compact ? 12 : 14} style={{ color: 'var(--color-text-muted)' }} />
+        </button>
+      </div>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div ref={popRef} className="fixed z-50" style={{ top: pos.top, left: pos.left }}>{calendar}</div>
+        </>
+      )}
+    </>
+  )
 
   // Popover mode — input-like button that opens the calendar as a fixed dropdown.
   return (

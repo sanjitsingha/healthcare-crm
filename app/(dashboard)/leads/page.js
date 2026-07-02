@@ -50,9 +50,12 @@ const BASE_COLUMNS = [
 
 // ── Helpers ────────────────────────────────────────────────────
 function patientName(lead) {
-  if (lead.first_name) return `${lead.first_name} ${lead.last_name || ''}`.trim()
-  if (lead.patients)   return `${lead.patients.first_name} ${lead.patients.last_name || ''}`.trim()
-  return lead.title
+  const sal = lead.custom_data?.salutation || ''
+  let name
+  if (lead.first_name)      name = `${lead.first_name} ${lead.last_name || ''}`.trim()
+  else if (lead.patients)   name = `${lead.patients.first_name} ${lead.patients.last_name || ''}`.trim()
+  else                      name = lead.title || ''
+  return sal ? `${sal} ${name}`.trim() : name
 }
 
 function patientPhone(lead)  { return lead.phone  || lead.patients?.phone  || '—' }
@@ -68,7 +71,7 @@ function StyledBadge({ label, styleMap }) {
   const s = styleMap?.[label] || {}
   return (
     <span
-      className="text-[10px] font-600 px-2 py-0.5 rounded-full"
+      className="text-[12px] font-600 px-2 py-0.5 rounded-full"
       style={{ background: s.bg || '#f3f4f6', color: s.color || '#374151' }}
     >
       {label}
@@ -363,7 +366,6 @@ const LEAD_FIELDS = [
   { key: 'source',     label: 'Source'     },
   { key: 'gender',     label: 'Gender'     },
   { key: 'address',    label: 'Address'    },
-  { key: 'notes',      label: 'Notes'      },
   { key: '__skip',     label: '— Skip —'   },
 ]
 
@@ -399,12 +401,12 @@ function autoMap(headers) {
   return map
 }
 
-function ImportModal({ orgId, onClose, onImported }) {
+function ImportModal({ orgId, customFields = [], onClose, onImported }) {
   const [step, setStep]         = useState('upload')   // upload | map | preview | importing | done
   const [headers, setHeaders]   = useState([])
   const [rows, setRows]         = useState([])
-  const [mapping, setMapping]   = useState({})          // colIndex → fieldKey
-  const [result, setResult]     = useState(null)        // { ok, errors }
+  const [mapping, setMapping]   = useState({})
+  const [result, setResult]     = useState(null)
   const fileRef = useRef()
 
   const handleFile = (e) => {
@@ -423,14 +425,13 @@ function ImportModal({ orgId, onClose, onImported }) {
   }
 
   const buildLead = (row) => {
-    const lead = { org_id: orgId, stage: 'New', priority: 'Medium' }
+    const lead = { organization_id: orgId, stage: 'New', priority: 'Medium' }
     headers.forEach((_, i) => {
       const key = mapping[i]
       if (!key || key === '__skip') return
       const val = row[i]?.trim()
       if (val) lead[key] = val
     })
-    // combine first/last into title if no separate title field
     if (!lead.title && (lead.first_name || lead.last_name)) {
       lead.title = [lead.first_name, lead.last_name].filter(Boolean).join(' ')
     }
@@ -455,13 +456,27 @@ function ImportModal({ orgId, onClose, onImported }) {
   const hasName  = mappedFieldKeys.includes('first_name') || mappedFieldKeys.includes('last_name')
   const canImport = (hasName || hasPhone) && rows.length > 0
 
-  const STEPS = [
-    { id: 'upload',    label: 'Upload'  },
-    { id: 'map',       label: 'Map'     },
-    { id: 'preview',   label: 'Preview' },
-  ]
-  const stepIdx = { upload: 0, map: 1, preview: 2, importing: 2, done: 2 }
-  const currentIdx = stepIdx[step] ?? 0
+  const downloadTemplate = async () => {
+    const XLSX = await import('xlsx')
+    const standardHeaders = ['First Name', 'Last Name', 'Phone', 'Email', 'Stage', 'Priority', 'Source', 'Gender', 'Address']
+    const customHeaders   = customFields.map(f => f.label)
+    const allHeaders      = [...standardHeaders, ...customHeaders]
+
+    const ws = XLSX.utils.aoa_to_sheet([allHeaders])
+    ws['!cols'] = allHeaders.map(() => ({ wch: 18 }))
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads')
+
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'leads-import-template.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
@@ -473,7 +488,7 @@ function ImportModal({ orgId, onClose, onImported }) {
         <div className="shrink-0 flex items-center justify-between px-7 pt-6 pb-5">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: 'var(--color-brand)', boxShadow: '0 4px 12px rgba(var(--color-brand-rgb,99,102,241),.35)' }}>
+              style={{ background: 'var(--color-brand)' }}>
               <Upload size={18} className="text-white" />
             </div>
             <div>
@@ -482,6 +497,9 @@ function ImportModal({ orgId, onClose, onImported }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={downloadTemplate} className="btn btn-secondary btn-md gap-1.5">
+              <Download size={14} /> Download Template
+            </button>
             {step !== 'importing' && step !== 'done' && (
               <button
                 onClick={() => {
@@ -500,42 +518,6 @@ function ImportModal({ orgId, onClose, onImported }) {
           </div>
         </div>
 
-        {/* ── Step progress bar ── */}
-        {step !== 'importing' && step !== 'done' && (
-          <div className="shrink-0 px-7 pb-5">
-            <div className="flex items-center gap-0">
-              {STEPS.map((s, i) => {
-                const done    = i < currentIdx
-                const active  = i === currentIdx
-                const isLast  = i === STEPS.length - 1
-                return (
-                  <div key={s.id} className="flex items-center flex-1 last:flex-none">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-700 shrink-0 transition-all"
-                        style={done
-                          ? { background: 'var(--color-brand)', color: 'white' }
-                          : active
-                            ? { background: 'var(--color-brand)', color: 'white', boxShadow: '0 0 0 3px var(--color-brand-50)' }
-                            : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', border: '1.5px solid var(--color-border)' }}
-                      >
-                        {done ? <Check size={12} /> : i + 1}
-                      </div>
-                      <span className="text-xs font-600 hidden sm:block"
-                        style={{ color: active ? 'var(--color-brand)' : done ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>
-                        {s.label}
-                      </span>
-                    </div>
-                    {!isLast && (
-                      <div className="flex-1 mx-3 h-px" style={{ background: done ? 'var(--color-brand)' : 'var(--color-border)' }} />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
         {/* ── Divider ── */}
         <div className="shrink-0 border-t border-(--color-border)" />
 
@@ -544,38 +526,19 @@ function ImportModal({ orgId, onClose, onImported }) {
 
           {/* Upload */}
           {step === 'upload' && (
-            <div className="h-full flex flex-col gap-5">
-              <div
-                className="flex-1 flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed cursor-pointer transition-all hover:border-(--color-brand) group"
-                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)' }}
-                onClick={() => fileRef.current?.click()}
-              >
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-(--color-brand)"
-                  style={{ background: 'var(--color-surface)' }}>
-                  <Upload size={28} className="transition-colors group-hover:text-white" style={{ color: 'var(--color-text-muted)' }} />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="text-base font-600" style={{ color: 'var(--color-text-primary)' }}>Click to upload a CSV file</p>
-                  <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>or drag and drop — UTF-8, comma-separated</p>
-                </div>
-                <div className="px-4 py-1.5 rounded-full text-xs font-600 border transition-colors group-hover:border-(--color-brand) group-hover:text-(--color-brand)"
-                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-                  Browse files
-                </div>
-                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+            <div className="h-full flex flex-col items-center justify-center gap-5">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ background: 'var(--color-brand-50)' }}>
+                <Upload size={28} style={{ color: 'var(--color-brand)' }} />
               </div>
-
-              <div className="shrink-0 rounded-xl p-4" style={{ background: 'var(--color-surface-2)' }}>
-                <p className="text-xs font-700 uppercase tracking-wider mb-2" style={{ color: 'var(--color-text-muted)' }}>Supported columns</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {LEAD_FIELDS.filter(f => f.key !== '__skip').map(f => (
-                    <span key={f.key} className="px-2.5 py-1 rounded-full text-[11px] font-500 border border-(--color-border)"
-                      style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
-                      {f.label}
-                    </span>
-                  ))}
-                </div>
+              <div className="text-center space-y-1">
+                <p className="text-base font-600" style={{ color: 'var(--color-text-primary)' }}>Select a CSV file to import</p>
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>UTF-8 encoded, comma-separated</p>
               </div>
+              <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-primary btn-md px-6">
+                <Upload size={14} /> Browse File
+              </button>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
             </div>
           )}
 
@@ -783,8 +746,42 @@ export default function LeadsPage() {
   // column sort (created / modified)
   const [sort,         setSort]        = useState({ field: null, dir: 'desc' })
   const [sortMenuCol,  setSortMenuCol] = useState(null)   // which col's dropdown is open
+  const filterRef = useRef()
+  const resizingRef = useRef(null)
+
+  const DEFAULT_COL_WIDTHS = { tag: 150, name: 190, phone: 130, email: 200, gender: 90, city: 120, stage: 110, priority: 100, source: 110, created: 120, modified: 120 }
+  const [colWidths, setColWidths] = useState(() => getPref('pref_lead_col_widths') || {})
+  const colWidthsRef = useRef(colWidths)
+  useEffect(() => { colWidthsRef.current = colWidths }, [colWidths])
+
+  const startResize = useCallback((colId, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX     = e.clientX
+    const startWidth = colWidthsRef.current[colId] ?? DEFAULT_COL_WIDTHS[colId] ?? 130
+    const onMove = (ev) => {
+      const w = Math.max(60, startWidth + ev.clientX - startX)
+      setColWidths(prev => ({ ...prev, [colId]: w }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      setColWidths(prev => { setPref('pref_lead_col_widths', prev); return prev })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  const getW = (id) => colWidths[id] ?? DEFAULT_COL_WIDTHS[id] ?? 130
+
   const [availableTags, setAvailableTags] = useState([])
   const [activeCustom, setActiveCustom] = useState([]) // colIds of custom fields shown as filters
+
+  useEffect(() => {
+    const h = (e) => { if (filterRef.current && !filterRef.current.contains(e.target)) setFiltersOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
 
   useEffect(() => {
     if (!orgId) return
@@ -985,38 +982,49 @@ export default function LeadsPage() {
     })
   }, [filtered, sort])
 
+  // ── Pagination ──
+  const [pageSize, setPageSize] = useState(20)
+  const [page,     setPage]     = useState(1)
+
+  // Reset to page 1 whenever filters / search / sort change
+  useEffect(() => { setPage(1) }, [search, filters, sort])
+
+  const totalPages   = Math.max(1, Math.ceil(sortedFiltered.length / pageSize))
+  const safePage     = Math.min(page, totalPages)
+  const pagedLeads   = sortedFiltered.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   const visibleCols = allColumns.filter(c => visible[c.id])
 
   const renderCell = (col, lead) => {
     // Custom module field
     if (col.moduleId) {
       const val = lead?.custom_data?.[col.moduleId]?.[col.fieldId]
-      return <span className="text-xs" style={{ color: val ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{val || '—'}</span>
+      return <span style={{ fontSize: 14, color: val ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{val || '—'}</span>
     }
     switch (col.id) {
       case 'name':     return (
-        <span className="font-600 text-[13px]" style={{ color: 'var(--color-text-primary)' }}>
+        <span style={{ color: 'var(--color-brand)', fontWeight: 500, fontSize: 15 }}>
           {patientName(lead)}
         </span>
       )
-      case 'phone':    return <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{patientPhone(lead)}</span>
-      case 'email':    return <span className="text-xs truncate max-w-45 block" style={{ color: 'var(--color-text-secondary)' }}>{patientEmail(lead)}</span>
-      case 'gender':   return <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{patientGender(lead)}</span>
-      case 'city':     return <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{patientCity(lead)}</span>
+      case 'phone':    return <span style={{ color: '#374151', fontSize: 15 }}>{patientPhone(lead)}</span>
+      case 'email':    return <span style={{ color: '#374151', fontSize: 15 }} className="truncate max-w-45 block">{patientEmail(lead)}</span>
+      case 'gender':   return <span style={{ color: '#374151', fontSize: 15 }}>{patientGender(lead)}</span>
+      case 'city':     return <span style={{ color: '#374151', fontSize: 15 }}>{patientCity(lead)}</span>
       case 'stage':    return <StyledBadge label={lead.stage}    styleMap={STAGE_STYLE} />
       case 'priority': return <StyledBadge label={lead.priority} styleMap={PRIORITY_STYLE} />
       case 'source':   return (
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+        <span style={{ fontSize: 13, padding: '2px 8px', borderRadius: 4, background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb', fontWeight: 500 }}>
           {lead.source}
         </span>
       )
       case 'created':  return (
-        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+        <span style={{ fontSize: 14, color: '#6b7280' }}>
           {format(new Date(lead.created_at), 'MMM d, yyyy')}
         </span>
       )
       case 'modified': return (
-        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+        <span style={{ fontSize: 14, color: '#6b7280' }}>
           {lead.updated_at ? format(new Date(lead.updated_at), 'MMM d, yyyy') : '—'}
         </span>
       )
@@ -1084,79 +1092,81 @@ export default function LeadsPage() {
           Import
         </button>
 
-        {/* Filters toggle */}
-        <button
-          onClick={() => setFiltersOpen(o => !o)}
-          className={clsx('btn btn-md', filtersOpen || hasFilters ? 'btn-primary' : 'btn-secondary')}
-        >
-          <SlidersHorizontal size={15} />
-          Filters
-          {hasFilters && (
-            <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }}>
-              {filterCount}
-            </span>
+        {/* Filters toggle + dropdown */}
+        <div className="relative" ref={filterRef}>
+          <button
+            onClick={() => setFiltersOpen(o => !o)}
+            className={clsx('btn btn-md', filtersOpen || hasFilters ? 'btn-primary' : 'btn-secondary')}
+          >
+            <SlidersHorizontal size={15} />
+            Filters
+            {hasFilters && (
+              <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }}>
+                {filterCount}
+              </span>
+            )}
+          </button>
+
+          {filtersOpen && (
+            <div
+              className="absolute right-0 top-full mt-1.5 z-40 rounded-xl border border-(--color-border) p-3 space-y-2.5"
+              style={{ background: 'var(--color-surface)', boxShadow: '0 12px 36px rgba(0,0,0,0.14)', width: '380px', maxWidth: 'calc(100vw - 2rem)', minHeight: '360px' }}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <MultiSelect label="Stage"    options={opts(stageOptions)} selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
+                <MultiSelect label="Priority" options={opts(PRIORITIES)}   selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
+                <MultiSelect label="Source"   options={opts(SOURCES)}      selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
+                <MultiSelect label="Gender"   options={opts(GENDERS)}      selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
+                <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
+                  selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
+
+                {leadModuleFields.length > 0 && (
+                  <CustomFieldPicker fields={leadModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 items-start">
+                <div className="col-span-2 w-full">
+                  <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
+                    onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
+                </div>
+
+                {activeCustom.map(colId => {
+                  const fld = leadModuleFields.find(f => f.colId === colId)
+                  if (!fld) return null
+                  if (fld.type === 'select' || fld.type === 'boolean') {
+                    return <MultiSelect key={colId} label={fld.label}
+                      options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
+                      selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
+                  }
+                  return (
+                    <div key={colId} className="relative">
+                      <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
+                        placeholder={fld.label}
+                        className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
+                        <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {hasFilters && (
+                <div className="flex justify-end pt-2 border-t border-(--color-border)">
+                  <button onClick={clearFilters} className="btn btn-danger btn-sm">
+                    <X size={12} /> Clear all
+                  </button>
+                </div>
+              )}
+            </div>
           )}
-        </button>
+        </div>
 
         {/* Column toggle */}
         <ColumnToggle allColumns={allColumns} visible={visible} setVisible={setVisible} />
       </div>
-
-      {/* Advanced filter panel */}
-      {filtersOpen && (
-        <Card className="p-3 border-(--color-border) space-y-2.5">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
-            <MultiSelect label="Stage"    options={opts(stageOptions)} selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
-            <MultiSelect label="Priority" options={opts(PRIORITIES)}   selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
-            <MultiSelect label="Source"   options={opts(SOURCES)}      selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
-            <MultiSelect label="Gender"   options={opts(GENDERS)}      selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
-            <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
-              selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
-
-            {/* Custom field picker — choose which custom fields to filter by */}
-            {leadModuleFields.length > 0 && (
-              <CustomFieldPicker fields={leadModuleFields} active={activeCustom} onToggle={toggleCustomField} />
-            )}
-          </div>
-
-          {/* Date range + activated custom filters */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 items-start">
-            <div className="col-span-2">
-              <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
-                onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
-            </div>
-
-            {activeCustom.map(colId => {
-              const fld = leadModuleFields.find(f => f.colId === colId)
-              if (!fld) return null
-              if (fld.type === 'select' || fld.type === 'boolean') {
-                return <MultiSelect key={colId} label={fld.label}
-                  options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
-                  selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
-              }
-              return (
-                <div key={colId} className="relative">
-                  <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
-                    placeholder={fld.label}
-                    className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
-                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                  <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
-                    <X size={12} style={{ color: 'var(--color-text-muted)' }} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
-          {hasFilters && (
-            <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters} className="btn btn-danger btn-sm">
-                <X size={12} /> Clear all
-              </button>
-            </div>
-          )}
-        </Card>
-      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
@@ -1191,75 +1201,72 @@ export default function LeadsPage() {
           <Spinner size={32} />
         </div>
       ) : (
-        <Card className="p-0 overflow-hidden border-(--color-border)">
+        <div style={{ border: '1px solid #dde1e7', borderRadius: 4, background: '#fff', overflow: 'hidden' }}>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="border-collapse" style={{ fontSize: 15, tableLayout: 'fixed', width: 'max-content', minWidth: '100%' }}>
+              <colgroup>
+                <col style={{ width: 40 }} />
+                <col style={{ width: getW('tag') }} />
+                {visibleCols.map(col => <col key={col.id} style={{ width: getW(col.id) }} />)}
+              </colgroup>
               <thead>
-                <tr className="border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                  {/* Select-all checkbox (pinned) */}
-                  <th className="sticky left-0 z-20 w-12 px-3 py-3" style={{ background: 'var(--color-surface-2)' }}>
+                <tr style={{ background: '#f3f4f6', borderBottom: '1px solid #dde1e7' }}>
+                  {/* Select-all */}
+                  <th className="sticky left-0 z-20" style={{ width: 40, padding: '0 0 0 14px', background: '#f3f4f6', borderRight: '1px solid #dde1e7' }}>
                     <input
                       type="checkbox"
                       checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length}
                       ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < sortedFiltered.length }}
                       onChange={toggleAll}
-                      className="w-4 h-4 cursor-pointer rounded"
+                      className="w-3.5 h-3.5 cursor-pointer"
                       style={{ accentColor: 'var(--color-brand)' }}
                     />
                   </th>
-                  {/* Tag (pinned) */}
-                  <th className="sticky left-12 z-20 text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap border-r border-(--color-border)" style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface-2)' }}>
+                  {/* Tag */}
+                  <th className="sticky z-20 text-left" style={{ left: 40, width: getW('tag'), padding: '9px 14px 9px 14px', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280', background: '#f3f4f6', borderRight: '1px solid #dde1e7', position: 'sticky', userSelect: 'none', overflow: 'hidden' }}>
                     Tag
+                    <div onMouseDown={e => startResize('tag', e)} style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', zIndex: 1 }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-brand)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />
                   </th>
                   {visibleCols.map(col => {
                     const isSortable = col.id === 'created' || col.id === 'modified'
                     const isActive   = sort.field === col.id
                     return (
-                      <th key={col.id} className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
+                      <th key={col.id} className="text-left" style={{ width: getW(col.id), padding: '9px 14px', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280', borderRight: '1px solid #dde1e7', position: 'relative', userSelect: 'none', overflow: 'hidden' }}>
                         {isSortable ? (
                           <div className="relative inline-flex items-center gap-1">
                             {col.label}
                             <button
                               type="button"
                               onClick={() => setSortMenuCol(sortMenuCol === col.id ? null : col.id)}
-                              className="p-0.5 rounded transition-colors hover:bg-(--color-surface)"
-                              style={{ color: isActive ? 'var(--color-brand)' : 'var(--color-text-muted)' }}
+                              className="p-0.5 rounded transition-colors"
+                              style={{ color: isActive ? 'var(--color-brand)' : '#9ca3af' }}
                               title="Sort"
                             >
                               {isActive
                                 ? (sort.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)
                                 : <ArrowUpDown size={11} />}
                             </button>
-
                             {sortMenuCol === col.id && (
                               <>
                                 <div className="fixed inset-0 z-30" onClick={() => setSortMenuCol(null)} />
-                                <div
-                                  className="absolute top-full left-0 mt-1 w-36 rounded-xl border overflow-hidden z-40"
-                                  style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
-                                >
+                                <div className="absolute top-full left-0 mt-1 w-36 overflow-hidden z-40" style={{ background: '#fff', border: '1px solid #dde1e7', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}>
                                   {[{ dir: 'asc', label: 'Ascending' }, { dir: 'desc', label: 'Descending' }].map(opt => (
-                                    <button
-                                      key={opt.dir}
-                                      type="button"
+                                    <button key={opt.dir} type="button"
                                       onClick={() => { setSort({ field: col.id, dir: opt.dir }); setSortMenuCol(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-(--color-surface-2)"
-                                      style={{ color: 'var(--color-text-primary)' }}
-                                    >
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-gray-50"
+                                      style={{ color: '#374151' }}>
                                       {opt.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
                                       {opt.label}
-                                      {isActive && sort.dir === opt.dir && (
-                                        <Check size={11} className="ml-auto" style={{ color: 'var(--color-brand)' }} />
-                                      )}
+                                      {isActive && sort.dir === opt.dir && <Check size={11} className="ml-auto" style={{ color: 'var(--color-brand)' }} />}
                                     </button>
                                   ))}
                                   {isActive && (
-                                    <button
-                                      type="button"
+                                    <button type="button"
                                       onClick={() => { setSort({ field: null, dir: 'desc' }); setSortMenuCol(null) }}
-                                      className="w-full px-3 py-2 text-xs text-left border-t border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
-                                      style={{ color: 'var(--color-text-muted)' }}
-                                    >
+                                      className="w-full px-3 py-2 text-xs text-left transition-colors hover:bg-gray-50"
+                                      style={{ color: '#9ca3af', borderTop: '1px solid #e5e7eb' }}>
                                       Clear sort
                                     </button>
                                   )}
@@ -1268,89 +1275,141 @@ export default function LeadsPage() {
                             )}
                           </div>
                         ) : col.label}
+                        <div onMouseDown={e => startResize(col.id, e)} style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', zIndex: 1 }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--color-brand)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />
                       </th>
                     )
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-(--color-border)">
+              <tbody>
                 {sortedFiltered.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleCols.length + 2} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={visibleCols.length + 2} className="text-center" style={{ padding: '56px 16px', fontSize: 15, color: '#9ca3af' }}>
                       {hasFilters || search ? 'No leads match your filters.' : 'No leads yet. Create your first lead.'}
                     </td>
                   </tr>
-                ) : sortedFiltered.map(lead => {
-                  const rowBg = selected.has(lead.id) ? '#eef6f2' : 'var(--color-surface)'
-                  const leadTags = (lead.tags || []).map(t => t.tags).filter(Boolean)
+                ) : pagedLeads.map((lead, idx) => {
+                  const isSelected = selected.has(lead.id)
+                  const leadTags   = (lead.tags || []).map(t => t.tags).filter(Boolean)
+                  const rowBg      = isSelected ? '#eef3ff' : '#fff'
+                  const rowStyle   = { background: rowBg, borderBottom: idx === pagedLeads.length - 1 ? 'none' : '1px solid #f0f0f0' }
                   return (
-                  <tr
-                    key={lead.id}
-                    className={clsx(
-                      'transition-colors',
-                      selected.has(lead.id) ? 'bg-(--color-brand-50)/60' : 'hover:bg-(--color-brand-50)/30'
-                    )}
-                  >
-                    {/* Row checkbox (pinned) */}
-                    <td className="sticky left-0 z-10 w-12 px-3 py-3" style={{ background: rowBg }} onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(lead.id)}
-                        onChange={() => toggleOne(lead.id)}
-                        className="w-4 h-4 cursor-pointer rounded"
-                        style={{ accentColor: 'var(--color-brand)' }}
-                      />
-                    </td>
-                    {/* Tag (pinned) */}
-                    <td className="sticky left-12 z-10 px-4 py-3 border-r border-(--color-border) cursor-pointer align-top" style={{ background: rowBg }} onClick={() => router.push(`/leads/${lead.id}`)}>
-                      {leadTags.length === 0 ? (
-                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1 max-w-60">
-                          {leadTags.map(tag => {
-                            const tc = tag.color || '#6366f1'
-                            return (
-                              <span key={tag.id} className="relative inline-flex items-center pl-2.5 pr-2 py-0.5 text-[10px] font-600 whitespace-nowrap"
-                                style={{ background: tc, color: 'white', clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>
-                                <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
-                                {tag.name}
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </td>
-                    {visibleCols.map(col => (
-                      <td
-                        key={col.id}
-                        className="px-4 py-3 whitespace-nowrap cursor-pointer"
-                        onClick={() => router.push(`/leads/${lead.id}`)}
-                      >
-                        {renderCell(col, lead)}
+                    <tr
+                      key={lead.id}
+                      style={rowStyle}
+                      className="group"
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#f5f8ff' }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = '#fff' }}
+                    >
+                      {/* Checkbox */}
+                      <td className="sticky left-0 z-10" style={{ width: 40, padding: '0 0 0 14px', background: rowBg, borderRight: '1px solid #f0f0f0' }} onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleOne(lead.id)}
+                          className="w-3.5 h-3.5 cursor-pointer"
+                          style={{ accentColor: 'var(--color-brand)' }}
+                        />
                       </td>
-                    ))}
-                  </tr>
+                      {/* Tags */}
+                      <td className="sticky z-10 cursor-pointer" style={{ left: 40, padding: '7px 14px', background: rowBg, borderRight: '1px solid #f0f0f0', overflow: 'hidden' }} onClick={() => router.push(`/leads/${lead.id}`)}>
+                        {leadTags.length === 0 ? (
+                          <span style={{ color: '#d1d5db', fontSize: 14 }}>—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {leadTags.map(tag => {
+                              const tc = tag.color || '#135BFB'
+                              return (
+                                <span key={tag.id} className="relative inline-flex items-center pl-2.5 pr-2 py-0.5 text-[12px] font-600 whitespace-nowrap"
+                                  style={{ background: tc, color: 'white', clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>
+                                  <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
+                                  {tag.name}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </td>
+                      {/* Data cells */}
+                      {visibleCols.map((col, ci) => (
+                        <td key={col.id}
+                          className="cursor-pointer"
+                          style={{ padding: '8px 14px', borderRight: ci === visibleCols.length - 1 ? 'none' : '1px solid #f0f0f0', verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          onClick={() => router.push(`/leads/${lead.id}`)}>
+                          {renderCell(col, lead)}
+                        </td>
+                      ))}
+                    </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
 
-          {/* Footer count */}
-          {sortedFiltered.length > 0 && (
-            <div
-              className="px-4 py-2.5 border-t border-(--color-border) text-xs"
-              style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface-2)' }}
-            >
-              Showing {sortedFiltered.length} of {leads.length} leads
+          {/* Pagination footer */}
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #dde1e7', background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            {/* Left: count + page-size selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#6b7280' }}>
+              <span>
+                {sortedFiltered.length === 0 ? '0 leads' : <>
+                  <strong style={{ color: '#374151' }}>{(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, sortedFiltered.length)}</strong>
+                  {' of '}
+                  <strong style={{ color: '#374151' }}>{sortedFiltered.length}</strong>
+                  {hasFilters ? ' (filtered)' : ''}
+                </>}
+              </span>
+              <span style={{ color: '#d1d5db' }}>|</span>
+              <span>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                style={{ fontSize: 12, padding: '2px 6px', border: '1px solid #dde1e7', borderRadius: 4, background: '#fff', color: '#374151', cursor: 'pointer' }}
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
             </div>
-          )}
-        </Card>
+
+            {/* Right: pagination controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #dde1e7', borderRadius: 4, background: safePage === 1 ? '#f9fafb' : '#fff', color: safePage === 1 ? '#d1d5db' : '#374151', cursor: safePage === 1 ? 'default' : 'pointer' }}
+              >‹ Prev</button>
+
+              {/* Page number pills */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(n => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                .reduce((acc, n, i, arr) => {
+                  if (i > 0 && n - arr[i - 1] > 1) acc.push('…')
+                  acc.push(n)
+                  return acc
+                }, [])
+                .map((n, i) => n === '…'
+                  ? <span key={`ellipsis-${i}`} style={{ padding: '3px 6px', fontSize: 12, color: '#9ca3af' }}>…</span>
+                  : <button key={n} onClick={() => setPage(n)}
+                      style={{ minWidth: 28, padding: '3px 6px', fontSize: 12, border: '1px solid', borderRadius: 4, cursor: 'pointer', fontWeight: n === safePage ? 600 : 400, borderColor: n === safePage ? 'var(--color-brand)' : '#dde1e7', background: n === safePage ? 'var(--color-brand)' : '#fff', color: n === safePage ? '#fff' : '#374151' }}
+                    >{n}</button>
+                )}
+
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #dde1e7', borderRadius: 4, background: safePage === totalPages ? '#f9fafb' : '#fff', color: safePage === totalPages ? '#d1d5db' : '#374151', cursor: safePage === totalPages ? 'default' : 'pointer' }}
+              >Next ›</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {importOpen && (
         <ImportModal
           orgId={orgId}
+          customFields={leadModuleFields}
           onClose={() => setImportOpen(false)}
           onImported={() => { setImportOpen(false); loadLeads() }}
         />

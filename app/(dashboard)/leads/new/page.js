@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ArrowLeft, Save } from 'lucide-react'
 import { Button, Card, Input, Select, Textarea } from '@/components/ui'
 import { ModuleFields } from '@/components/crm/CustomModule'
+import CustomDatePicker from '@/components/crm/CustomDatePicker'
 import { createLead } from '@/lib/supabase/queries'
 import { toast } from '@/lib/toast'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -10,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 const STAGES = [
-  { label: 'New',        color: '#6366f1' },
+  { label: 'New',        color: '#135BFB' },
   { label: 'Contacted',  color: '#0ea5e9' },
   { label: 'Interested', color: '#f59e0b' },
   { label: 'Follow-up',  color: '#8b5cf6' },
@@ -25,7 +26,10 @@ const PRIORITIES = [
   { label: 'Urgent', color: '#7c3aed' },
 ]
 
-const SOURCES    = ['WhatsApp', 'Meta Ads', 'Website', 'Referral', 'Call', 'Email', 'Walk-in', 'Event', 'Other']
+const SOURCES     = ['WhatsApp', 'Meta Ads', 'Website', 'Referral', 'Call', 'Email', 'Walk-in', 'Event', 'Other']
+const SALUTATIONS = ['Mr', 'Mrs', 'Ms', 'Miss', 'Dr', 'Prof']
+// Auto-set gender from title; Dr / Prof are gender-neutral → left untouched
+const SALUTATION_GENDER = { Mr: 'Male', Mrs: 'Female', Ms: 'Female', Miss: 'Female' }
 const GENDERS    = ['Male', 'Female', 'Other']
 const BLOOD_GROUPS = ['', 'A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−']
 const DEPARTMENTS  = [
@@ -74,6 +78,7 @@ export default function NewLeadPage() {
     setCustomData(prev => ({ ...prev, [moduleId]: { ...(prev[moduleId] || {}), [fieldId]: value } }))
 
   const [form, setForm] = useState({
+    salutation:   '',
     first_name:   '',
     last_name:    '',
     phone:        '',
@@ -97,6 +102,18 @@ export default function NewLeadPage() {
 
   const set = field => e => setForm(f => ({ ...f, [field]: e.target.value }))
 
+  // Age auto-derived from date of birth
+  const age = (() => {
+    if (!form.date_of_birth) return ''
+    const dob = new Date(String(form.date_of_birth).length === 10 ? form.date_of_birth + 'T12:00:00' : form.date_of_birth)
+    if (isNaN(dob)) return ''
+    const now = new Date()
+    let a = now.getFullYear() - dob.getFullYear()
+    const m = now.getMonth() - dob.getMonth()
+    if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) a--
+    return a >= 0 && a < 150 ? String(a) : ''
+  })()
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.first_name.trim() || !orgId) return
@@ -106,6 +123,7 @@ export default function NewLeadPage() {
 
       // Structured fields go into custom_data; only free-text notes go into description
       const extraFields = {
+        ...(form.salutation   ? { salutation:   form.salutation   } : {}),
         ...(form.blood_group  ? { blood_group:  form.blood_group  } : {}),
         ...(form.reason       ? { reason:       form.reason       } : {}),
         ...(form.department   ? { department:   form.department   } : {}),
@@ -172,35 +190,49 @@ export default function NewLeadPage() {
         <Card className="p-6">
           <SectionLabel>Personal Information</SectionLabel>
           <div className="grid grid-cols-4 gap-4">
+            <Select
+              label="Title"
+              value={form.salutation}
+              onChange={e => {
+                const salutation = e.target.value
+                const g = SALUTATION_GENDER[salutation]
+                setForm(f => ({ ...f, salutation, ...(g ? { gender: g } : {}) }))
+              }}
+              options={[{ value: '', label: 'Select...' }, ...SALUTATIONS.map(s => ({ value: s, label: s }))]}
+            />
             <Input label="First Name *" placeholder="Ramesh" value={form.first_name} onChange={set('first_name')} required />
             <Input label="Last Name"    placeholder="Kumar"  value={form.last_name}  onChange={set('last_name')} />
             <Input label="Phone"        type="tel"           placeholder="+91 98765 43210" value={form.phone} onChange={set('phone')} />
             <Input label="Email"        type="email"         placeholder="ramesh@example.com" value={form.email} onChange={set('email')} />
-            <Input label="Date of Birth" type="date"         value={form.date_of_birth} onChange={set('date_of_birth')} />
+            <div className="space-y-1">
+              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Date of Birth</label>
+              <CustomDatePicker
+                popover
+                typeable
+                placeholder="dd/mm/yyyy"
+                value={form.date_of_birth}
+                onChange={v => setForm(f => ({ ...f, date_of_birth: v }))}
+              />
+            </div>
+            <Input
+              label="Age"
+              placeholder="—"
+              value={age}
+              readOnly
+              title="Auto-calculated from Date of Birth"
+            />
             <Select
               label="Blood Group"
               value={form.blood_group}
               onChange={set('blood_group')}
               options={BLOOD_GROUPS.map(g => ({ value: g, label: g || 'Select...' }))}
             />
-            <div className="col-span-2 space-y-1.5">
-              <label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Gender</label>
-              <div className="flex gap-2 h-9.5">
-                {GENDERS.map(g => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setForm(f => ({ ...f, gender: f.gender === g ? '' : g }))}
-                    className="flex-1 rounded-lg text-xs font-500 border transition-all"
-                    style={form.gender === g
-                      ? { background: 'var(--color-brand)', color: 'white', borderColor: 'var(--color-brand)' }
-                      : { color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Select
+              label="Gender"
+              value={form.gender}
+              onChange={set('gender')}
+              options={[{ value: '', label: 'Select...' }, ...GENDERS.map(g => ({ value: g, label: g }))]}
+            />
           </div>
         </Card>
 
