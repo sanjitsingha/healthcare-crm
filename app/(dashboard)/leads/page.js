@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Upload, AlertCircle, FileText } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
-import { getLeads, deleteLead, updateLead, getTags } from '@/lib/supabase/queries'
+import { getLeads, deleteLead, updateLead, getTags, createLead } from '@/lib/supabase/queries'
 import { getPref, setPref } from '@/lib/prefs'
 import { useOrg } from '@/lib/context/OrgContext'
 import Link from 'next/link'
@@ -356,6 +356,452 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
   )
 }
 
+// ── CSV Import Modal ───────────────────────────────────────────
+const LEAD_FIELDS = [
+  { key: 'first_name', label: 'First Name' },
+  { key: 'last_name',  label: 'Last Name'  },
+  { key: 'phone',      label: 'Phone'      },
+  { key: 'email',      label: 'Email'      },
+  { key: 'stage',      label: 'Stage'      },
+  { key: 'priority',   label: 'Priority'   },
+  { key: 'source',     label: 'Source'     },
+  { key: 'gender',     label: 'Gender'     },
+  { key: 'address',    label: 'Address'    },
+  { key: 'notes',      label: 'Notes'      },
+  { key: '__skip',     label: '— Skip —'   },
+]
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/)
+  if (lines.length < 2) return { headers: [], rows: [] }
+  const parse = (line) => {
+    const result = []; let cur = ''; let inQ = false
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i]
+      if (c === '"') { inQ = !inQ; continue }
+      if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue }
+      cur += c
+    }
+    result.push(cur.trim())
+    return result
+  }
+  const headers = parse(lines[0])
+  const rows = lines.slice(1).map(parse).filter(r => r.some(c => c))
+  return { headers, rows }
+}
+
+function autoMap(headers) {
+  const map = {}
+  const norm = s => s.toLowerCase().replace(/[\s_-]+/g, '')
+  headers.forEach((h, i) => {
+    const n = norm(h)
+    const match = LEAD_FIELDS.find(f => f.key !== '__skip' && norm(f.label) === n)
+      || LEAD_FIELDS.find(f => f.key !== '__skip' && n.includes(norm(f.label)))
+      || LEAD_FIELDS.find(f => f.key !== '__skip' && norm(f.key) === n)
+    map[i] = match ? match.key : '__skip'
+  })
+  return map
+}
+
+function ImportModal({ orgId, onClose, onImported }) {
+  const [step, setStep]         = useState('upload')   // upload | map | preview | importing | done
+  const [headers, setHeaders]   = useState([])
+  const [rows, setRows]         = useState([])
+  const [mapping, setMapping]   = useState({})          // colIndex → fieldKey
+  const [result, setResult]     = useState(null)        // { ok, errors }
+  const fileRef = useRef()
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const { headers: h, rows: r } = parseCSV(ev.target.result)
+      if (!h.length) { toast({ type: 'error', title: 'Invalid CSV', message: 'No headers found.' }); return }
+      setHeaders(h)
+      setRows(r)
+      setMapping(autoMap(h))
+      setStep('map')
+    }
+    reader.readAsText(file)
+  }
+
+  const buildLead = (row) => {
+    const lead = { org_id: orgId, stage: 'New', priority: 'Medium' }
+    headers.forEach((_, i) => {
+      const key = mapping[i]
+      if (!key || key === '__skip') return
+      const val = row[i]?.trim()
+      if (val) lead[key] = val
+    })
+    // combine first/last into title if no separate title field
+    if (!lead.title && (lead.first_name || lead.last_name)) {
+      lead.title = [lead.first_name, lead.last_name].filter(Boolean).join(' ')
+    }
+    return lead
+  }
+
+  const handleImport = async () => {
+    setStep('importing')
+    let ok = 0; const errors = []
+    for (const row of rows) {
+      const lead = buildLead(row)
+      try { await createLead(lead); ok++ }
+      catch (err) { errors.push({ row, message: err.message }) }
+    }
+    setResult({ ok, errors })
+    setStep('done')
+    if (ok > 0) onImported()
+  }
+
+  const mappedFieldKeys = Object.values(mapping).filter(k => k && k !== '__skip')
+  const hasPhone = mappedFieldKeys.includes('phone')
+  const hasName  = mappedFieldKeys.includes('first_name') || mappedFieldKeys.includes('last_name')
+  const canImport = (hasName || hasPhone) && rows.length > 0
+
+  const STEPS = [
+    { id: 'upload',    label: 'Upload'  },
+    { id: 'map',       label: 'Map'     },
+    { id: 'preview',   label: 'Preview' },
+  ]
+  const stepIdx = { upload: 0, map: 1, preview: 2, importing: 2, done: 2 }
+  const currentIdx = stepIdx[step] ?? 0
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
+      <div
+        className="relative w-full max-w-3xl flex flex-col rounded-2xl border border-(--color-border) shadow-2xl"
+        style={{ background: 'var(--color-surface)', height: '82vh', maxHeight: '740px' }}
+      >
+        {/* ── Header ── */}
+        <div className="shrink-0 flex items-center justify-between px-7 pt-6 pb-5">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: 'var(--color-brand)', boxShadow: '0 4px 12px rgba(var(--color-brand-rgb,99,102,241),.35)' }}>
+              <Upload size={18} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-700 leading-tight" style={{ color: 'var(--color-text-primary)' }}>Import Leads</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Bulk-create leads from a CSV file</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {step !== 'importing' && step !== 'done' && (
+              <button
+                onClick={() => {
+                  if (step === 'map') setStep('preview')
+                  else if (step === 'preview') handleImport()
+                }}
+                disabled={step === 'upload' || (step === 'map' && !canImport)}
+                className="px-7 py-2 rounded-xl text-sm font-600 text-white transition-all hover:brightness-105 disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(0,0,0,0.08) 100%), var(--color-brand)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.22)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                }}
+              >
+                {step === 'preview' ? `Import ${rows.length}` : 'Save'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="px-7 py-2 rounded-xl text-sm font-500 transition-all hover:brightness-98"
+              style={{
+                background: 'linear-gradient(180deg, #ffffff 0%, #f1f2f4 100%)',
+                color: '#374151',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+                border: '1px solid #d1d5db',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        {/* ── Step progress bar ── */}
+        {step !== 'importing' && step !== 'done' && (
+          <div className="shrink-0 px-7 pb-5">
+            <div className="flex items-center gap-0">
+              {STEPS.map((s, i) => {
+                const done    = i < currentIdx
+                const active  = i === currentIdx
+                const isLast  = i === STEPS.length - 1
+                return (
+                  <div key={s.id} className="flex items-center flex-1 last:flex-none">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-700 shrink-0 transition-all"
+                        style={done
+                          ? { background: 'var(--color-brand)', color: 'white' }
+                          : active
+                            ? { background: 'var(--color-brand)', color: 'white', boxShadow: '0 0 0 3px var(--color-brand-50)' }
+                            : { background: 'var(--color-surface-2)', color: 'var(--color-text-muted)', border: '1.5px solid var(--color-border)' }}
+                      >
+                        {done ? <Check size={12} /> : i + 1}
+                      </div>
+                      <span className="text-xs font-600 hidden sm:block"
+                        style={{ color: active ? 'var(--color-brand)' : done ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>
+                        {s.label}
+                      </span>
+                    </div>
+                    {!isLast && (
+                      <div className="flex-1 mx-3 h-px" style={{ background: done ? 'var(--color-brand)' : 'var(--color-border)' }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Divider ── */}
+        <div className="shrink-0 border-t border-(--color-border)" />
+
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto px-7 py-6">
+
+          {/* Upload */}
+          {step === 'upload' && (
+            <div className="h-full flex flex-col gap-5">
+              <div
+                className="flex-1 flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed cursor-pointer transition-all hover:border-(--color-brand) group"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-2)' }}
+                onClick={() => fileRef.current?.click()}
+              >
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-(--color-brand)"
+                  style={{ background: 'var(--color-surface)' }}>
+                  <Upload size={28} className="transition-colors group-hover:text-white" style={{ color: 'var(--color-text-muted)' }} />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-base font-600" style={{ color: 'var(--color-text-primary)' }}>Click to upload a CSV file</p>
+                  <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>or drag and drop — UTF-8, comma-separated</p>
+                </div>
+                <div className="px-4 py-1.5 rounded-full text-xs font-600 border transition-colors group-hover:border-(--color-brand) group-hover:text-(--color-brand)"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                  Browse files
+                </div>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+              </div>
+
+              <div className="shrink-0 rounded-xl p-4" style={{ background: 'var(--color-surface-2)' }}>
+                <p className="text-xs font-700 uppercase tracking-wider mb-2" style={{ color: 'var(--color-text-muted)' }}>Supported columns</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {LEAD_FIELDS.filter(f => f.key !== '__skip').map(f => (
+                    <span key={f.key} className="px-2.5 py-1 rounded-full text-[11px] font-500 border border-(--color-border)"
+                      style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
+                      {f.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Map */}
+          {step === 'map' && (
+            <div className="h-full flex flex-col gap-4">
+              <div className="shrink-0 flex items-center justify-between">
+                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                  Match each CSV column to a lead field. Unmapped columns are skipped.
+                </p>
+                <span className="text-xs font-600 px-2.5 py-1 rounded-full"
+                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                  {rows.length} row{rows.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Column headers */}
+              <div className="shrink-0 grid grid-cols-2 gap-x-4 px-1">
+                <p className="text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>CSV Column</p>
+                <p className="text-[10px] font-700 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Maps to field</p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {headers.map((h, i) => {
+                  const isMapped = mapping[i] && mapping[i] !== '__skip'
+                  return (
+                    <div key={i} className="grid grid-cols-2 gap-4 items-center p-3 rounded-xl border transition-colors"
+                      style={{ borderColor: isMapped ? 'var(--color-brand)' : 'var(--color-border)', background: isMapped ? 'var(--color-brand-50)' : 'var(--color-surface-2)' }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{ background: isMapped ? 'var(--color-brand)' : 'var(--color-border)' }} />
+                        <span className="text-xs font-600 truncate" style={{ color: 'var(--color-text-primary)' }}>{h}</span>
+                      </div>
+                      <select
+                        value={mapping[i] || '__skip'}
+                        onChange={e => setMapping(m => ({ ...m, [i]: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-(--color-border) text-xs outline-none focus:border-(--color-brand) transition-colors"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                      >
+                        {LEAD_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {!canImport && (
+                <div className="shrink-0 flex items-center gap-2.5 px-4 py-3 rounded-xl"
+                  style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
+                  <AlertCircle size={15} className="shrink-0" style={{ color: '#b45309' }} />
+                  <p className="text-xs font-500" style={{ color: '#92400e' }}>
+                    Map at least a <strong>First Name</strong> or <strong>Phone</strong> column to continue.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preview */}
+          {step === 'preview' && (
+            <div className="h-full flex flex-col gap-4">
+              <div className="shrink-0 flex items-center justify-between">
+                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                  Previewing the first 8 rows — all {rows.length} will be imported.
+                </p>
+                <span className="text-xs font-600 px-2.5 py-1 rounded-full"
+                  style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                  {rows.length} lead{rows.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex-1 overflow-auto rounded-xl border border-(--color-border)">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10">
+                    <tr style={{ background: 'var(--color-surface-2)' }}>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-700 uppercase tracking-wider whitespace-nowrap border-b border-(--color-border)"
+                        style={{ color: 'var(--color-text-muted)' }}>#</th>
+                      {headers.map((h, i) => mapping[i] !== '__skip' && (
+                        <th key={i} className="px-3 py-2.5 text-left text-[10px] font-700 uppercase tracking-wider whitespace-nowrap border-b border-(--color-border)"
+                          style={{ color: 'var(--color-text-muted)' }}>
+                          {LEAD_FIELDS.find(f => f.key === mapping[i])?.label || h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-(--color-border)">
+                    {rows.slice(0, 8).map((row, ri) => (
+                      <tr key={ri} className="transition-colors hover:bg-(--color-brand-50)/30">
+                        <td className="px-3 py-2.5 text-[10px] font-600" style={{ color: 'var(--color-text-muted)' }}>{ri + 1}</td>
+                        {headers.map((_, i) => mapping[i] !== '__skip' && (
+                          <td key={i} className="px-3 py-2.5 whitespace-nowrap font-500" style={{ color: row[i] ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}>
+                            {row[i] || '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {rows.length > 8 && (
+                <p className="shrink-0 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
+                  + {rows.length - 8} more row{rows.length - 8 !== 1 ? 's' : ''} not shown
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Importing */}
+          {step === 'importing' && (
+            <div className="h-full flex flex-col items-center justify-center gap-5">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ background: 'var(--color-brand-50)' }}>
+                <Spinner size={28} />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-base font-700" style={{ color: 'var(--color-text-primary)' }}>Importing leads…</p>
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Creating {rows.length} record{rows.length !== 1 ? 's' : ''}, please wait</p>
+              </div>
+            </div>
+          )}
+
+          {/* Done */}
+          {step === 'done' && result && (
+            <div className="h-full flex flex-col gap-5">
+              <div className="flex-1 flex flex-col items-center justify-center gap-5">
+                <div className="w-20 h-20 rounded-2xl flex items-center justify-center"
+                  style={{ background: result.ok > 0 ? '#dcfce7' : '#fee2e2' }}>
+                  {result.ok > 0
+                    ? <Check size={36} style={{ color: '#15803d' }} />
+                    : <AlertCircle size={36} style={{ color: '#b91c1c' }} />}
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-2xl font-800" style={{ color: result.ok > 0 ? '#15803d' : '#b91c1c' }}>
+                    {result.ok} lead{result.ok !== 1 ? 's' : ''} imported
+                  </p>
+                  {result.errors.length > 0 && (
+                    <p className="text-sm" style={{ color: '#b91c1c' }}>
+                      {result.errors.length} row{result.errors.length !== 1 ? 's' : ''} failed to import
+                    </p>
+                  )}
+                </div>
+              </div>
+              {result.errors.length > 0 && (
+                <div className="shrink-0 rounded-xl border border-red-200 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-red-100" style={{ background: '#fef2f2' }}>
+                    <p className="text-xs font-700 uppercase tracking-wider" style={{ color: '#b91c1c' }}>Failed rows</p>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto divide-y divide-red-100">
+                    {result.errors.slice(0, 10).map((e, i) => (
+                      <div key={i} className="flex items-start gap-2 px-4 py-2">
+                        <span className="text-[10px] font-700 shrink-0 mt-0.5" style={{ color: '#b91c1c' }}>Row {i + 1}</span>
+                        <p className="text-xs" style={{ color: '#7f1d1d' }}>{e.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="shrink-0 border-t border-(--color-border) flex items-center justify-between px-7 py-4"
+          style={{ background: 'var(--color-surface-2)' }}>
+          <div style={{ color: 'var(--color-text-muted)' }}>
+            {step === 'map' && <p className="text-xs">{headers.length} column{headers.length !== 1 ? 's' : ''} detected</p>}
+            {step === 'preview' && <p className="text-xs">{rows.length} lead{rows.length !== 1 ? 's' : ''} ready to import</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            {step === 'done' ? (
+              <button onClick={onClose}
+                className="px-5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
+                style={{ background: 'var(--color-brand)' }}>
+                Done
+              </button>
+            ) : step === 'map' ? (
+              <>
+                <button onClick={() => setStep('upload')}
+                  className="px-4 py-2 rounded-lg text-sm font-500 border border-(--color-border) transition-colors hover:bg-(--color-surface)"
+                  style={{ color: 'var(--color-text-secondary)' }}>
+                  Back
+                </button>
+                <button onClick={() => setStep('preview')} disabled={!canImport}
+                  className="px-5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                  style={{ background: 'var(--color-brand)' }}>
+                  Preview →
+                </button>
+              </>
+            ) : step === 'preview' ? (
+              <>
+                <button onClick={() => setStep('map')}
+                  className="px-4 py-2 rounded-lg text-sm font-500 border border-(--color-border) transition-colors hover:bg-(--color-surface)"
+                  style={{ color: 'var(--color-text-secondary)' }}>
+                  Back
+                </button>
+                <button onClick={handleImport}
+                  className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
+                  style={{ background: 'var(--color-brand)' }}>
+                  <Upload size={14} /> Import {rows.length} Lead{rows.length !== 1 ? 's' : ''}
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Page ──────────────────────────────────────────────────
 export default function LeadsPage() {
   const { orgId, org, hasPermission } = useOrg()
@@ -363,6 +809,7 @@ export default function LeadsPage() {
 
   const [leads,   setLeads]   = useState([])
   const [loading, setLoading] = useState(true)
+  const [importOpen, setImportOpen] = useState(false)
 
   // filters
   const [search,      setSearch]      = useState('')
@@ -666,6 +1113,16 @@ export default function LeadsPage() {
           )}
         </div>
 
+        {/* Import */}
+        <button
+          onClick={() => setImportOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-(--color-border) text-sm font-500 transition-colors hover:bg-(--color-brand-50)"
+          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
+        >
+          <Upload size={15} />
+          Import
+        </button>
+
         {/* Filters toggle */}
         <button
           onClick={() => setFiltersOpen(o => !o)}
@@ -949,6 +1406,14 @@ export default function LeadsPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {importOpen && (
+        <ImportModal
+          orgId={orgId}
+          onClose={() => setImportOpen(false)}
+          onImported={() => { setImportOpen(false); loadLeads() }}
+        />
       )}
     </div>
   )
