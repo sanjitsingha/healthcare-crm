@@ -443,11 +443,7 @@ export default function LeadPipelinePage() {
             </button>
           </div>
 
-          <Link
-            href="/leads/new"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-opacity hover:opacity-85"
-            style={{ background: 'var(--color-brand)', color: 'white' }}
-          >
+          <Link href="/leads/new" className="btn btn-primary btn-sm">
             <Plus size={13} /> New Lead
           </Link>
         </div>

@@ -1726,9 +1726,9 @@ export default function LeadDetailPage({ params }) {
           {hasPermission("leads.delete") && (
             <button
               onClick={handleDelete}
-              className="p-2 rounded-lg border border-(--color-border) hover:bg-red-50 hover:border-red-200 transition-colors"
+              className="btn btn-danger btn-icon"
             >
-              <Trash2 size={15} className="text-red-500" />
+              <Trash2 size={15} />
             </button>
           )}
         </div>

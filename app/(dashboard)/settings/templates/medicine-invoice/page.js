@@ -139,9 +139,7 @@ export default function MedicineInvoiceDesigner() {
             <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Upload your letterhead, pick a data layout, set the placement.</p>
           </div>
         </div>
-        <button type="button" onClick={save} disabled={saving || uploading}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-700 text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          style={{ background: 'var(--color-brand)' }}>
+        <button type="button" onClick={save} disabled={saving || uploading} className="btn btn-primary btn-md disabled:opacity-50">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
           {saving ? 'Saving…' : 'Confirm & Activate'}
         </button>

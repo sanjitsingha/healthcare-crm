@@ -62,14 +62,10 @@ export default function InvoicePage({ params }) {
 
       {/* Screen toolbar */}
       <div className="no-print flex items-center justify-between gap-3 mb-5">
-        <Link href="/pharmacy/billing"
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-(--color-border) text-sm font-600 hover:bg-(--color-surface-2) transition-colors"
-          style={{ color: 'var(--color-text-secondary)' }}>
+        <Link href="/pharmacy/billing" className="btn btn-secondary btn-md">
           <ArrowLeft size={15} /> Back
         </Link>
-        <button type="button" onClick={() => window.print()}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-700 text-white transition-opacity hover:opacity-90"
-          style={{ background: 'var(--color-brand)' }}>
+        <button type="button" onClick={() => window.print()} className="btn btn-primary btn-md">
           <Printer size={15} /> Print / Save PDF
         </button>
       </div>

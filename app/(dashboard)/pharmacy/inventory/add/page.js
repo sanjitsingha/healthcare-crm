@@ -218,12 +218,10 @@ function InventoryFormInner() {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 pt-2">
-          <Link href="/pharmacy/inventory" className="px-4 py-2 rounded-lg text-sm font-600 border border-(--color-border) hover:bg-(--color-surface-2) transition-colors" style={{ color: 'var(--color-text-secondary)' }}>
+          <Link href="/pharmacy/inventory" className="btn btn-secondary btn-md">
             Cancel
           </Link>
-          <button type="submit" disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-            style={{ background: 'var(--color-brand)' }}>
+          <button type="submit" disabled={saving} className="btn btn-primary btn-md disabled:opacity-60">
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             {saving ? 'Saving…' : editId ? 'Save changes' : 'Add item'}
           </button>
