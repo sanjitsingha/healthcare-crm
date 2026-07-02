@@ -311,8 +311,13 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-(--color-border) text-sm font-500 transition-colors hover:bg-(--color-brand-50)"
-        style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-500 transition-all hover:brightness-98"
+        style={{
+          background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
+          border: '1px solid #d1d5db',
+          color: '#374151',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
+        }}
       >
         {open ? <EyeOff size={15} /> : <Eye size={15} />}
         Columns
@@ -1076,16 +1081,25 @@ export default function LeadsPage() {
             onClick={loadLeads}
             disabled={loading}
             title="Refresh leads"
-            className="p-2 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2) disabled:opacity-50"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="p-2 rounded-lg disabled:opacity-50 transition-all"
+            style={{
+              background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
+              border: '1px solid #d1d5db',
+              color: '#6b7280',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
+            }}
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
           {hasPermission('leads.create') && (
             <Link href="/leads/new">
               <button
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-                style={{ background: 'var(--color-brand)' }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-all hover:brightness-105"
+                style={{
+                  background: 'linear-gradient(180deg,rgba(255,255,255,0.15) 0%,rgba(0,0,0,0.08) 100%),var(--color-brand)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.22)',
+                }}
               >
                 <Plus size={16} /> New Lead
               </button>
@@ -1100,8 +1114,13 @@ export default function LeadsPage() {
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
           <input
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-(--color-border) outline-none transition-all"
-            style={{ background: 'var(--color-surface)' }}
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg outline-none transition-all focus:border-(--color-brand)"
+            style={{
+              background: 'linear-gradient(180deg,#ffffff 0%,#f9fafb 100%)',
+              border: '1px solid #d1d5db',
+              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)',
+              color: 'var(--color-text-primary)',
+            }}
             placeholder="Search by name, phone, email..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -1116,8 +1135,13 @@ export default function LeadsPage() {
         {/* Import */}
         <button
           onClick={() => setImportOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-(--color-border) text-sm font-500 transition-colors hover:bg-(--color-brand-50)"
-          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-500 transition-all hover:brightness-98"
+          style={{
+            background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
+            border: '1px solid #d1d5db',
+            color: '#374151',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
+          }}
         >
           <Upload size={15} />
           Import
@@ -1126,18 +1150,25 @@ export default function LeadsPage() {
         {/* Filters toggle */}
         <button
           onClick={() => setFiltersOpen(o => !o)}
-          className={clsx(
-            'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-500 transition-all',
-            filtersOpen || hasFilters ? 'border-(--color-brand) text-white' : 'border-(--color-border) hover:bg-(--color-brand-50)'
-          )}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-500 transition-all"
           style={filtersOpen || hasFilters
-            ? { background: 'var(--color-brand)' }
-            : { color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}
+            ? {
+                background: 'linear-gradient(180deg,rgba(255,255,255,0.15) 0%,rgba(0,0,0,0.08) 100%),var(--color-brand)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.22)',
+              }
+            : {
+                background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
+                border: '1px solid #d1d5db',
+                color: '#374151',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
+              }}
         >
           <SlidersHorizontal size={15} />
           Filters
           {hasFilters && (
-            <span className="bg-white/30 text-[10px] font-700 px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }}>
               {filterCount}
             </span>
           )}
@@ -1196,7 +1227,13 @@ export default function LeadsPage() {
           {hasFilters && (
             <div className="flex justify-end pt-2 border-t border-(--color-border)">
               <button onClick={clearFilters}
-                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg transition-all hover:brightness-105"
+                style={{
+                  background: 'linear-gradient(180deg,#fee2e2 0%,#fecaca 100%)',
+                  border: '1px solid #fca5a5',
+                  color: '#b91c1c',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.6)',
+                }}>
                 <X size={12} /> Clear all
               </button>
             </div>
@@ -1215,29 +1252,50 @@ export default function LeadsPage() {
           </span>
           <button
             onClick={clearSelection}
-            className="text-xs font-500 px-2 py-1 rounded-lg hover:bg-white/50 transition-colors"
-            style={{ color: 'var(--color-brand)' }}
+            className="text-xs font-500 px-3 py-1.5 rounded-lg transition-all hover:brightness-98"
+            style={{
+              background: 'linear-gradient(180deg,rgba(255,255,255,0.25) 0%,rgba(255,255,255,0.05) 100%)',
+              border: '1px solid rgba(255,255,255,0.4)',
+              color: 'var(--color-brand)',
+            }}
           >
             Deselect all
           </button>
           <div className="flex-1" />
           <button
             onClick={handleMoveToPatient}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-green-200 bg-white text-green-700 hover:bg-green-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all hover:brightness-105"
+            style={{
+              background: 'linear-gradient(180deg,#bbf7d0 0%,#86efac 100%)',
+              border: '1px solid #4ade80',
+              color: '#15803d',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.08),inset 0 1px 0 rgba(255,255,255,0.7)',
+            }}
           >
             <UserCheck size={14} /> Move to Patient
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) bg-white hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all hover:brightness-98"
+            style={{
+              background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
+              border: '1px solid #d1d5db',
+              color: '#374151',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
+            }}
           >
             <Download size={14} /> Export
           </button>
           {hasPermission('leads.delete') && (
             <button
               onClick={handleBulkDelete}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all hover:brightness-105"
+              style={{
+                background: 'linear-gradient(180deg,#fee2e2 0%,#fecaca 100%)',
+                border: '1px solid #fca5a5',
+                color: '#b91c1c',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.6)',
+              }}
             >
               <Trash2 size={14} /> Delete
             </button>
