@@ -499,13 +499,12 @@ export default function PatientsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={loadPatients} disabled={loading} title="Refresh patients"
-            className="p-2 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2) disabled:opacity-50"
-            style={{ color: 'var(--color-text-muted)' }}>
+            className="btn btn-secondary btn-icon disabled:opacity-50">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
           {hasPermission('patients.create') && (
             <Link href="/patients/new">
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90" style={{ background: 'var(--color-brand)' }}>
+              <button className="btn btn-primary btn-md">
                 <Plus size={16} /> New Patient
               </button>
             </Link>
@@ -580,7 +579,7 @@ export default function PatientsPage() {
 
           {hasFilters && (
             <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters} className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+              <button onClick={clearFilters} className="btn btn-danger btn-sm">
                 <X size={12} /> Clear all
               </button>
             </div>
@@ -594,17 +593,17 @@ export default function PatientsPage() {
           <span className="text-sm font-600" style={{ color: 'var(--color-brand)' }}>{selected.size} patient{selected.size !== 1 ? 's' : ''} selected</span>
           <button onClick={clearSel} className="text-xs font-500 px-2 py-1 rounded-lg hover:bg-white/50 transition-colors" style={{ color: 'var(--color-brand)' }}>Deselect all</button>
           <div className="flex-1" />
-          <button onClick={() => handleBulkStatus('Active')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-green-200 bg-white text-green-700 hover:bg-green-50 transition-colors">
+          <button onClick={() => handleBulkStatus('Active')} className="btn btn-success btn-sm">
             <ToggleRight size={14} /> Mark Active
           </button>
-          <button onClick={() => handleBulkStatus('Inactive')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) bg-white hover:bg-gray-50 transition-colors" style={{ color: 'var(--color-text-secondary)' }}>
+          <button onClick={() => handleBulkStatus('Inactive')} className="btn btn-secondary btn-sm">
             <ToggleLeft size={14} /> Mark Inactive
           </button>
-          <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) bg-white hover:bg-gray-50 transition-colors" style={{ color: 'var(--color-text-secondary)' }}>
+          <button onClick={handleExport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export
           </button>
           {hasPermission('patients.delete') && (
-            <button onClick={handleBulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors">
+            <button onClick={handleBulkDelete} className="btn btn-danger btn-sm">
               <Trash2 size={14} /> Delete
             </button>
           )}

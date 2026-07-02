@@ -436,7 +436,7 @@ export default function RolesPage() {
                   type="button"
                   disabled={deleting}
                   onClick={handleDelete}
-                  className="flex items-center gap-1.5 text-xs font-500 px-3 py-2 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                  className="btn btn-danger btn-sm disabled:opacity-50"
                 >
                   <Trash2 size={13} />
                   {deleting ? 'Deleting…' : 'Delete Role'}

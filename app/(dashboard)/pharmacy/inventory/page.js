@@ -161,8 +161,7 @@ export default function PharmacyInventoryPage() {
         </div>
         <Link
           href="/pharmacy/inventory/add"
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-600 transition-opacity hover:opacity-90"
-          style={{ background: 'var(--color-brand)', color: 'white' }}
+          className="btn btn-primary btn-md"
         >
           <Plus size={16} /> Add Item
         </Link>

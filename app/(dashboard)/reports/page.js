@@ -238,8 +238,7 @@ function RangeDropdown({ rangeKey, setRangeKey, custom, setCustom, label }) {
                 className="w-full px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
               <button type="button" disabled={!custom.start || !custom.end}
                 onClick={() => { setRangeKey('custom'); setOpen(false) }}
-                className="w-full py-1.5 rounded-lg text-xs font-600 text-white disabled:opacity-40"
-                style={{ background: 'var(--color-brand)' }}>Apply custom range</button>
+                className="btn btn-primary btn-md w-full disabled:opacity-40">Apply custom range</button>
             </div>
           </div>
         </div>
@@ -408,7 +407,7 @@ export default function ReportsPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <button type="button" onClick={load} title="Refresh"
-            className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
+            className="btn btn-secondary btn-icon">
             <RefreshCw size={15} />
           </button>
           <PersonDropdown people={people} value={person} setValue={setPerson} />

@@ -132,8 +132,7 @@ export default function DashboardPage() {
           <UserSelector value={user} onChange={setUser} users={people} />
           <DateRangePicker value={range} onChange={setRange} />
           <button type="button" onClick={refresh} disabled={refreshing} title="Refresh"
-            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border transition-colors hover:bg-(--color-surface-2) disabled:opacity-60"
-            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-secondary)' }}>
+            className="btn btn-secondary btn-icon disabled:opacity-60">
             <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
           </button>
           <span className="relative rounded-full p-[1.5px]" style={{ background: 'linear-gradient(90deg, var(--color-brand), #a78bfa, #38bdf8, #a78bfa, var(--color-brand))', backgroundSize: '300% 100%', animation: 'ai-border 3s linear infinite' }}>

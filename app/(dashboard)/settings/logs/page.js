@@ -274,8 +274,7 @@ export default function LogsPage() {
           </div>
 
           <button type="button" onClick={load} title="Refresh"
-            className="p-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}>
+            className="btn btn-secondary btn-icon">
             <RefreshCw size={13} />
           </button>
         </div>
@@ -316,8 +315,7 @@ export default function LogsPage() {
                 type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="px-4 py-2 text-xs font-600 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2) disabled:opacity-50"
-                style={{ color: 'var(--color-text-secondary)' }}
+                className="btn btn-secondary btn-sm disabled:opacity-50"
               >
                 {loadingMore ? 'Loading…' : `See ${LOAD_MORE_SIZE} more`}
               </button>

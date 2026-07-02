@@ -522,13 +522,11 @@ export default function ConsultationPage() {
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={load} disabled={loading} title="Refresh"
-            className="p-2 rounded-lg border border-(--color-border) transition-colors hover:bg-(--color-surface-2) disabled:opacity-50"
-            style={{ color: 'var(--color-text-muted)' }}>
+            className="btn btn-secondary btn-icon disabled:opacity-50">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
           <Link href="/consultation/new">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--color-brand)' }}>
+            <button className="btn btn-primary btn-md">
               <Plus size={16} /> Add Consultation
             </button>
           </Link>
@@ -609,8 +607,7 @@ export default function ConsultationPage() {
 
           {hasFilters && (
             <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters}
-                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+              <button onClick={clearFilters} className="btn btn-danger btn-sm">
                 <X size={12} /> Clear all
               </button>
             </div>
@@ -628,13 +625,10 @@ export default function ConsultationPage() {
             Deselect all
           </button>
           <div className="flex-1" />
-          <button onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-(--color-border) bg-white hover:bg-gray-50 transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}>
+          <button onClick={handleExport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export
           </button>
-          <button onClick={handleBulkDelete} disabled={deleting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 border border-red-200 bg-white text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+          <button onClick={handleBulkDelete} disabled={deleting} className="btn btn-danger btn-sm disabled:opacity-50">
             <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete'}
           </button>
         </div>

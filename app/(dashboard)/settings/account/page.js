@@ -262,8 +262,7 @@ export default function AccountPage() {
             type="button"
             onClick={handleSignOut}
             disabled={signingOut}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-600 border transition-colors hover:bg-red-50 shrink-0 disabled:opacity-50"
-            style={{ borderColor: '#fecaca', color: '#b91c1c' }}
+            className="btn btn-danger btn-sm shrink-0 disabled:opacity-50"
           >
             <LogOut size={13} />
             {signingOut ? 'Signing out…' : 'Sign Out'}
@@ -420,8 +419,7 @@ export default function AccountPage() {
           </div>
           {geoStatus !== 'granted' && (
             <button type="button" onClick={requestPreciseLocation} disabled={geoStatus === 'requesting'}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-600 transition-colors hover:bg-(--color-brand-50) shrink-0 disabled:opacity-50"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-brand)' }}>
+              className="btn btn-secondary btn-sm shrink-0 disabled:opacity-50">
               <Crosshair size={13} /> {geoStatus === 'requesting' ? 'Locating…' : geoStatus === 'denied' ? 'Location blocked' : 'Use precise location'}
             </button>
           )}

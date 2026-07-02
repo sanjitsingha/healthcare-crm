@@ -230,9 +230,9 @@ export default function TagsPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-brand-50) transition-colors"
+                className="btn btn-secondary btn-icon"
               >
-                <X size={15} style={{ color: 'var(--color-text-muted)' }} />
+                <X size={15} />
               </button>
             </div>
           </form>
@@ -282,7 +282,7 @@ export default function TagsPage() {
           <div className="flex-1 min-w-40"><Input label="Status Name *" placeholder="e.g. On Hold" value={newPatientStatus} onChange={e => setNewPatientStatus(e.target.value)} required /></div>
           <div className="space-y-1.5"><label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Color</label><div className="flex items-center gap-2"><div className="flex gap-1.5 flex-wrap">{PRESET_COLORS.map(c => <button key={c} type="button" onClick={() => setNewPatientStatusColor(c)} className="w-5 h-5 rounded-full border-2" style={{ background: c, borderColor: newPatientStatusColor === c ? 'white' : 'transparent', outline: newPatientStatusColor === c ? `2px solid ${c}` : 'none' }} />)}</div><input type="color" value={newPatientStatusColor} onChange={e => setNewPatientStatusColor(e.target.value)} className="w-7 h-7 rounded border border-(--color-border) p-0.5" /></div></div>
           <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-600 self-end mb-0.5" style={{ background: newPatientStatusColor + '15', borderColor: newPatientStatusColor + '50', color: newPatientStatusColor }}><UserCheck size={13} />{newPatientStatus || 'Preview'}</div>
-          <div className="flex gap-2 self-end mb-0.5"><Button type="submit" size="sm" disabled={savingPatientStatuses || !newPatientStatus.trim()}>{savingPatientStatuses ? 'Creating...' : 'Create'}</Button><button type="button" onClick={() => { setNewPatientStatus(''); setNewPatientStatusColor('#10b981'); setShowPatientStatusForm(false) }} className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-brand-50)"><X size={15} /></button></div>
+          <div className="flex gap-2 self-end mb-0.5"><Button type="submit" size="sm" disabled={savingPatientStatuses || !newPatientStatus.trim()}>{savingPatientStatuses ? 'Creating...' : 'Create'}</Button><button type="button" onClick={() => { setNewPatientStatus(''); setNewPatientStatusColor('#10b981'); setShowPatientStatusForm(false) }} className="btn btn-secondary btn-icon"><X size={15} /></button></div>
         </form>}
         <div className="flex flex-wrap gap-2 mb-5">{patientStatuses.map(status => <div key={status.name} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border group" style={{ background: status.color + '12', borderColor: status.color + '40' }}><span className="w-2 h-2 rounded-full" style={{ background: status.color }} /><span className="text-xs font-600" style={{ color: status.color }}>{status.name}</span><button type="button" onClick={() => handleDeletePatientStatus(status.name)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 text-gray-400 hover:text-red-500"><X size={10} /></button></div>)}</div>
       </Card>
@@ -329,7 +329,7 @@ export default function TagsPage() {
           <div className="flex-1 min-w-40"><Input label="Stage Name *" placeholder="e.g. Negotiation" value={newStage} onChange={e => setNewStage(e.target.value)} required /></div>
           <div className="space-y-1.5"><label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Color</label><div className="flex items-center gap-2"><div className="flex gap-1.5 flex-wrap">{PRESET_COLORS.map(c => <button key={c} type="button" onClick={() => setNewStageColor(c)} className="w-5 h-5 rounded-full border-2" style={{ background: c, borderColor: newStageColor === c ? 'white' : 'transparent', outline: newStageColor === c ? `2px solid ${c}` : 'none' }} />)}</div><input type="color" value={newStageColor} onChange={e => setNewStageColor(e.target.value)} className="w-7 h-7 rounded border border-(--color-border) p-0.5" /></div></div>
           <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-600 self-end mb-0.5" style={{ background: newStageColor + '15', borderColor: newStageColor + '50', color: newStageColor }}>{(() => { const I = STAGE_ICONS[newStage.trim()] || TrendingUp; return <I size={13} /> })()}{newStage || 'Preview'}</div>
-          <div className="flex gap-2 self-end mb-0.5"><Button type="submit" size="sm" disabled={savingStages || !newStage.trim()}>{savingStages ? 'Creating...' : 'Create'}</Button><button type="button" onClick={() => { setNewStage(''); setNewStageColor('#6366f1'); setShowStageForm(false) }} className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-brand-50)"><X size={15} /></button></div>
+          <div className="flex gap-2 self-end mb-0.5"><Button type="submit" size="sm" disabled={savingStages || !newStage.trim()}>{savingStages ? 'Creating...' : 'Create'}</Button><button type="button" onClick={() => { setNewStage(''); setNewStageColor('#6366f1'); setShowStageForm(false) }} className="btn btn-secondary btn-icon"><X size={15} /></button></div>
         </form>}
       </Card>
 

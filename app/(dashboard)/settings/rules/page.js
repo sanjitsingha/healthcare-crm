@@ -453,10 +453,7 @@ export default function RulesPage() {
               </button>
               {/* Save button */}
               <button type="button" onClick={handleSave} disabled={saving||!dirty}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-700 transition-all shrink-0 disabled:opacity-50"
-                style={dirty
-                  ? { background:'var(--color-brand)', color:'white' }
-                  : { background:'var(--color-surface-2)', color:'var(--color-text-muted)' }}>
+                className="btn btn-primary btn-md shrink-0 disabled:opacity-50">
                 {saving ? <Spinner size={13}/> : dirty ? null : <Check size={13}/>}
                 {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
               </button>
@@ -707,14 +704,12 @@ export default function RulesPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={runTest} disabled={testing}
-                      className="text-xs font-700 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                      style={{color:'var(--color-brand)'}}>
+                      className="btn btn-secondary btn-sm disabled:opacity-50">
                       <Play size={11}/>{testing?'Testing…':'Test on latest record'}
                     </button>
                     {selectedRuns.length>0 && (
                       <button type="button" onClick={()=>setShowRuns(s=>!s)}
-                        className="text-xs font-700 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) inline-flex items-center gap-1.5 transition-colors"
-                        style={{color:'var(--color-text-muted)'}}>
+                        className="btn btn-secondary btn-sm">
                         <History size={11}/>{selectedRuns.length} run{selectedRuns.length!==1?'s':''}
                       </button>
                     )}

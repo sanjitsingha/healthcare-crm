@@ -389,20 +389,17 @@ export default function BillingPage() {
                         <div className="flex items-center gap-1.5">
                           {canPay && (
                             <button onClick={() => setPayInvoice(inv)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-700 transition-colors hover:opacity-90"
-                              style={{ background: 'var(--color-brand)', color: 'white' }}>
+                              className="btn btn-primary btn-sm">
                               <Banknote size={12} /> Pay
                             </button>
                           )}
                           <button onClick={() => printInvoice(inv, org)}
-                            className="p-1.5 rounded-lg border hover:bg-gray-50 transition-colors"
-                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                            className="btn btn-secondary btn-icon">
                             <Printer size={13} />
                           </button>
                           {!['Cancelled', 'Paid'].includes(inv.effective_status) && (
                             <button onClick={() => cancelInvoice(inv)}
-                              className="p-1.5 rounded-lg border hover:bg-red-50 hover:border-red-200 transition-colors"
-                              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                              className="btn btn-secondary btn-icon">
                               <X size={13} />
                             </button>
                           )}

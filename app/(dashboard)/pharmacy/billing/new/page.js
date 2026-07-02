@@ -441,14 +441,12 @@ function NewSaleInner() {
               )}
 
               <button type="button" onClick={completeSale} disabled={saving || savingDraft || cart.length === 0}
-                className="w-full mt-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-700 text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                style={{ background: 'var(--color-brand)' }}>
+                className="btn btn-primary btn-md w-full mt-1">
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <IndianRupee size={16} />}
                 {saving ? 'Processing…' : `Complete Sale · ${money(totals.total)}`}
               </button>
               <button type="button" onClick={saveDraft} disabled={saving || savingDraft || cart.length === 0}
-                className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-600 border border-(--color-border) hover:bg-(--color-surface-2) transition-colors disabled:opacity-50"
-                style={{ color: 'var(--color-text-secondary)' }}>
+                className="btn btn-secondary btn-md w-full">
                 {savingDraft ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
                 {savingDraft ? 'Saving…' : 'Save as draft'}
               </button>
@@ -508,10 +506,10 @@ function ReceiptCard({ sale, onClose }) {
           </div>
         </div>
         <div className="p-4 flex gap-2 border-t border-(--color-border)">
-          <button type="button" onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-600 border border-(--color-border) hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-secondary)' }}>
+          <button type="button" onClick={() => window.print()} className="btn btn-secondary btn-md flex-1">
             <Printer size={14} /> Print
           </button>
-          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 rounded-lg text-sm font-700 text-white hover:opacity-90" style={{ background: 'var(--color-brand)' }}>
+          <button type="button" onClick={onClose} className="btn btn-primary btn-md flex-1">
             Done
           </button>
         </div>

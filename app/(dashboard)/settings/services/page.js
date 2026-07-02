@@ -316,7 +316,7 @@ function ServicesTab({ services, persistServices, controlRef }) {
           <ClipboardList size={32} className="mx-auto mb-3 opacity-20" />
           <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>{services.length === 0 ? 'No services added yet.' : (search || hasFilters) ? 'No services match your filters.' : 'No services found.'}</p>
           {services.length === 0 && !showForm && (
-            <button onClick={openAdd} className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-xs font-600 transition-colors hover:opacity-90" style={{ background: 'var(--color-brand)', color: 'white' }}><Plus size={13} /> Add your first service</button>
+            <button onClick={openAdd} className="btn btn-primary btn-sm mt-3"><Plus size={13} /> Add your first service</button>
           )}
         </div>
       ) : (
@@ -438,7 +438,7 @@ function PackagesTab({ services, packages, persistPackages, onGoToServices, cont
       <div className="py-24 text-center border border-dashed rounded-2xl border-(--color-border)">
         <Package size={32} className="mx-auto mb-3 opacity-20" />
         <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>Add some services first, then bundle them into packages.</p>
-        <button onClick={onGoToServices} className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-xs font-600 transition-colors hover:opacity-90" style={{ background: 'var(--color-brand)', color: 'white' }}>
+        <button onClick={onGoToServices} className="btn btn-primary btn-sm mt-3">
           Go to Services <ArrowRight size={13} />
         </button>
       </div>
@@ -577,7 +577,7 @@ function PackagesTab({ services, packages, persistPackages, onGoToServices, cont
           <div className="py-24 text-center border border-dashed rounded-2xl border-(--color-border)">
             <Package size={32} className="mx-auto mb-3 opacity-20" />
             <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>No packages yet.</p>
-            <button onClick={openAdd} className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-xs font-600 transition-colors hover:opacity-90" style={{ background: 'var(--color-brand)', color: 'white' }}><Plus size={13} /> Create your first package</button>
+            <button onClick={openAdd} className="btn btn-primary btn-sm mt-3"><Plus size={13} /> Create your first package</button>
           </div>
         )
       ) : (

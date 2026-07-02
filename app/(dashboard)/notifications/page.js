@@ -83,17 +83,15 @@ export default function NotificationsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => markAllRead(uid, visible.map(n => n.id))} disabled={!unread}
-            className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2) transition-colors disabled:opacity-40"
-            style={{ color: 'var(--color-text-secondary)' }}>
+            className="btn btn-secondary btn-sm">
             <CheckCheck size={14} /> Mark all read
           </button>
           <button type="button" onClick={async () => { const ok = await showConfirm({ title: 'Clear all notifications?', confirmLabel: 'Clear all', variant: 'info' }); if (ok) clearAll(uid, visible.map(n => n.id)) }} disabled={!visible.length}
-            className="inline-flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg border border-(--color-border) hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40"
-            style={{ color: 'var(--color-text-secondary)' }}>
+            className="btn btn-danger btn-sm">
             <Trash2 size={14} /> Clear
           </button>
           <button type="button" onClick={load} title="Refresh"
-            className="p-2 rounded-lg border border-(--color-border) hover:bg-(--color-surface-2)" style={{ color: 'var(--color-text-muted)' }}>
+            className="btn btn-secondary btn-icon">
             <RefreshCw size={15} />
           </button>
         </div>

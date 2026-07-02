@@ -72,13 +72,11 @@ export default function PharmacyOverviewPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/pharmacy/billing/new"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-600 border border-(--color-border) hover:bg-(--color-surface-2) transition-colors"
-            style={{ color: 'var(--color-text-secondary)' }}>
+            className="btn btn-secondary btn-md">
             <ShoppingCart size={15} /> New Sale
           </Link>
           <Link href="/pharmacy/inventory/add"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-            style={{ background: 'var(--color-brand)' }}>
+            className="btn btn-primary btn-md">
             <Plus size={16} /> Add Item
           </Link>
         </div>
