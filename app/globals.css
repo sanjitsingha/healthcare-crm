@@ -64,3 +64,96 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
   from { transform: translateY(8px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   BUTTON SYSTEM  —  single source of truth for all button styles.
+   Change here → reflects everywhere (both <Button> component and
+   raw <button className="btn btn-*"> elements).
+   ═══════════════════════════════════════════════════════════════ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+}
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Sizes ── */
+.btn-sm   { font-size: 0.75rem;  padding: 0.3125rem 0.75rem; }
+.btn-md   { font-size: 0.875rem; padding: 0.46875rem 1rem;   }
+.btn-lg   { font-size: 0.875rem; padding: 0.59375rem 1.25rem;}
+.btn-icon { padding: 0.46875rem; }
+
+/* ── Primary (brand) ── */
+.btn-primary {
+  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.08) 100%), var(--color-brand);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.07); }
+.btn-primary:active:not(:disabled){ filter: brightness(0.95); }
+
+/* ── Secondary (white/grey) ── */
+.btn-secondary {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f2f4 100%);
+  color: #374151;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.btn-secondary:hover:not(:disabled) { filter: brightness(0.97); }
+.btn-secondary:active:not(:disabled){ filter: brightness(0.94); }
+
+/* ── Danger (red) ── */
+.btn-danger {
+  background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.btn-danger:hover:not(:disabled) { filter: brightness(1.04); }
+.btn-danger:active:not(:disabled){ filter: brightness(0.95); }
+
+/* ── Success (green) ── */
+.btn-success {
+  background: linear-gradient(180deg, #bbf7d0 0%, #86efac 100%);
+  color: #15803d;
+  border: 1px solid #4ade80;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+.btn-success:hover:not(:disabled) { filter: brightness(1.04); }
+.btn-success:active:not(:disabled){ filter: brightness(0.95); }
+
+/* ── Warning (amber) ── */
+.btn-warning {
+  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+.btn-warning:hover:not(:disabled) { filter: brightness(1.04); }
+.btn-warning:active:not(:disabled){ filter: brightness(0.95); }
+
+/* ── Ghost (no background) ── */
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+.btn-ghost:hover:not(:disabled) { background: var(--color-brand-50); color: var(--color-brand); }
+.btn-ghost:active:not(:disabled){ background: var(--color-brand-50); }

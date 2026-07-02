@@ -309,16 +309,7 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
 
   return (
     <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-500 transition-all hover:brightness-98"
-        style={{
-          background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
-          border: '1px solid #d1d5db',
-          color: '#374151',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
-        }}
-      >
+      <button onClick={() => setOpen(o => !o)} className="btn btn-secondary btn-md">
         {open ? <EyeOff size={15} /> : <Eye size={15} />}
         Columns
         <span
@@ -498,26 +489,12 @@ function ImportModal({ orgId, onClose, onImported }) {
                   else if (step === 'preview') handleImport()
                 }}
                 disabled={step === 'upload' || (step === 'map' && !canImport)}
-                className="px-7 py-2 rounded-xl text-sm font-600 text-white transition-all hover:brightness-105 disabled:opacity-30 disabled:cursor-not-allowed"
-                style={{
-                  background: 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(0,0,0,0.08) 100%), var(--color-brand)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.22)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                }}
+                className="btn btn-primary btn-md px-7"
               >
                 {step === 'preview' ? `Import ${rows.length}` : 'Save'}
               </button>
             )}
-            <button
-              onClick={onClose}
-              className="px-7 py-2 rounded-xl text-sm font-500 transition-all hover:brightness-98"
-              style={{
-                background: 'linear-gradient(180deg, #ffffff 0%, #f1f2f4 100%)',
-                color: '#374151',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
-                border: '1px solid #d1d5db',
-              }}
-            >
+            <button onClick={onClose} className="btn btn-secondary btn-md px-7">
               Cancel
             </button>
           </div>
@@ -768,34 +745,16 @@ function ImportModal({ orgId, onClose, onImported }) {
           </div>
           <div className="flex items-center gap-2">
             {step === 'done' ? (
-              <button onClick={onClose}
-                className="px-5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-                style={{ background: 'var(--color-brand)' }}>
-                Done
-              </button>
+              <button onClick={onClose} className="btn btn-primary btn-md">Done</button>
             ) : step === 'map' ? (
               <>
-                <button onClick={() => setStep('upload')}
-                  className="px-4 py-2 rounded-lg text-sm font-500 border border-(--color-border) transition-colors hover:bg-(--color-surface)"
-                  style={{ color: 'var(--color-text-secondary)' }}>
-                  Back
-                </button>
-                <button onClick={() => setStep('preview')} disabled={!canImport}
-                  className="px-5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-                  style={{ background: 'var(--color-brand)' }}>
-                  Preview →
-                </button>
+                <button onClick={() => setStep('upload')} className="btn btn-secondary btn-md">Back</button>
+                <button onClick={() => setStep('preview')} disabled={!canImport} className="btn btn-primary btn-md">Preview →</button>
               </>
             ) : step === 'preview' ? (
               <>
-                <button onClick={() => setStep('map')}
-                  className="px-4 py-2 rounded-lg text-sm font-500 border border-(--color-border) transition-colors hover:bg-(--color-surface)"
-                  style={{ color: 'var(--color-text-secondary)' }}>
-                  Back
-                </button>
-                <button onClick={handleImport}
-                  className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-600 text-white transition-opacity hover:opacity-90"
-                  style={{ background: 'var(--color-brand)' }}>
+                <button onClick={() => setStep('map')} className="btn btn-secondary btn-md">Back</button>
+                <button onClick={handleImport} className="btn btn-primary btn-md">
                   <Upload size={14} /> Import {rows.length} Lead{rows.length !== 1 ? 's' : ''}
                 </button>
               </>
@@ -1081,26 +1040,13 @@ export default function LeadsPage() {
             onClick={loadLeads}
             disabled={loading}
             title="Refresh leads"
-            className="p-2 rounded-lg disabled:opacity-50 transition-all"
-            style={{
-              background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
-              border: '1px solid #d1d5db',
-              color: '#6b7280',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
-            }}
+            className="btn btn-secondary btn-icon"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
           {hasPermission('leads.create') && (
             <Link href="/leads/new">
-              <button
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-600 text-white transition-all hover:brightness-105"
-                style={{
-                  background: 'linear-gradient(180deg,rgba(255,255,255,0.15) 0%,rgba(0,0,0,0.08) 100%),var(--color-brand)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.22)',
-                }}
-              >
+              <button className="btn btn-primary btn-md">
                 <Plus size={16} /> New Lead
               </button>
             </Link>
@@ -1133,16 +1079,7 @@ export default function LeadsPage() {
         </div>
 
         {/* Import */}
-        <button
-          onClick={() => setImportOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-500 transition-all hover:brightness-98"
-          style={{
-            background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
-            border: '1px solid #d1d5db',
-            color: '#374151',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
-          }}
-        >
+        <button onClick={() => setImportOpen(true)} className="btn btn-secondary btn-md">
           <Upload size={15} />
           Import
         </button>
@@ -1150,20 +1087,7 @@ export default function LeadsPage() {
         {/* Filters toggle */}
         <button
           onClick={() => setFiltersOpen(o => !o)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-500 transition-all"
-          style={filtersOpen || hasFilters
-            ? {
-                background: 'linear-gradient(180deg,rgba(255,255,255,0.15) 0%,rgba(0,0,0,0.08) 100%),var(--color-brand)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: 'white',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.18),inset 0 1px 0 rgba(255,255,255,0.22)',
-              }
-            : {
-                background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
-                border: '1px solid #d1d5db',
-                color: '#374151',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
-              }}
+          className={clsx('btn btn-md', filtersOpen || hasFilters ? 'btn-primary' : 'btn-secondary')}
         >
           <SlidersHorizontal size={15} />
           Filters
@@ -1226,14 +1150,7 @@ export default function LeadsPage() {
 
           {hasFilters && (
             <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters}
-                className="flex items-center gap-1.5 text-xs font-600 px-3 py-1.5 rounded-lg transition-all hover:brightness-105"
-                style={{
-                  background: 'linear-gradient(180deg,#fee2e2 0%,#fecaca 100%)',
-                  border: '1px solid #fca5a5',
-                  color: '#b91c1c',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.6)',
-                }}>
+              <button onClick={clearFilters} className="btn btn-danger btn-sm">
                 <X size={12} /> Clear all
               </button>
             </div>
@@ -1250,53 +1167,18 @@ export default function LeadsPage() {
           <span className="text-sm font-600" style={{ color: 'var(--color-brand)' }}>
             {selected.size} lead{selected.size !== 1 ? 's' : ''} selected
           </span>
-          <button
-            onClick={clearSelection}
-            className="text-xs font-500 px-3 py-1.5 rounded-lg transition-all hover:brightness-98"
-            style={{
-              background: 'linear-gradient(180deg,rgba(255,255,255,0.25) 0%,rgba(255,255,255,0.05) 100%)',
-              border: '1px solid rgba(255,255,255,0.4)',
-              color: 'var(--color-brand)',
-            }}
-          >
+          <button onClick={clearSelection} className="btn btn-ghost btn-sm" style={{ color: 'var(--color-brand)' }}>
             Deselect all
           </button>
           <div className="flex-1" />
-          <button
-            onClick={handleMoveToPatient}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all hover:brightness-105"
-            style={{
-              background: 'linear-gradient(180deg,#bbf7d0 0%,#86efac 100%)',
-              border: '1px solid #4ade80',
-              color: '#15803d',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.08),inset 0 1px 0 rgba(255,255,255,0.7)',
-            }}
-          >
+          <button onClick={handleMoveToPatient} className="btn btn-success btn-sm">
             <UserCheck size={14} /> Move to Patient
           </button>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all hover:brightness-98"
-            style={{
-              background: 'linear-gradient(180deg,#ffffff 0%,#f1f2f4 100%)',
-              border: '1px solid #d1d5db',
-              color: '#374151',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.9)',
-            }}
-          >
+          <button onClick={handleExport} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export
           </button>
           {hasPermission('leads.delete') && (
-            <button
-              onClick={handleBulkDelete}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all hover:brightness-105"
-              style={{
-                background: 'linear-gradient(180deg,#fee2e2 0%,#fecaca 100%)',
-                border: '1px solid #fca5a5',
-                color: '#b91c1c',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.07),inset 0 1px 0 rgba(255,255,255,0.6)',
-              }}
-            >
+            <button onClick={handleBulkDelete} className="btn btn-danger btn-sm">
               <Trash2 size={14} /> Delete
             </button>
           )}

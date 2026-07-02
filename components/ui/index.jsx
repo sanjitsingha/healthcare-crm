@@ -63,23 +63,31 @@ export function Tag({ label, onRemove }) {
 }
 
 // ── Button ────────────────────────────────────────────────────
-export function Button({ children, variant = 'primary', size = 'md', className = '', onClick, type = 'button', disabled = false }) {
-  const base = 'inline-flex items-center gap-2 font-500 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
-  const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-sm' }
-  const variants = {
-    primary: 'text-white hover:opacity-90 active:scale-95',
-    secondary: 'border border-[var(--color-border)] bg-white hover:bg-[var(--color-surface-2)] active:scale-95',
-    ghost: 'hover:bg-[var(--color-brand-50)] active:scale-95',
-    danger: 'bg-red-500 text-white hover:bg-red-600 active:scale-95',
-  }
+// Variants: primary | secondary | danger | success | warning | ghost
+// Sizes:    sm | md | lg | icon
+// Style source of truth: app/globals.css → .btn / .btn-* classes
+export function Button({
+  children,
+  variant = 'primary',
+  size = 'md',
+  className = '',
+  onClick,
+  type = 'button',
+  disabled = false,
+  title,
+  icon,            // pass an icon component as a convenience
+}) {
+  const sizeClass    = { sm: 'btn-sm', md: 'btn-md', lg: 'btn-lg', icon: 'btn-icon' }[size] ?? 'btn-md'
+  const variantClass = { primary: 'btn-primary', secondary: 'btn-secondary', danger: 'btn-danger', success: 'btn-success', warning: 'btn-warning', ghost: 'btn-ghost' }[variant] ?? 'btn-primary'
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={clsx(base, sizes[size], variants[variant], className)}
-      style={variant === 'primary' ? { background: 'var(--color-brand)' } : {}}
+      title={title}
+      className={clsx('btn', sizeClass, variantClass, className)}
     >
+      {icon && <span className="shrink-0">{icon}</span>}
       {children}
     </button>
   )
