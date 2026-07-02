@@ -126,6 +126,13 @@ const WA_PROVIDERS = {
       { key: 'integrated_number', label: 'WhatsApp Number', placeholder: '15558xxxxxxx' },
     ],
   },
+  nebkern: {
+    label: 'Nebkern WABA',
+    hint: 'Your in-house WABA platform at waba.nebkern.com — paste the x-api-key from API Access settings.',
+    fields: [
+      { key: 'api_key', label: 'API Key', secret: true, placeholder: 'wak_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' },
+    ],
+  },
   custom: {
     label: 'Generic / Custom REST',
     hint: 'Any provider with a POST endpoint. Use {{to}}, {{text}}, {{template}}, {{params}} in the body template.',
@@ -138,7 +145,7 @@ const WA_PROVIDERS = {
   },
 }
 
-const WA_REQUIRED = { wati: ['endpoint', 'access_token'], interakt: ['api_key'], msg91: ['authkey', 'integrated_number'], custom: ['url'] }
+const WA_REQUIRED = { wati: ['endpoint', 'access_token'], interakt: ['api_key'], msg91: ['authkey', 'integrated_number'], nebkern: ['api_key'], custom: ['url'] }
 function waReadyOf(wa) {
   const need = WA_REQUIRED[wa?.provider] || []
   return need.length > 0 && need.every((k) => String(wa?.[k] || '').trim())
@@ -148,6 +155,7 @@ function waEndpoint(wa) {
     case 'wati':     return wa.endpoint ? `${String(wa.endpoint).replace(/\/+$/, '')}/api/v1/sendTemplateMessage` : '<endpoint>/api/v1/sendTemplateMessage'
     case 'interakt': return 'https://api.interakt.ai/v1/public/message/'
     case 'msg91':    return 'https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/'
+    case 'nebkern':  return 'https://waba.nebkern.com/api/integrations/send-message'
     case 'custom':   return wa.url || '<your endpoint>'
     default:         return '—'
   }
@@ -158,6 +166,7 @@ function waAuthLine(wa) {
     case 'wati':     return `Authorization: Bearer ${mask(wa.access_token)}`
     case 'interakt': return `Authorization: Basic ${mask(wa.api_key)}`
     case 'msg91':    return `authkey: ${mask(wa.authkey)}`
+    case 'nebkern':  return `x-api-key: ${mask(wa.api_key)}`
     case 'custom':   return `${wa.auth_header || 'Authorization'}: ${mask(wa.auth_value)}`
     default:         return ''
   }

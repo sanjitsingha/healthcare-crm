@@ -13,6 +13,141 @@ import { useOrg } from '@/lib/context/OrgContext'
 import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 
+// ── WhatsApp field options (for variable mapping) ──────────────
+const WA_FIELD_OPTIONS = [
+  { value: 'first_name',   label: 'First name' },
+  { value: 'last_name',    label: 'Last name' },
+  { value: 'phone',        label: 'Phone' },
+  { value: 'email',        label: 'Email' },
+  { value: 'title',        label: 'Lead title' },
+  { value: 'stage',        label: 'Stage' },
+  { value: 'source',       label: 'Source' },
+  { value: 'scheduled_at', label: 'Appt. date/time' },
+  { value: 'date_of_birth',label: 'Date of birth' },
+  { value: 'address',      label: 'Address' },
+  { value: 'patient_code', label: 'Patient code' },
+]
+
+// ── WhatsApp template picker + variable mapper (inside action node) ──
+function WhatsAppActionConfig({ orgId, data, onChange }) {
+  const [templates, setTemplates] = useState(null)   // null = not loaded yet
+  const [fetching, setFetching]   = useState(false)
+  const [fetchErr, setFetchErr]   = useState(null)
+
+  const fetchTemplates = async () => {
+    setFetching(true); setFetchErr(null)
+    try {
+      const res = await fetch(`/api/whatsapp/templates?orgId=${orgId}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+      setTemplates(json.templates || [])
+    } catch (e) { setFetchErr(e.message) }
+    finally { setFetching(false) }
+  }
+
+  const selected = templates?.find(t => t.name === data.wa_template) || null
+  const paramCount = selected?.paramCount ?? (data.wa_params || 0)
+  const varMap     = data.wa_var_map || []
+
+  const pickTemplate = (name) => {
+    const t = templates?.find(x => x.name === name)
+    const count = t?.paramCount ?? 0
+    onChange({
+      wa_template: name,
+      wa_language: t?.language || 'en_US',
+      wa_params:   count,
+      // Preserve existing mappings up to the new count; fill new ones as empty.
+      wa_var_map: Array.from({ length: count }, (_, i) => varMap[i] || { source: 'field', field: '' }),
+    })
+  }
+
+  const setVar = (i, patch) => {
+    const next = varMap.map((v, idx) => idx === i ? { ...v, ...patch } : v)
+    onChange({ wa_var_map: next })
+  }
+
+  return (
+    <div className="space-y-1.5" onPointerDown={e => e.stopPropagation()}>
+      {/* Template picker */}
+      {templates === null ? (
+        <div className="space-y-1">
+          <button type="button" onClick={fetchTemplates} disabled={fetching}
+            className="w-full px-2 py-1.5 text-xs rounded-lg border border-(--color-border) font-600 transition-colors hover:bg-(--color-brand-50)"
+            style={{ background: 'var(--color-surface)', color: fetching ? 'var(--color-text-muted)' : 'var(--color-brand)' }}>
+            {fetching ? 'Loading templates…' : '↓ Load Templates'}
+          </button>
+          {fetchErr && (
+            <p className="text-[10px] px-0.5" style={{ color: '#dc2626' }}>{fetchErr}</p>
+          )}
+        </div>
+      ) : (
+        <div className="flex gap-1">
+          <select value={data.wa_template || ''} onChange={e => pickTemplate(e.target.value)}
+            className="flex-1 min-w-0 px-2 py-1.5 text-xs rounded-lg border outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)', borderColor: data.wa_template ? 'var(--color-border)' : '#f59e0b' }}>
+            <option value="">Select template…</option>
+            {templates.map(t => (
+              <option key={t.name} value={t.name}>{t.name}</option>
+            ))}
+          </select>
+          <button type="button" onClick={fetchTemplates} disabled={fetching} title="Refresh"
+            className="px-1.5 rounded-lg border border-(--color-border) text-[10px] transition-colors hover:bg-(--color-surface-2)"
+            style={{ color: 'var(--color-text-muted)' }}>↺</button>
+        </div>
+      )}
+
+      {/* Template body preview */}
+      {selected?.bodyText && (
+        <p className="text-[10px] leading-relaxed px-1 py-1 rounded-md italic break-words"
+          style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface-2)' }}>
+          {selected.bodyText.length > 80 ? selected.bodyText.slice(0, 80) + '…' : selected.bodyText}
+        </p>
+      )}
+
+      {/* Variable mapper */}
+      {data.wa_template && paramCount > 0 && (
+        <div className="space-y-1 pt-0.5">
+          <p className="text-[10px] font-700 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Variables</p>
+          {Array.from({ length: paramCount }, (_, i) => {
+            const v = varMap[i] || { source: 'field', field: '' }
+            return (
+              <div key={i} className="flex items-center gap-1">
+                <span className="text-[10px] font-mono font-700 shrink-0 w-6 text-right" style={{ color: 'var(--color-brand)' }}>
+                  {`{{${i + 1}}}`}
+                </span>
+                <select value={v.source || 'field'} onChange={e => setVar(i, { source: e.target.value, field: '', value: '' })}
+                  className="w-14 shrink-0 px-1 py-1 text-[10px] rounded-md border border-(--color-border) outline-none"
+                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}>
+                  <option value="field">Field</option>
+                  <option value="static">Text</option>
+                </select>
+                {v.source === 'static' ? (
+                  <input value={v.value || ''} onChange={e => setVar(i, { value: e.target.value })}
+                    placeholder="static value"
+                    className="flex-1 min-w-0 px-1.5 py-1 text-[10px] rounded-md border border-(--color-border) outline-none"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                ) : (
+                  <select value={v.field || ''} onChange={e => setVar(i, { field: e.target.value })}
+                    className="flex-1 min-w-0 px-1 py-1 text-[10px] rounded-md border outline-none"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)', borderColor: v.field ? 'var(--color-border)' : '#f59e0b' }}>
+                    <option value="">Pick field…</option>
+                    {WA_FIELD_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* No-variable template hint */}
+      {data.wa_template && paramCount === 0 && (
+        <p className="text-[10px] px-0.5" style={{ color: 'var(--color-text-muted)' }}>No variables — template sends as-is.</p>
+      )}
+    </div>
+  )
+}
+
 // ── Catalog ────────────────────────────────────────────────────
 const TRIGGERS = [
   { value: 'lead_created',          label: 'Lead Created' },
@@ -210,7 +345,7 @@ export default function AutomationPage() {
         name: name.trim() || 'Untitled Automation',
         trigger_event: triggerNode?.data?.event || 'manual',
         conditions: { nodes, edges },
-        actions: nodes.filter(n => n.type === 'action').map(n => n.data.action),
+        actions: nodes.filter(n => n.type === 'action').map(n => ({ type: n.data.action, ...n.data })),
         is_active: isActive,
       }
       if (ruleId) {
@@ -542,9 +677,17 @@ export default function AutomationPage() {
                           )
                         )}
 
-                        {(n.data.action === 'send_whatsapp' || n.data.action === 'send_email' || n.data.action === 'send_sms') && (
+                        {n.data.action === 'send_whatsapp' && (
+                          <WhatsAppActionConfig
+                            orgId={orgId}
+                            data={n.data}
+                            onChange={patch => updateNode(n.id, patch)}
+                          />
+                        )}
+
+                        {(n.data.action === 'send_email' || n.data.action === 'send_sms') && (
                           <textarea value={n.data.message || ''} onChange={e => updateNode(n.id, { message: e.target.value })}
-                            placeholder={n.data.action === 'send_email' ? 'Email message / template…' : n.data.action === 'send_sms' ? 'SMS message…' : 'WhatsApp message…'} rows={2}
+                            placeholder={n.data.action === 'send_email' ? 'Email message / template…' : 'SMS message…'} rows={2}
                             className="w-full px-2 py-1.5 text-xs rounded-lg border border-(--color-border) outline-none resize-none" style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
                         )}
 

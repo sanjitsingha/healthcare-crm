@@ -199,6 +199,7 @@ create table appointments (
   scheduled_at timestamptz not null,
   duration_minutes integer default 30,
   status text check (status in ('booked','confirmed','completed','cancelled')) default 'booked',
+  appointment_code text,
   notes text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
