@@ -4,6 +4,7 @@ import { OrgProvider } from '@/lib/context/OrgContext'
 import { SidebarStateProvider } from '@/lib/context/SidebarContext'
 import { AIPanelProvider } from '@/lib/context/AIPanelContext'
 import Sidebar from '@/components/crm/Sidebar'
+import TopBar from '@/components/crm/TopBar'
 import MainContent from '@/components/crm/MainContent'
 import ThemeApplier from '@/components/crm/ThemeApplier'
 import ToastHost from '@/components/crm/Toast'
@@ -56,6 +57,7 @@ export default async function DashboardLayout({ children }) {
           <ThemeApplier />
           <div className="flex min-h-screen">
             <Sidebar />
+            <TopBar />
             <MainContent><RouteGuard>{children}</RouteGuard></MainContent>
           </div>
           <ToastHost />

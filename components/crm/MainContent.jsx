@@ -16,7 +16,7 @@ export default function MainContent({ children }) {
       className={`flex-1 min-w-0 ${collapsed ? _collapsed : _expanded} ${open ? _panelOpen : ''}`}
       style={{ transition: 'margin-left 300ms ease-in-out, margin-right 300ms ease-in-out' }}
     >
-      <div className="pb-10">{children}</div>
+      <div className="pt-13 pb-10">{children}</div>
       <BottomBar />
     </main>
   )

@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { LifeBuoy, Sparkles } from 'lucide-react'
 import { useSidebar } from '@/lib/context/SidebarContext'
 import { useAIPanel } from '@/lib/context/AIPanelContext'
-import NotificationBell from '@/components/crm/NotificationBell'
 import ZeoPanel from '@/components/crm/ZeoPanel'
 
 // Static strings so Tailwind v4 scanner picks up all classes
@@ -56,8 +55,6 @@ export default function BottomBar() {
           >
             <LifeBuoy size={13} /> Raise a Complaint
           </Link>
-
-          <NotificationBell />
         </div>
       </div>
 
