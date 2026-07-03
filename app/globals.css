@@ -69,7 +69,11 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
    BUTTON SYSTEM  —  single source of truth for all button styles.
    Change here → reflects everywhere (both <Button> component and
    raw <button className="btn btn-*"> elements).
+   Kept in @layer components so Tailwind utilities (bg-*, text-*, w-*,
+   etc.) added on a button still override these — utilities layer wins.
    ═══════════════════════════════════════════════════════════════ */
+
+@layer components {
 
 .btn {
   display: inline-flex;
@@ -157,3 +161,5 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
 }
 .btn-ghost:hover:not(:disabled) { background: var(--color-brand-50); color: var(--color-brand); }
 .btn-ghost:active:not(:disabled){ background: var(--color-brand-50); }
+
+}
