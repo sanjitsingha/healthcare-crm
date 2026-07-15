@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Upload, AlertCircle, FileText } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Eye, EyeOff, X, Trash2, UserCheck, Download, RefreshCw, ChevronDown, Tag, Check, ArrowUpDown, ArrowUp, ArrowDown, Calendar, Upload, AlertCircle, FileText, User, Phone, Mail, MapPin, Flag, Clock, CircleDot, Megaphone, Hash, VenusAndMars, Kanban } from 'lucide-react'
 import { Badge, Card, Spinner } from '@/components/ui'
 import { getLeads, deleteLead, updateLead, getTags, createLead } from '@/lib/supabase/queries'
 import { getPref, setPref } from '@/lib/prefs'
@@ -36,16 +36,16 @@ const PRIORITY_STYLE = {
 
 // Base columns — extended dynamically with active module fields inside the component
 const BASE_COLUMNS = [
-  { id: 'name',     label: 'Name',     defaultVisible: true  },
-  { id: 'phone',    label: 'Phone',    defaultVisible: true  },
-  { id: 'email',    label: 'Email',    defaultVisible: false },
-  { id: 'gender',   label: 'Gender',   defaultVisible: false },
-  { id: 'city',     label: 'City',     defaultVisible: false },
-  { id: 'stage',    label: 'Stage',    defaultVisible: true  },
-  { id: 'priority', label: 'Priority', defaultVisible: true  },
-  { id: 'source',   label: 'Source',   defaultVisible: true  },
-  { id: 'created',  label: 'Created',  defaultVisible: true  },
-  { id: 'modified', label: 'Modified', defaultVisible: false },
+  { id: 'name',     label: 'Name',     defaultVisible: true,  icon: User },
+  { id: 'phone',    label: 'Phone',    defaultVisible: true,  icon: Phone },
+  { id: 'email',    label: 'Email',    defaultVisible: false, icon: Mail },
+  { id: 'gender',   label: 'Gender',   defaultVisible: false, icon: VenusAndMars },
+  { id: 'city',     label: 'City',     defaultVisible: false, icon: MapPin },
+  { id: 'stage',    label: 'Stage',    defaultVisible: true,  icon: CircleDot },
+  { id: 'priority', label: 'Priority', defaultVisible: true,  icon: Flag },
+  { id: 'source',   label: 'Source',   defaultVisible: true,  icon: Megaphone },
+  { id: 'created',  label: 'Created',  defaultVisible: true,  icon: Calendar },
+  { id: 'modified', label: 'Modified', defaultVisible: false, icon: Clock },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -746,13 +746,13 @@ export default function LeadsPage() {
   // column sort (created / modified)
   const [sort,         setSort]        = useState({ field: null, dir: 'desc' })
   const [sortMenuCol,  setSortMenuCol] = useState(null)   // which col's dropdown is open
-  const filterRef = useRef()
   const resizingRef = useRef(null)
 
   const DEFAULT_COL_WIDTHS = { tag: 150, name: 190, phone: 130, email: 200, gender: 90, city: 120, stage: 110, priority: 100, source: 110, created: 120, modified: 120 }
-  const [colWidths, setColWidths] = useState(() => getPref('pref_lead_col_widths') || {})
+  const [colWidths, setColWidths] = useState({}) // SSR-safe; saved widths loaded post-mount to avoid hydration mismatch
   const colWidthsRef = useRef(colWidths)
   useEffect(() => { colWidthsRef.current = colWidths }, [colWidths])
+  useEffect(() => { const saved = getPref('pref_lead_col_widths'); if (saved) setColWidths(saved) }, [])
 
   const startResize = useCallback((colId, e) => {
     e.preventDefault()
@@ -777,11 +777,14 @@ export default function LeadsPage() {
   const [availableTags, setAvailableTags] = useState([])
   const [activeCustom, setActiveCustom] = useState([]) // colIds of custom fields shown as filters
 
+  // Filter modal: close on Escape and lock background scroll while open.
   useEffect(() => {
-    const h = (e) => { if (filterRef.current && !filterRef.current.contains(e.target)) setFiltersOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+    if (!filtersOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setFiltersOpen(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [filtersOpen])
 
   useEffect(() => {
     if (!orgId) return
@@ -828,12 +831,17 @@ export default function LeadsPage() {
     return [...BASE_COLUMNS, ...moduleFields]
   }, [org])
 
-  // Column visibility — initialise from saved prefs, then merge new columns as they appear
-  const [visible, setVisible] = useState(() => {
+  // Column visibility. Start from SSR-safe defaults so the server and first client
+  // render agree; saved prefs are merged in after mount to avoid a hydration mismatch.
+  const [visible, setVisible] = useState(() =>
+    Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
+  )
+  const [colPrefsLoaded, setColPrefsLoaded] = useState(false)
+  useEffect(() => {
     const saved = getPref('pref_lead_cols')
-    const defaults = Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
-    return saved ? { ...defaults, ...saved } : defaults
-  })
+    if (saved) setVisible(prev => ({ ...prev, ...saved }))
+    setColPrefsLoaded(true)
+  }, [])
   useEffect(() => {
     setVisible(prev => {
       const next = { ...prev }
@@ -844,7 +852,8 @@ export default function LeadsPage() {
       return changed ? next : prev
     })
   }, [allColumns])
-  useEffect(() => { setPref('pref_lead_cols', visible) }, [visible])
+  // Persist only after saved prefs have loaded, so we don't overwrite them with defaults on mount.
+  useEffect(() => { if (colPrefsLoaded) setPref('pref_lead_cols', visible) }, [visible, colPrefsLoaded])
 
   // ── Selection ──
   const [selected, setSelected] = useState(new Set())
@@ -1052,6 +1061,11 @@ export default function LeadsPage() {
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
+          <Link href="/leads/pipeline">
+            <button className="btn btn-secondary btn-md">
+              <Kanban size={15} /> Pipeline
+            </button>
+          </Link>
           {hasPermission('leads.create') && (
             <Link href="/leads/new">
               <button className="btn btn-primary btn-md">
@@ -1092,77 +1106,99 @@ export default function LeadsPage() {
           Import
         </button>
 
-        {/* Filters toggle + dropdown */}
-        <div className="relative" ref={filterRef}>
-          <button
-            onClick={() => setFiltersOpen(o => !o)}
-            className={clsx('btn btn-md', filtersOpen || hasFilters ? 'btn-primary' : 'btn-secondary')}
-          >
-            <SlidersHorizontal size={15} />
-            Filters
-            {hasFilters && (
-              <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }}>
-                {filterCount}
-              </span>
-            )}
-          </button>
+        {/* Filters toggle */}
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className={clsx('btn btn-md', filtersOpen || hasFilters ? 'btn-primary' : 'btn-secondary')}
+        >
+          <SlidersHorizontal size={15} />
+          Filters
+          {hasFilters && (
+            <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.3)' }}>
+              {filterCount}
+            </span>
+          )}
+        </button>
 
-          {filtersOpen && (
-            <div
-              className="absolute right-0 top-full mt-1.5 z-40 rounded-xl border border-(--color-border) p-3 space-y-2.5"
-              style={{ background: 'var(--color-surface)', boxShadow: '0 12px 36px rgba(0,0,0,0.14)', width: '380px', maxWidth: 'calc(100vw - 2rem)', minHeight: '360px' }}
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <MultiSelect label="Stage"    options={opts(stageOptions)} selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
-                <MultiSelect label="Priority" options={opts(PRIORITIES)}   selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
-                <MultiSelect label="Source"   options={opts(SOURCES)}      selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
-                <MultiSelect label="Gender"   options={opts(GENDERS)}      selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
-                <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
-                  selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
-
-                {leadModuleFields.length > 0 && (
-                  <CustomFieldPicker fields={leadModuleFields} active={activeCustom} onToggle={toggleCustomField} />
-                )}
+        {/* Filters modal */}
+        {filtersOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={() => setFiltersOpen(false)} />
+            <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-(--color-border)">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal size={16} style={{ color: 'var(--color-brand)' }} />
+                  <h2 className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Filter Leads</h2>
+                  {hasFilters && (
+                    <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                      {filterCount}
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => setFiltersOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Close">
+                  <X size={16} style={{ color: 'var(--color-text-muted)' }} />
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 items-start">
-                <div className="col-span-2 w-full">
-                  <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
-                    onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
+              {/* Body */}
+              <div className="p-4 space-y-2.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <MultiSelect label="Stage"    options={opts(stageOptions)} selected={filters.stages}     onChange={v => setFilters(f => ({ ...f, stages: v }))} />
+                  <MultiSelect label="Priority" options={opts(PRIORITIES)}   selected={filters.priorities} onChange={v => setFilters(f => ({ ...f, priorities: v }))} />
+                  <MultiSelect label="Source"   options={opts(SOURCES)}      selected={filters.sources}    onChange={v => setFilters(f => ({ ...f, sources: v }))} />
+                  <MultiSelect label="Gender"   options={opts(GENDERS)}      selected={filters.genders}    onChange={v => setFilters(f => ({ ...f, genders: v }))} />
+                  <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))}
+                    selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
+
+                  {leadModuleFields.length > 0 && (
+                    <CustomFieldPicker fields={leadModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+                  )}
                 </div>
 
-                {activeCustom.map(colId => {
-                  const fld = leadModuleFields.find(f => f.colId === colId)
-                  if (!fld) return null
-                  if (fld.type === 'select' || fld.type === 'boolean') {
-                    return <MultiSelect key={colId} label={fld.label}
-                      options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
-                      selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
-                  }
-                  return (
-                    <div key={colId} className="relative">
-                      <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
-                        placeholder={fld.label}
-                        className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
-                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                      <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
-                        <X size={12} style={{ color: 'var(--color-text-muted)' }} />
-                      </button>
-                    </div>
-                  )
-                })}
+                <div className="grid grid-cols-2 gap-2 items-start">
+                  <div className="col-span-2 w-full">
+                    <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
+                      onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
+                  </div>
+
+                  {activeCustom.map(colId => {
+                    const fld = leadModuleFields.find(f => f.colId === colId)
+                    if (!fld) return null
+                    if (fld.type === 'select' || fld.type === 'boolean') {
+                      return <MultiSelect key={colId} label={fld.label}
+                        options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
+                        selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
+                    }
+                    return (
+                      <div key={colId} className="relative">
+                        <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
+                          placeholder={fld.label}
+                          className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
+                          style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                        <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
+                          <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
 
-              {hasFilters && (
-                <div className="flex justify-end pt-2 border-t border-(--color-border)">
+              {/* Footer */}
+              <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-(--color-border)">
+                {hasFilters ? (
                   <button onClick={clearFilters} className="btn btn-danger btn-sm">
                     <X size={12} /> Clear all
                   </button>
-                </div>
-              )}
+                ) : <span />}
+                <button onClick={() => setFiltersOpen(false)} className="btn btn-primary btn-sm">
+                  Done
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Column toggle */}
         <ColumnToggle allColumns={allColumns} visible={visible} setVisible={setVisible} />
@@ -1212,7 +1248,7 @@ export default function LeadsPage() {
               <thead>
                 <tr style={{ background: '#f3f4f6', borderBottom: '1px solid #dde1e7' }}>
                   {/* Select-all */}
-                  <th className="sticky left-0 z-20" style={{ width: 40, padding: '0 0 0 14px', background: '#f3f4f6', borderRight: '1px solid #dde1e7' }}>
+                  <th className="sticky left-0 z-20 text-left" style={{ width: 40, padding: '0 0 0 14px', background: '#f3f4f6', borderRight: '1px solid #dde1e7' }}>
                     <input
                       type="checkbox"
                       checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length}
@@ -1224,7 +1260,10 @@ export default function LeadsPage() {
                   </th>
                   {/* Tag */}
                   <th className="sticky z-20 text-left" style={{ left: 40, width: getW('tag'), padding: '9px 14px 9px 14px', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280', background: '#f3f4f6', borderRight: '1px solid #dde1e7', position: 'sticky', userSelect: 'none', overflow: 'hidden' }}>
-                    Tag
+                    <span className="inline-flex items-center gap-1.5">
+                      <Tag size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                      Tag
+                    </span>
                     <div onMouseDown={e => startResize('tag', e)} style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', zIndex: 1 }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--color-brand)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />
@@ -1232,10 +1271,12 @@ export default function LeadsPage() {
                   {visibleCols.map(col => {
                     const isSortable = col.id === 'created' || col.id === 'modified'
                     const isActive   = sort.field === col.id
+                    const ColIcon    = col.icon || Hash
                     return (
                       <th key={col.id} className="text-left" style={{ width: getW(col.id), padding: '9px 14px', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280', borderRight: '1px solid #dde1e7', position: 'relative', userSelect: 'none', overflow: 'hidden' }}>
                         {isSortable ? (
                           <div className="relative inline-flex items-center gap-1">
+                            <ColIcon size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
                             {col.label}
                             <button
                               type="button"
@@ -1274,7 +1315,12 @@ export default function LeadsPage() {
                               </>
                             )}
                           </div>
-                        ) : col.label}
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5">
+                            <ColIcon size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                            {col.label}
+                          </span>
+                        )}
                         <div onMouseDown={e => startResize(col.id, e)} style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', zIndex: 1 }}
                           onMouseEnter={e => e.currentTarget.style.background = 'var(--color-brand)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />

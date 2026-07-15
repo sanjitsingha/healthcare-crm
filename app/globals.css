@@ -1,16 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* Tighter corner radius across the whole app — crisper, less "soft" feel.
-   Overrides Tailwind's radius scale, so every rounded-* utility shrinks. */
+/* Gently softened corner radius across the whole app — slightly rounded,
+   not pillowy. Overrides Tailwind's radius scale, so every rounded-* utility
+   reads from these tokens. */
 @theme {
-  --radius-xs:  0.0625rem; /* 1px */
-  --radius-sm:  0.0625rem; /* 1px */
-  --radius-md:  0.125rem;  /* 2px */
-  --radius-lg:  0.125rem;  /* 2px */
-  --radius-xl:  0.1875rem; /* 3px */
-  --radius-2xl: 0.25rem;   /* 4px */
-  --radius-3xl: 0.3125rem; /* 5px */
+  --radius-xs:  0.125rem;  /* 2px */
+  --radius-sm:  0.1875rem; /* 3px */
+  --radius-md:  0.25rem;   /* 4px */
+  --radius-lg:  0.375rem;  /* 6px */
+  --radius-xl:  0.5rem;    /* 8px */
+  --radius-2xl: 0.625rem;  /* 10px */
+  --radius-3xl: 0.75rem;   /* 12px */
 }
 
 :root {
@@ -27,6 +28,10 @@
 }
 
 * { box-sizing: border-box; }
+/* Global type scale — nudge the root size up so all rem-based text (Tailwind
+   text-* utilities, .btn labels, headings, etc.) reads slightly larger app-wide.
+   Bump this one value to scale everything proportionally. */
+html { font-size: 106.25%; } /* 17px base, up from the browser default 16px */
 body { font-family: var(--font-sans); background: var(--color-surface-2); color: var(--color-text-primary); }
 
 .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -85,7 +90,7 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
-  transition: filter 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  transition: transform 0.07s ease, filter 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -96,6 +101,15 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
   pointer-events: none;
 }
 
+/* Tactile press feedback — every .btn dips + squeezes on click, then springs back.
+   Combines with each variant's :active brightness shift for a physical "press" feel. */
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn { transition: filter 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; }
+  .btn:active:not(:disabled) { transform: none; }
+}
+
 /* ── Sizes ── */
 .btn-sm   { font-size: 0.75rem;  padding: 0.3125rem 0.75rem; }
 .btn-md   { font-size: 0.875rem; padding: 0.46875rem 1rem;   }
@@ -104,52 +118,47 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
 
 /* ── Primary (brand) ── */
 .btn-primary {
-  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.08) 100%), var(--color-brand);
+  background: var(--color-brand);
   color: #ffffff;
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.22);
+  border: 1px solid var(--color-brand);
 }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.07); }
 .btn-primary:active:not(:disabled){ filter: brightness(0.95); }
 
 /* ── Secondary (white/grey) ── */
 .btn-secondary {
-  background: linear-gradient(180deg, #ffffff 0%, #f1f2f4 100%);
+  background: #ffffff;
   color: #374151;
   border: 1px solid #d1d5db;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
 }
-.btn-secondary:hover:not(:disabled) { filter: brightness(0.97); }
-.btn-secondary:active:not(:disabled){ filter: brightness(0.94); }
+.btn-secondary:hover:not(:disabled) { background: #f9fafb; }
+.btn-secondary:active:not(:disabled){ background: #f1f2f4; }
 
 /* ── Danger (red) ── */
 .btn-danger {
-  background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+  background: #fee2e2;
   color: #b91c1c;
   border: 1px solid #fca5a5;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.6);
 }
-.btn-danger:hover:not(:disabled) { filter: brightness(1.04); }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.98); }
 .btn-danger:active:not(:disabled){ filter: brightness(0.95); }
 
 /* ── Success (green) ── */
 .btn-success {
-  background: linear-gradient(180deg, #bbf7d0 0%, #86efac 100%);
+  background: #bbf7d0;
   color: #15803d;
   border: 1px solid #4ade80;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7);
 }
-.btn-success:hover:not(:disabled) { filter: brightness(1.04); }
+.btn-success:hover:not(:disabled) { filter: brightness(0.98); }
 .btn-success:active:not(:disabled){ filter: brightness(0.95); }
 
 /* ── Warning (amber) ── */
 .btn-warning {
-  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
+  background: #fef3c7;
   color: #92400e;
   border: 1px solid #fcd34d;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.7);
 }
-.btn-warning:hover:not(:disabled) { filter: brightness(1.04); }
+.btn-warning:hover:not(:disabled) { filter: brightness(0.98); }
 .btn-warning:active:not(:disabled){ filter: brightness(0.95); }
 
 /* ── Ghost (no background) ── */

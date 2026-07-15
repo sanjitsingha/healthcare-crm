@@ -19,28 +19,22 @@ import {
   ArrowLeftRight,
   Zap,
   Settings,
-  MessageSquare,
   ChevronsLeft,
   ChevronsRight,
   Bell,
-  Kanban,
-  ListFilter,
   Stethoscope,
   Pill,
   BarChart3,
   BellRing,
-  LogOut,
   Search,
   Radio,
   Plus,
   X as XIcon,
 } from "lucide-react";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useOrg } from "@/lib/context/OrgContext";
 import { useSidebar } from "@/lib/context/SidebarContext";
-import { createClient } from "@/lib/supabase/client";
 
 const navGroups = [
   {
@@ -54,7 +48,7 @@ const navGroups = [
   {
     label: "Sales",
     items: [
-      { type: "leads", permission: "leads" },
+      { href: "/leads",         icon: TrendingUp, label: "Leads",         permission: "leads" },
       { href: "/contacts",      icon: Users,    label: "Contacts",      permission: "contacts" },
       { href: "/organizations", icon: Building2, label: "Organizations", permission: "organizations" },
     ],
@@ -79,11 +73,6 @@ const navGroups = [
     label: "Tools",
     items: [{ href: "/automation", icon: Zap, label: "Automation", permission: "automation" }],
   },
-];
-
-const LEADS_SUB = [
-  { href: "/leads", icon: ListFilter, label: "All Leads" },
-  { href: "/leads/pipeline", icon: Kanban, label: "Lead Pipeline" },
 ];
 
 const BILLING_SUB = [
@@ -117,23 +106,11 @@ function OrgLogo({ logoUrl, orgName }) {
 }
 
 function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
-  const { org, user, userRoleName, hasPermission } = useOrg();
+  const { org, hasPermission } = useOrg();
   const { collapsed: _collapsed, toggle } = useSidebar();
-  const router = useRouter();
-
-  const handleLogout = useCallback(async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-  }, [router]);
   const collapsed = forceExpanded ? false : _collapsed;
 
   const orgName = org?.name || "Your Clinic";
-
-  const [leadsOpen, setLeadsOpen] = useState(() =>
-    pathname.startsWith("/leads"),
-  );
-  const leadsExpanded = leadsOpen || pathname.startsWith("/leads");
 
   const [billingOpen, setBillingOpen] = useState(() =>
     pathname.startsWith("/billing"),
@@ -173,11 +150,7 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
     const items = []
     for (const group of navGroups) {
       for (const item of group.items) {
-        if (item.type === "leads") {
-          if (hasPermission("leads")) {
-            LEADS_SUB.forEach(s => items.push({ ...s, group: "Sales" }))
-          }
-        } else if (item.type === "billing") {
+        if (item.type === "billing") {
           if (hasPermission("billing")) {
             BILLING_SUB.filter(s => !s.permission || hasPermission(s.permission))
               .forEach(s => items.push({ ...s, group: "Operations" }))
@@ -242,81 +215,6 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
           <ChevronRight size={14} className="ml-auto opacity-60" />
         )}
       </Link>
-    );
-  };
-
-  const renderLeadsNav = () => {
-    if (collapsed) {
-      return (
-        <Link
-          key="leads"
-          href="/leads"
-          onClick={() => setMobileOpen(false)}
-          title="Leads"
-          className={navLinkClass(isActive("/leads"))}
-          style={navLinkStyle(isActive("/leads"))}
-        >
-          <TrendingUp size={17} />
-        </Link>
-      );
-    }
-
-    return (
-      <div key="leads">
-        <button
-          type="button"
-          onClick={() => setLeadsOpen((o) => !o)}
-          className={clsx(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-            isActive("/leads") ? "text-white" : "hover:bg-(--color-brand-50)",
-          )}
-          style={
-            isActive("/leads")
-              ? { background: "var(--color-brand)", color: "white" }
-              : { color: "var(--color-text-secondary)" }
-          }
-        >
-          <TrendingUp size={17} />
-          <span className="flex-1 text-left">Leads</span>
-          <ChevronDown
-            size={14}
-            className="opacity-60 transition-transform duration-200"
-            style={{ transform: leadsExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
-          />
-        </button>
-
-        {leadsExpanded && (
-          <div className="mt-0.5 ml-3 space-y-0.5">
-            {LEADS_SUB.map(({ href, icon: Icon, label }) => {
-              const active = pathname === href;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2.5 pr-2.5 py-2 text-xs font-500 transition-colors"
-                  style={
-                    active
-                      ? {
-                          borderLeft: "2px solid var(--color-brand)",
-                          color: "var(--color-brand)",
-                          paddingLeft: "10px",
-                        }
-                      : {
-                          borderLeft: "2px solid transparent",
-                          color: "var(--color-text-secondary)",
-                          paddingLeft: "10px",
-                        }
-                  }
-                >
-                  <Icon size={14} />
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
     );
   };
 
@@ -572,8 +470,7 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
             )}
             <div className="space-y-0.5">
               {visibleItems.map((item) =>
-                item.type === "leads" ? renderLeadsNav()
-                  : item.type === "billing" ? renderBillingNav()
+                item.type === "billing" ? renderBillingNav()
                   : renderNavLink(item),
               )}
             </div>
@@ -583,34 +480,8 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
       </nav>
 
       {/* Bottom: settings */}
-      <div className="px-2 pb-4 border-t border-(--color-border) pt-3 space-y-1">
-        <Link
-          href="/feedback"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setMobileOpen(false)}
-          title={collapsed ? "Feedback" : undefined}
-          className={navLinkClass(false)}
-          style={navLinkStyle(false)}
-        >
-          <MessageSquare size={16} />
-          {!collapsed && "Feedback"}
-        </Link>
-
-        <Link
-          href="/status"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setMobileOpen(false)}
-          title={collapsed ? "System Status" : undefined}
-          className={navLinkClass(false)}
-          style={navLinkStyle(false)}
-        >
-          <Radio size={16} />
-          {!collapsed && "System Status"}
-        </Link>
-
-        {hasPermission("settings") && (
+      {hasPermission("settings") && (
+        <div className="px-2 pb-4 border-t border-(--color-border) pt-3">
           <Link
             href="/settings"
             onClick={() => setMobileOpen(false)}
@@ -621,41 +492,8 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
             <Settings size={16} />
             {!collapsed && "Settings"}
           </Link>
-        )}
-
-        {/* User strip + logout */}
-        <div
-          className={clsx(
-            "mt-1 pt-2 border-t border-(--color-border) flex items-center gap-2",
-            collapsed ? "justify-center" : "px-1"
-          )}
-        >
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-700 text-white"
-            style={{ background: "var(--color-brand)" }}
-          >
-            {(user?.user_metadata?.name || user?.email || "?")[0].toUpperCase()}
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-600 truncate" style={{ color: "var(--color-text-primary)" }}>
-                {user?.user_metadata?.name || user?.email?.split("@")[0] || "User"}
-              </p>
-              <p className="text-[10px] truncate font-500" style={{ color: userRoleName ? 'var(--color-brand)' : 'var(--color-text-muted)' }}>
-                {userRoleName || 'Owner · Full access'}
-              </p>
-            </div>
-          )}
-          <button
-            onClick={handleLogout}
-            title="Log out"
-            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors shrink-0"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            <LogOut size={14} />
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -3,8 +3,9 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   Plus, Search, SlidersHorizontal, Eye, EyeOff, X,
   Trash2, Download, RefreshCw, ChevronDown, Check, UserRound, TrendingUp, Calendar,
+  User, Users, Phone, Mail, CircleDot, CalendarDays, Hash,
 } from 'lucide-react'
-import { Card, Spinner, Avatar } from '@/components/ui'
+import { Spinner, Avatar } from '@/components/ui'
 import { getPatients, getLeads, getAppointments, deletePatient, deleteLead } from '@/lib/supabase/queries'
 import { getPref, setPref } from '@/lib/prefs'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -20,14 +21,20 @@ const TYPE_OPTIONS = ['Patient', 'Lead']
 const STATUS_OPTIONS = ['Active', 'Inactive', 'Discharged']
 
 const BASE_COLUMNS = [
-  { id: 'name',         label: 'Name',           defaultVisible: true  },
-  { id: 'type',         label: 'Type',           defaultVisible: true  },
-  { id: 'phone',        label: 'Phone',          defaultVisible: true  },
-  { id: 'email',        label: 'Email',          defaultVisible: false },
-  { id: 'detail',       label: 'Stage / Status', defaultVisible: true  },
-  { id: 'appointments', label: 'Appointments',   defaultVisible: true  },
-  { id: 'created',      label: 'Created',        defaultVisible: true  },
+  { id: 'name',         label: 'Name',           defaultVisible: true,  icon: User },
+  { id: 'type',         label: 'Type',           defaultVisible: true,  icon: Users },
+  { id: 'phone',        label: 'Phone',          defaultVisible: true,  icon: Phone },
+  { id: 'email',        label: 'Email',          defaultVisible: false, icon: Mail },
+  { id: 'detail',       label: 'Stage / Status', defaultVisible: true,  icon: CircleDot },
+  { id: 'appointments', label: 'Appointments',   defaultVisible: true,  icon: CalendarDays },
+  { id: 'created',      label: 'Created',        defaultVisible: true,  icon: Calendar },
 ]
+
+// Default pixel widths per column — resizable, persisted per device (same as Leads table)
+const DEFAULT_COL_WIDTHS = {
+  name: 200, type: 110, phone: 140, email: 210,
+  detail: 140, appointments: 140, created: 120,
+}
 
 // ── MultiSelect dropdown ───────────────────────────────────────
 function MultiSelect({ label, options, selected, onChange }) {
@@ -298,16 +305,22 @@ export default function ConsultationPage() {
   const allColumns = useMemo(() => {
     const modCols = customModuleFields.map(f => ({
       id: f.colId, label: `${f.label} (${f.page})`, defaultVisible: false,
-      moduleId: f.moduleId, fieldId: f.fieldId,
+      moduleId: f.moduleId, fieldId: f.fieldId, icon: Hash,
     }))
     return [...BASE_COLUMNS, ...modCols]
   }, [customModuleFields])
 
-  const [visible, setVisible] = useState(() => {
+  // Column visibility. Start from SSR-safe defaults so the server and first client
+  // render agree; saved prefs are merged in after mount to avoid a hydration mismatch.
+  const [visible, setVisible] = useState(() =>
+    Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
+  )
+  const [colPrefsLoaded, setColPrefsLoaded] = useState(false)
+  useEffect(() => {
     const saved = getPref('pref_consult_cols')
-    const defaults = Object.fromEntries(BASE_COLUMNS.map(c => [c.id, c.defaultVisible]))
-    return saved ? { ...defaults, ...saved } : defaults
-  })
+    if (saved) setVisible(prev => ({ ...prev, ...saved }))
+    setColPrefsLoaded(true)
+  }, [])
   useEffect(() => {
     setVisible(prev => {
       const next = { ...prev }; let changed = false
@@ -315,7 +328,47 @@ export default function ConsultationPage() {
       return changed ? next : prev
     })
   }, [allColumns])
-  useEffect(() => { setPref('pref_consult_cols', visible) }, [visible])
+  // Persist only after saved prefs have loaded, so we don't overwrite them with defaults on mount.
+  useEffect(() => { if (colPrefsLoaded) setPref('pref_consult_cols', visible) }, [visible, colPrefsLoaded])
+
+  // Column widths — resizable, loaded post-mount to avoid hydration mismatch (same as Leads)
+  const [colWidths, setColWidths] = useState({})
+  const colWidthsRef = useRef(colWidths)
+  useEffect(() => { colWidthsRef.current = colWidths }, [colWidths])
+  useEffect(() => { const saved = getPref('pref_consult_col_widths'); if (saved) setColWidths(saved) }, [])
+
+  const startResize = useCallback((colId, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX     = e.clientX
+    const startWidth = colWidthsRef.current[colId] ?? DEFAULT_COL_WIDTHS[colId] ?? 130
+    const onMove = (ev) => {
+      const w = Math.max(60, startWidth + ev.clientX - startX)
+      setColWidths(prev => ({ ...prev, [colId]: w }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      setColWidths(prev => { setPref('pref_consult_col_widths', prev); return prev })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  const getW = (id) => colWidths[id] ?? DEFAULT_COL_WIDTHS[id] ?? 130
+
+  // Pagination (same as Leads)
+  const [page, setPage]         = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+
+  // Filter modal: close on Escape and lock background scroll while open.
+  useEffect(() => {
+    if (!filtersOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setFiltersOpen(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [filtersOpen])
 
   const setCustomFilter = (colId, value) => setFilters(f => ({ ...f, custom: { ...f.custom, [colId]: value } }))
   const toggleCustomField = colId => {
@@ -403,6 +456,10 @@ export default function ConsultationPage() {
     Object.values(filters.custom).filter(v => Array.isArray(v) ? v.length : v).length
   const hasFilters = filterCount > 0
   const clearFilters = () => { setFilters({ types: [], statuses: [], dateFrom: '', dateTo: '', custom: {} }); setActiveCustom([]) }
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const safePage   = Math.min(page, totalPages)
+  const pagedRows  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   // ── Selection ──
   const rowKey = r => `${r.type}:${r.id}`
@@ -550,7 +607,7 @@ export default function ConsultationPage() {
           )}
         </div>
 
-        <button onClick={() => setFiltersOpen(o => !o)}
+        <button onClick={() => setFiltersOpen(true)}
           className={clsx('flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-500 transition-all',
             filtersOpen || hasFilters ? 'border-(--color-brand) text-white' : 'border-(--color-border) hover:bg-(--color-brand-50)')}
           style={filtersOpen || hasFilters ? { background: 'var(--color-brand)' } : { color: 'var(--color-text-secondary)', background: 'var(--color-surface)' }}>
@@ -561,58 +618,83 @@ export default function ConsultationPage() {
         <ColumnToggle allColumns={allColumns} visible={visible} setVisible={setVisible} />
       </div>
 
-      {/* Filter panel */}
+      {/* Filter modal */}
       {filtersOpen && (
-        <Card className="p-3 border-(--color-border) space-y-2.5">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
-            <MultiSelect label="Type"          options={TYPE_OPTIONS} selected={filters.types}    onChange={v => setFilters(f => ({ ...f, types: v }))} />
-            <MultiSelect label="Stage / Status" options={stageOpts}   selected={filters.statuses} onChange={v => setFilters(f => ({ ...f, statuses: v }))} />
-
-            {/* Date range */}
-            <div className="col-span-2">
-              <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
-                onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
-            </div>
-
-            {customModuleFields.length > 0 && (
-              <CustomFieldPicker fields={customModuleFields} active={activeCustom} onToggle={toggleCustomField} />
-            )}
-          </div>
-
-          {/* Active custom field inputs */}
-          {activeCustom.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2 items-start">
-              {activeCustom.map(colId => {
-                const fld = customModuleFields.find(f => f.colId === colId)
-                if (!fld) return null
-                if (fld.type === 'select' || fld.type === 'boolean') {
-                  return <MultiSelect key={colId} label={fld.label}
-                    options={fld.type === 'boolean' ? ['Yes', 'No'] : fld.options}
-                    selected={filters.custom[colId] || []} onChange={v => setCustomFilter(colId, v)} />
-                }
-                return (
-                  <div key={colId} className="relative">
-                    <input value={filters.custom[colId] || ''} onChange={e => setCustomFilter(colId, e.target.value)}
-                      placeholder={fld.label}
-                      className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
-                      style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                    <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2">
-                      <X size={12} style={{ color: 'var(--color-text-muted)' }} />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {hasFilters && (
-            <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters} className="btn btn-danger btn-sm">
-                <X size={12} /> Clear all
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={() => setFiltersOpen(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-(--color-border)">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={16} style={{ color: 'var(--color-brand)' }} />
+                <h2 className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Filter Consultations</h2>
+                {hasFilters && (
+                  <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                    {filterCount}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setFiltersOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Close">
+                <X size={16} style={{ color: 'var(--color-text-muted)' }} />
               </button>
             </div>
-          )}
-        </Card>
+
+            {/* Body */}
+            <div className="p-4 space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <MultiSelect label="Type"           options={TYPE_OPTIONS} selected={filters.types}    onChange={v => setFilters(f => ({ ...f, types: v }))} />
+                <MultiSelect label="Stage / Status" options={stageOpts}    selected={filters.statuses} onChange={v => setFilters(f => ({ ...f, statuses: v }))} />
+
+                <div className="col-span-2">
+                  <DateRangeSelect from={filters.dateFrom} to={filters.dateTo}
+                    onChange={(dateFrom, dateTo) => setFilters(f => ({ ...f, dateFrom, dateTo }))} />
+                </div>
+
+                {customModuleFields.length > 0 && (
+                  <CustomFieldPicker fields={customModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+                )}
+              </div>
+
+              {/* Active custom field inputs */}
+              {activeCustom.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 items-start">
+                  {activeCustom.map(colId => {
+                    const fld = customModuleFields.find(f => f.colId === colId)
+                    if (!fld) return null
+                    if (fld.type === 'select' || fld.type === 'boolean') {
+                      return <MultiSelect key={colId} label={fld.label}
+                        options={fld.type === 'boolean' ? ['Yes', 'No'] : fld.options}
+                        selected={filters.custom[colId] || []} onChange={v => setCustomFilter(colId, v)} />
+                    }
+                    return (
+                      <div key={colId} className="relative">
+                        <input value={filters.custom[colId] || ''} onChange={e => setCustomFilter(colId, e.target.value)}
+                          placeholder={fld.label}
+                          className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
+                          style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                        <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                          <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-(--color-border)">
+              {hasFilters ? (
+                <button onClick={clearFilters} className="btn btn-danger btn-sm">
+                  <X size={12} /> Clear all
+                </button>
+              ) : <span />}
+              <button onClick={() => setFiltersOpen(false)} className="btn btn-primary btn-sm">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bulk action bar */}
@@ -634,42 +716,75 @@ export default function ConsultationPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — same design as the Leads table */}
       {loading ? (
         <div className="flex items-center justify-center py-24"><Spinner size={32} /></div>
       ) : (
-        <Card className="p-0 overflow-hidden border-(--color-border)">
+        <div style={{ border: '1px solid #dde1e7', borderRadius: 4, background: '#fff', overflow: 'hidden' }}>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="border-collapse" style={{ fontSize: 15, tableLayout: 'fixed', width: 'max-content', minWidth: '100%' }}>
+              <colgroup>
+                <col style={{ width: 40 }} />
+                {visibleCols.map(col => <col key={col.id} style={{ width: getW(col.id) }} />)}
+              </colgroup>
               <thead>
-                <tr className="border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-                  <th className="w-10 px-4 py-3">
-                    <input type="checkbox"
+                <tr style={{ background: '#f3f4f6', borderBottom: '1px solid #dde1e7' }}>
+                  {/* Select-all */}
+                  <th className="sticky left-0 z-20 text-left" style={{ width: 40, padding: '0 0 0 14px', background: '#f3f4f6', borderRight: '1px solid #dde1e7' }}>
+                    <input
+                      type="checkbox"
                       checked={filtered.length > 0 && selected.size === filtered.length}
                       ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length }}
-                      onChange={toggleAll} className="w-4 h-4 cursor-pointer rounded" style={{ accentColor: 'var(--color-brand)' }} />
+                      onChange={toggleAll}
+                      className="w-3.5 h-3.5 cursor-pointer"
+                      style={{ accentColor: 'var(--color-brand)' }}
+                    />
                   </th>
-                  {visibleCols.map(col => (
-                    <th key={col.id} className="text-left px-4 py-3 text-[11px] font-600 whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>{col.label}</th>
-                  ))}
+                  {visibleCols.map(col => {
+                    const ColIcon = col.icon || Hash
+                    return (
+                      <th key={col.id} className="text-left" style={{ width: getW(col.id), padding: '9px 14px', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280', borderRight: '1px solid #dde1e7', position: 'relative', userSelect: 'none', overflow: 'hidden' }}>
+                        <span className="inline-flex items-center gap-1.5">
+                          <ColIcon size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                          {col.label}
+                        </span>
+                        <div onMouseDown={e => startResize(col.id, e)} style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', zIndex: 1 }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--color-brand)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-(--color-border)">
+              <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleCols.length + 1} className="px-4 py-20 text-center text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    <td colSpan={visibleCols.length + 1} className="text-center" style={{ padding: '56px 16px', fontSize: 15, color: '#9ca3af' }}>
                       {search || hasFilters ? 'No records match your filters.' : 'No patients or appointment-booked leads yet.'}
                     </td>
                   </tr>
-                ) : filtered.map(r => {
-                  const key = rowKey(r)
+                ) : pagedRows.map((r, idx) => {
+                  const key   = rowKey(r)
+                  const sel   = selected.has(key)
+                  const rowBg = sel ? '#eef3ff' : '#fff'
                   return (
-                    <tr key={key} className={clsx('transition-colors', selected.has(key) ? 'bg-(--color-brand-50)/60' : 'hover:bg-(--color-brand-50)/30')}>
-                      <td className="w-10 px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={selected.has(key)} onChange={() => toggleOne(key)} className="w-4 h-4 cursor-pointer rounded" style={{ accentColor: 'var(--color-brand)' }} />
+                    <tr
+                      key={key}
+                      className="group"
+                      style={{ background: rowBg, borderBottom: idx === pagedRows.length - 1 ? 'none' : '1px solid #f0f0f0' }}
+                      onMouseEnter={e => { if (!sel) e.currentTarget.style.background = '#f5f8ff' }}
+                      onMouseLeave={e => { if (!sel) e.currentTarget.style.background = '#fff' }}
+                    >
+                      {/* Checkbox */}
+                      <td className="sticky left-0 z-10" style={{ width: 40, padding: '0 0 0 14px', background: rowBg, borderRight: '1px solid #f0f0f0' }} onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={sel} onChange={() => toggleOne(key)} className="w-3.5 h-3.5 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} />
                       </td>
-                      {visibleCols.map(col => (
-                        <td key={col.id} className="px-4 py-3 whitespace-nowrap cursor-pointer" onClick={() => router.push(r.href)}>
+                      {/* Data cells */}
+                      {visibleCols.map((col, ci) => (
+                        <td key={col.id}
+                          className="cursor-pointer"
+                          style={{ padding: '8px 14px', borderRight: ci === visibleCols.length - 1 ? 'none' : '1px solid #f0f0f0', verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          onClick={() => router.push(r.href)}>
                           {renderCell(col, r)}
                         </td>
                       ))}
@@ -679,12 +794,63 @@ export default function ConsultationPage() {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-(--color-border) text-xs" style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface-2)' }}>
-              Showing {filtered.length} of {rows.length}
+
+          {/* Pagination footer */}
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #dde1e7', background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            {/* Left: count + page-size selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#6b7280' }}>
+              <span>
+                {filtered.length === 0 ? '0 records' : <>
+                  <strong style={{ color: '#374151' }}>{(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}</strong>
+                  {' of '}
+                  <strong style={{ color: '#374151' }}>{filtered.length}</strong>
+                  {hasFilters ? ' (filtered)' : ''}
+                </>}
+              </span>
+              <span style={{ color: '#d1d5db' }}>|</span>
+              <span>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                style={{ fontSize: 12, padding: '2px 6px', border: '1px solid #dde1e7', borderRadius: 4, background: '#fff', color: '#374151', cursor: 'pointer' }}
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
             </div>
-          )}
-        </Card>
+
+            {/* Right: pagination controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #dde1e7', borderRadius: 4, background: safePage === 1 ? '#f9fafb' : '#fff', color: safePage === 1 ? '#d1d5db' : '#374151', cursor: safePage === 1 ? 'default' : 'pointer' }}
+              >‹ Prev</button>
+
+              {/* Page number pills */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(n => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                .reduce((acc, n, i, arr) => {
+                  if (i > 0 && n - arr[i - 1] > 1) acc.push('…')
+                  acc.push(n)
+                  return acc
+                }, [])
+                .map((n, i) => n === '…'
+                  ? <span key={`ellipsis-${i}`} style={{ padding: '3px 6px', fontSize: 12, color: '#9ca3af' }}>…</span>
+                  : <button key={n} onClick={() => setPage(n)}
+                      style={{ minWidth: 28, padding: '3px 6px', fontSize: 12, border: '1px solid', borderRadius: 4, cursor: 'pointer', fontWeight: n === safePage ? 600 : 400, borderColor: n === safePage ? 'var(--color-brand)' : '#dde1e7', background: n === safePage ? 'var(--color-brand)' : '#fff', color: n === safePage ? '#fff' : '#374151' }}
+                    >{n}</button>
+                )}
+
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #dde1e7', borderRadius: 4, background: safePage === totalPages ? '#f9fafb' : '#fff', color: safePage === totalPages ? '#d1d5db' : '#374151', cursor: safePage === totalPages ? 'default' : 'pointer' }}
+              >Next ›</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

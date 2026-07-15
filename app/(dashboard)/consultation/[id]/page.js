@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Stethoscope, Plus, Calendar, Clock, CheckSquare, History,
   Phone, Mail, User, UserRound, TrendingUp, ChevronDown, Check, X,
-  MessageSquare, Edit2, Tag, Bell, FileText,
+  MessageSquare, Edit2, Tag, Bell, FileText, Pill,
   List, Table2, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw, PhoneCall,
 } from 'lucide-react'
 import { Button, Card, Spinner, Avatar, Input, Select, Textarea, Modal } from '@/components/ui'
@@ -120,6 +120,21 @@ export default function ConsultationDetailPage({ params }) {
   const [editingNotes, setEditingNotes] = useState(false)
   const [savingNotes,  setSavingNotes]  = useState(false)
   const [notesText,    setNotesText]    = useState('')
+
+  // Prescriptions
+  const EMPTY_MED = { name: '', dosage: '', frequency: '', duration: '' }
+  const [rxOpen,   setRxOpen]   = useState(false)
+  const [savingRx, setSavingRx] = useState(false)
+  const [rxForm,   setRxForm]   = useState({ doctor_id: '', diagnosis: '', notes: '', medicines: [{ ...EMPTY_MED }] })
+
+  // Prescription modal: close on Escape and lock background scroll while open.
+  useEffect(() => {
+    if (!rxOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setRxOpen(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [rxOpen])
 
   useEffect(() => {
     if (!orgId || !id) return
@@ -320,6 +335,45 @@ export default function ConsultationDetailPage({ params }) {
     finally { setSavingNotes(false) }
   }
 
+  // ── Prescriptions ──
+  const setMed    = (i, patch) => setRxForm(f => ({ ...f, medicines: f.medicines.map((m, mi) => mi === i ? { ...m, ...patch } : m) }))
+  const addMed    = () => setRxForm(f => ({ ...f, medicines: [...f.medicines, { ...EMPTY_MED }] }))
+  const removeMed = (i) => setRxForm(f => ({ ...f, medicines: f.medicines.filter((_, mi) => mi !== i) }))
+
+  const handleSaveRx = async () => {
+    if (!entity) return
+    const meds = rxForm.medicines.filter(m => m.name.trim())
+    if (!meds.length && !rxForm.notes.trim()) {
+      toast({ type: 'error', title: 'Empty prescription', message: 'Add at least one medicine or instructions.' })
+      return
+    }
+    setSavingRx(true)
+    try {
+      // Serialize medicine rows into readable text — stored on consultations.prescription
+      const lines = meds.map((m, i) =>
+        `${i + 1}. ${[m.name.trim(), m.dosage.trim(), m.frequency.trim(), m.duration.trim()].filter(Boolean).join(' — ')}`)
+      const text = [lines.join('\n'), rxForm.notes.trim()].filter(Boolean).join('\n\n')
+      const doc = doctors.find(x => (x.id || x.name) === rxForm.doctor_id)
+      const c = await createConsultation({
+        organization_id: orgId,
+        patient_id: entity.type === 'patient' ? id : null,
+        lead_id:    entity.type === 'lead'    ? id : null,
+        doctor_id: doc?.id || null,
+        consultation_type: 'Routine',
+        status: 'Completed',
+        consulted_at: new Date().toISOString(),
+        diagnosis: rxForm.diagnosis.trim() || null,
+        prescription: text,
+      })
+      setConsultations(prev => [c, ...prev])
+      setRxOpen(false)
+      setRxForm({ doctor_id: '', diagnosis: '', notes: '', medicines: [{ ...EMPTY_MED }] })
+      toast({ type: 'success', title: 'Prescription recorded' })
+      await addActivity('note', 'Prescription recorded')
+    } catch (err) { toast({ type: 'error', title: 'Error', message: err.message }) }
+    finally { setSavingRx(false) }
+  }
+
   const handleCreateFollowupInline = async (patch) => {
     if (!orgId) return
     try {
@@ -353,6 +407,7 @@ export default function ConsultationDetailPage({ params }) {
   const stages = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
   const detailColor = isPatient ? (detail === 'Active' ? '#15803d' : '#b91c1c') : (stages.find(s => s.name === detail)?.color || '#135BFB')
   const history = isPatient && Array.isArray(d.medical_history) ? d.medical_history : []
+  const prescriptions = consultations.filter(c => (c.prescription || '').trim())
 
   const RIGHT_TABS = [
     { id: 'tasks',    label: 'Tasks',    icon: CheckSquare, count: tasks.filter(t => t.status !== 'Completed').length },
@@ -466,6 +521,54 @@ export default function ConsultationDetailPage({ params }) {
                     onPaymentUpdate={handleApptPayment}
                     onReschedule={handleApptReschedule}
                   />
+                )}
+              </div>
+            </Card>
+
+            {/* Prescriptions */}
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                <p className="text-xs font-700 uppercase tracking-widest flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                  <Pill size={13} style={{ color: 'var(--color-brand)' }} /> Prescriptions <span style={{ color: 'var(--color-text-primary)' }}>({prescriptions.length})</span>
+                </p>
+                <Button size="sm" type="button" onClick={() => setRxOpen(true)}><Plus size={14} /> Record Prescription</Button>
+              </div>
+              <div className="p-3">
+                {prescriptions.length === 0 ? (
+                  <div className="py-10 text-center border border-dashed rounded-xl border-(--color-border)">
+                    <Pill size={24} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No prescriptions recorded yet.</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Click “Record Prescription” to add the first one.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-150 overflow-y-auto pr-1">
+                    {prescriptions.map(c => {
+                      const doc = doctors.find(x => x.id === c.doctor_id)
+                      return (
+                        <div key={c.id} className="rounded-xl border border-(--color-border) overflow-hidden">
+                          <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
+                            <Calendar size={12} style={{ color: 'var(--color-text-muted)' }} />
+                            <span className="text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>
+                              {format(new Date(c.consulted_at), 'MMM d, yyyy · h:mm a')}
+                            </span>
+                            {doc && <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>· Dr. {doc.name}</span>}
+                            {c.diagnosis && (
+                              <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                                {c.diagnosis}
+                              </span>
+                            )}
+                            {c.consultation_type && (
+                              <span className="ml-auto text-[10px] font-600 px-2 py-0.5 rounded-full"
+                                style={{ background: (TYPE_STYLE[c.consultation_type] || TYPE_STYLE['Routine']).bg, color: (TYPE_STYLE[c.consultation_type] || TYPE_STYLE['Routine']).color }}>
+                                {c.consultation_type}
+                              </span>
+                            )}
+                          </div>
+                          <p className="px-3 py-2.5 text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--color-text-secondary)' }}>{c.prescription}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             </Card>
@@ -597,6 +700,82 @@ export default function ConsultationDetailPage({ params }) {
 
         </div>
       </div>
+
+      {/* Record Prescription modal */}
+      {rxOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={() => setRxOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-(--color-border)">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)">
+              <div className="flex items-center gap-2">
+                <Pill size={16} style={{ color: 'var(--color-brand)' }} />
+                <h2 className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Record Prescription</h2>
+                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>· {name}</span>
+              </div>
+              <button onClick={() => setRxOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Close">
+                <X size={16} style={{ color: 'var(--color-text-muted)' }} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                <Select label="Doctor" value={rxForm.doctor_id}
+                  onChange={e => setRxForm(f => ({ ...f, doctor_id: e.target.value }))}
+                  options={[{ value: '', label: 'Select doctor (optional)' }, ...doctors.map(x => ({ value: x.id || x.name, label: x.name }))]} />
+                <Input label="Diagnosis" value={rxForm.diagnosis}
+                  onChange={e => setRxForm(f => ({ ...f, diagnosis: e.target.value }))}
+                  placeholder="e.g. Type 2 Diabetes" />
+              </div>
+
+              {/* Medicines */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-600" style={{ color: 'var(--color-text-secondary)' }}>Medicines</p>
+                  <button type="button" onClick={addMed} className="btn btn-secondary btn-sm">
+                    <Plus size={12} /> Add medicine
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {rxForm.medicines.map((m, i) => (
+                    <div key={i} className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-center">
+                      <input value={m.name} onChange={e => setMed(i, { name: e.target.value })} placeholder="Medicine name"
+                        className="w-full px-2.5 py-2 text-sm rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <input value={m.dosage} onChange={e => setMed(i, { dosage: e.target.value })} placeholder="Dosage"
+                        className="w-full px-2.5 py-2 text-sm rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <input value={m.frequency} onChange={e => setMed(i, { frequency: e.target.value })} placeholder="1-0-1"
+                        className="w-full px-2.5 py-2 text-sm rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <input value={m.duration} onChange={e => setMed(i, { duration: e.target.value })} placeholder="5 days"
+                        className="w-full px-2.5 py-2 text-sm rounded-lg border border-(--color-border) outline-none focus:border-(--color-brand)"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <button type="button" onClick={() => removeMed(i)} disabled={rxForm.medicines.length === 1}
+                        className="p-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-30" title="Remove">
+                        <X size={14} style={{ color: 'var(--color-text-muted)' }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Textarea label="Instructions / notes" rows={3} value={rxForm.notes}
+                onChange={e => setRxForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="e.g. Take after meals. Review after 2 weeks." />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-(--color-border)">
+              <Button variant="secondary" size="sm" type="button" onClick={() => setRxOpen(false)}>Cancel</Button>
+              <Button size="sm" type="button" disabled={savingRx} onClick={handleSaveRx}>
+                {savingRx ? 'Saving…' : 'Save Prescription'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

@@ -2,14 +2,17 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   Search, Phone, Mail, UserRound, TrendingUp,
-  Eye, EyeOff, Download, Check, X, ArrowRight, Trash2,
+  Eye, EyeOff, Download, Check, X, Trash2,
   ChevronDown, Calendar, Plus, ArrowUpDown, ArrowUp, ArrowDown,
   SlidersHorizontal, Tag, RefreshCw, Users,
+  User, CircleDot, Megaphone, VenusAndMars, Clock, Hash,
 } from 'lucide-react'
-import { Spinner, Avatar, Card } from '@/components/ui'
+import { Spinner, Avatar } from '@/components/ui'
 import { getLeads, getPatients, deleteLead, deletePatient, updateOrganization } from '@/lib/supabase/queries'
 import { useOrg } from '@/lib/context/OrgContext'
+import { getPref, setPref } from '@/lib/prefs'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { format, startOfDay, endOfDay } from 'date-fns'
 import { logAudit, AUDIT } from '@/lib/audit'
 import { toast } from '@/lib/toast'
@@ -22,21 +25,27 @@ const opts = (arr) => arr.map(v => ({ value: v, label: v }))
 
 // Base column definitions — `locked` columns can't be hidden
 const BASE_COLUMNS = [
-  { key: 'name',     label: 'Name',           locked: true },
-  { key: 'type',     label: 'Type' },
-  { key: 'phone',    label: 'Phone' },
-  { key: 'email',    label: 'Email' },
-  { key: 'status',   label: 'Stage / Status' },
-  { key: 'source',   label: 'Source' },
-  { key: 'gender',   label: 'Gender' },
-  { key: 'tags',     label: 'Tags' },
-  { key: 'created',  label: 'Created' },
-  { key: 'modified', label: 'Modified' },
+  { key: 'name',     label: 'Name',           locked: true, icon: User },
+  { key: 'type',     label: 'Type',           icon: Users },
+  { key: 'phone',    label: 'Phone',          icon: Phone },
+  { key: 'email',    label: 'Email',          icon: Mail },
+  { key: 'status',   label: 'Stage / Status', icon: CircleDot },
+  { key: 'source',   label: 'Source',         icon: Megaphone },
+  { key: 'gender',   label: 'Gender',         icon: VenusAndMars },
+  { key: 'tags',     label: 'Tags',           icon: Tag },
+  { key: 'created',  label: 'Created',        icon: Calendar },
+  { key: 'modified', label: 'Modified',       icon: Clock },
 ]
 const BASE_DEFAULT_VISIBLE = {
   name: true, type: true, phone: true, email: true,
   status: true, source: false, gender: false,
   tags: false, created: true, modified: false,
+}
+
+// Default pixel widths per column — resizable, persisted per device (same as Leads table)
+const DEFAULT_COL_WIDTHS = {
+  name: 200, type: 110, phone: 140, email: 210, status: 140,
+  source: 120, gender: 100, tags: 160, created: 120, modified: 120,
 }
 
 const EMPTY_FILTERS = {
@@ -319,6 +328,37 @@ export default function ContactsPage() {
   const [activeCustom, setActiveCustom] = useState([]) // colIds of custom fields shown as filters
   const [selected, setSelected] = useState(new Set())
   const [sort, setSort]         = useState({ field: 'created', dir: 'desc' })
+  const router = useRouter()
+
+  // Column widths — resizable, loaded post-mount to avoid hydration mismatch (same as Leads)
+  const [colWidths, setColWidths] = useState({})
+  const colWidthsRef = useRef(colWidths)
+  useEffect(() => { colWidthsRef.current = colWidths }, [colWidths])
+  useEffect(() => { const saved = getPref('pref_contact_col_widths'); if (saved) setColWidths(saved) }, [])
+
+  const startResize = useCallback((colKey, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX     = e.clientX
+    const startWidth = colWidthsRef.current[colKey] ?? DEFAULT_COL_WIDTHS[colKey] ?? 130
+    const onMove = (ev) => {
+      const w = Math.max(60, startWidth + ev.clientX - startX)
+      setColWidths(prev => ({ ...prev, [colKey]: w }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      setColWidths(prev => { setPref('pref_contact_col_widths', prev); return prev })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  const getW = (key) => colWidths[key] ?? DEFAULT_COL_WIDTHS[key] ?? 130
+
+  // Pagination (same as Leads)
+  const [page, setPage]         = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   const stages  = (org?.settings?.lead_stages || []).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
   const stageColor = (name) => stages.find(s => s.name === name)?.color || '#135BFB'
@@ -328,7 +368,7 @@ export default function ContactsPage() {
     .flatMap(m => (m.fields || []).map(f => ({
       key: `cf:${m.id}:${f.id}`,
       label: f.label,
-      custom: true, page: m.page, moduleId: m.id, fieldId: f.id,
+      custom: true, page: m.page, moduleId: m.id, fieldId: f.id, icon: Hash,
     })))
 
   const ALL_COLUMNS = [...BASE_COLUMNS, ...customColumns]
@@ -371,6 +411,15 @@ export default function ContactsPage() {
   }, [orgId])
 
   useEffect(() => { load() }, [load])
+
+  // Filter modal: close on Escape and lock background scroll while open.
+  useEffect(() => {
+    if (!filtersOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setFiltersOpen(false) }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [filtersOpen])
 
   const persistColumns = async (next) => {
     setVisible(next)
@@ -461,6 +510,10 @@ export default function ContactsPage() {
     return arr
   }, [filtered, sort])
 
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / pageSize))
+  const safePage   = Math.min(page, totalPages)
+  const pagedRows  = sortedFiltered.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   const customCount = Object.values(filters.custom).filter(v => Array.isArray(v) ? v.length : v).length
   const filterCount =
     filters.types.length + filters.stages.length + filters.statuses.length +
@@ -473,10 +526,10 @@ export default function ContactsPage() {
   const toggleSort = (field) =>
     setSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' })
   const SortIcon = ({ field }) => {
-    if (sort.field !== field) return <ArrowUpDown size={12} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+    if (sort.field !== field) return <ArrowUpDown size={11} style={{ color: '#9ca3af' }} />
     return sort.dir === 'asc'
-      ? <ArrowUp size={12} style={{ color: 'var(--color-brand)' }} />
-      : <ArrowDown size={12} style={{ color: 'var(--color-brand)' }} />
+      ? <ArrowUp size={11} style={{ color: 'var(--color-brand)' }} />
+      : <ArrowDown size={11} style={{ color: 'var(--color-brand)' }} />
   }
 
   // ── Selection ──────────────────────────────────────────────────
@@ -537,7 +590,7 @@ export default function ContactsPage() {
         )
       case 'type':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-700 px-2 py-0.5 rounded-full"
+          <span className="inline-flex items-center gap-1 text-[11px] font-700 px-2 py-0.5 rounded-full"
             style={isPatient ? { background: '#dcfce7', color: '#15803d' } : { background: '#dbeafe', color: '#1d4ed8' }}>
             {isPatient ? <UserRound size={10} /> : <TrendingUp size={10} />}{r.type}
           </span>
@@ -552,9 +605,9 @@ export default function ContactsPage() {
           : <span style={{ color: 'var(--color-text-muted)' }}>—</span>
       case 'status':
         return isPatient ? (
-          <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={r.detail === 'Active' ? { background: '#dcfce7', color: '#15803d' } : { background: '#fee2e2', color: '#b91c1c' }}>{r.detail}</span>
+          <span className="text-[11px] font-600 px-2 py-0.5 rounded-full" style={r.detail === 'Active' ? { background: '#dcfce7', color: '#15803d' } : { background: '#fee2e2', color: '#b91c1c' }}>{r.detail}</span>
         ) : (
-          <span className="text-[10px] font-600 px-2 py-0.5 rounded-full" style={{ background: stageColor(r.detail) + '20', color: stageColor(r.detail) }}>{r.detail}</span>
+          <span className="text-[11px] font-600 px-2 py-0.5 rounded-full" style={{ background: stageColor(r.detail) + '20', color: stageColor(r.detail) }}>{r.detail}</span>
         )
       case 'source':
         return <span style={{ color: r.source ? 'var(--color-text-secondary)' : 'var(--color-text-muted)' }}>{r.source || '—'}</span>
@@ -567,14 +620,14 @@ export default function ContactsPage() {
               const tc = tag.color || '#135BFB'
               return (
                 <span key={tag.id}
-                  className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-[10px] font-600"
+                  className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-[11px] font-600"
                   style={{ background: tc, color: 'white', clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
                   <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.85)' }} />
                   {tag.name}
                 </span>
               )
             })}
-            {r.tags.length > 3 && <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>+{r.tags.length - 3}</span>}
+            {r.tags.length > 3 && <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>+{r.tags.length - 3}</span>}
           </div>
         ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>
       case 'created':
@@ -630,7 +683,7 @@ export default function ContactsPage() {
 
         {/* Filters toggle */}
         <button
-          onClick={() => setFiltersOpen(o => !o)}
+          onClick={() => setFiltersOpen(true)}
           className={clsx(
             'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-500 transition-all',
             filtersOpen || hasFilters ? 'border-(--color-brand) text-white' : 'border-(--color-border) hover:bg-(--color-brand-50)'
@@ -646,71 +699,91 @@ export default function ContactsPage() {
         <ColumnToggle baseColumns={BASE_COLUMNS} customColumns={customColumns} isVisible={isVisible} toggleColumn={toggleColumn} />
       </div>
 
-      {/* Advanced filter panel */}
+      {/* Filter modal */}
       {filtersOpen && (
-        <Card className="p-3 border-(--color-border) space-y-2.5">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
-            <MultiSelect label="Type" icon={Users} options={opts(['Lead', 'Patient'])} selected={filters.types} onChange={v => setFilters(f => ({ ...f, types: v }))} />
-            {stages.length > 0 && (
-              <MultiSelect label="Stage" options={stages.map(s => ({ value: s.name, label: s.name, color: s.color }))} selected={filters.stages} onChange={v => setFilters(f => ({ ...f, stages: v }))} />
-            )}
-            <MultiSelect label="Status" options={opts(['Active', 'Inactive'])} selected={filters.statuses} onChange={v => setFilters(f => ({ ...f, statuses: v }))} />
-            {sources.length > 0 && (
-              <MultiSelect label="Source" options={opts(sources)} selected={filters.sources} onChange={v => setFilters(f => ({ ...f, sources: v }))} />
-            )}
-            <MultiSelect label="Gender" options={opts(GENDERS)} selected={filters.genders} onChange={v => setFilters(f => ({ ...f, genders: v }))} />
-            {availableTags.length > 0 && (
-              <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))} selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
-            )}
-            <MultiSelect label="Has" options={opts(['Phone', 'Email'])} selected={filters.has} onChange={v => setFilters(f => ({ ...f, has: v }))} />
-
-            {/* Custom field picker — choose which custom fields to filter by */}
-            {contactModuleFields.length > 0 && (
-              <CustomFieldPicker fields={contactModuleFields} active={activeCustom} onToggle={toggleCustomField} />
-            )}
-          </div>
-
-          {/* Date ranges + activated custom filters */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 items-start">
-            <div className="col-span-2">
-              <DateRangeSelect label="Created" from={filters.createdFrom} to={filters.createdTo}
-                onChange={(createdFrom, createdTo) => setFilters(f => ({ ...f, createdFrom, createdTo }))} />
-            </div>
-            <div className="col-span-2">
-              <DateRangeSelect label="Modified" from={filters.modifiedFrom} to={filters.modifiedTo}
-                onChange={(modifiedFrom, modifiedTo) => setFilters(f => ({ ...f, modifiedFrom, modifiedTo }))} />
-            </div>
-
-            {activeCustom.map(colId => {
-              const fld = contactModuleFields.find(f => f.colId === colId)
-              if (!fld) return null
-              if (fld.type === 'select' || fld.type === 'boolean') {
-                return <MultiSelect key={colId} label={fld.label}
-                  options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
-                  selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
-              }
-              return (
-                <div key={colId} className="relative">
-                  <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
-                    placeholder={fld.label}
-                    className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
-                    style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
-                  <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
-                    <X size={12} style={{ color: 'var(--color-text-muted)' }} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
-          {hasFilters && (
-            <div className="flex justify-end pt-2 border-t border-(--color-border)">
-              <button onClick={clearFilters} className="btn btn-danger btn-sm">
-                <X size={12} /> Clear all
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={() => setFiltersOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-(--color-border)">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--color-border)">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={16} style={{ color: 'var(--color-brand)' }} />
+                <h2 className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>Filter Contacts</h2>
+                {hasFilters && (
+                  <span className="text-[10px] font-700 px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-brand-50)', color: 'var(--color-brand)' }}>
+                    {filterCount}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setFiltersOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Close">
+                <X size={16} style={{ color: 'var(--color-text-muted)' }} />
               </button>
             </div>
-          )}
-        </Card>
+
+            {/* Body */}
+            <div className="p-4 space-y-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <MultiSelect label="Type" icon={Users} options={opts(['Lead', 'Patient'])} selected={filters.types} onChange={v => setFilters(f => ({ ...f, types: v }))} />
+                {stages.length > 0 && (
+                  <MultiSelect label="Stage" options={stages.map(s => ({ value: s.name, label: s.name, color: s.color }))} selected={filters.stages} onChange={v => setFilters(f => ({ ...f, stages: v }))} />
+                )}
+                <MultiSelect label="Status" options={opts(['Active', 'Inactive'])} selected={filters.statuses} onChange={v => setFilters(f => ({ ...f, statuses: v }))} />
+                {sources.length > 0 && (
+                  <MultiSelect label="Source" options={opts(sources)} selected={filters.sources} onChange={v => setFilters(f => ({ ...f, sources: v }))} />
+                )}
+                <MultiSelect label="Gender" options={opts(GENDERS)} selected={filters.genders} onChange={v => setFilters(f => ({ ...f, genders: v }))} />
+                {availableTags.length > 0 && (
+                  <MultiSelect label="Tag" icon={Tag} options={availableTags.map(t => ({ value: t.id, label: t.name, color: t.color }))} selected={filters.tags} onChange={v => setFilters(f => ({ ...f, tags: v }))} />
+                )}
+                <MultiSelect label="Has" options={opts(['Phone', 'Email'])} selected={filters.has} onChange={v => setFilters(f => ({ ...f, has: v }))} />
+
+                {contactModuleFields.length > 0 && (
+                  <CustomFieldPicker fields={contactModuleFields} active={activeCustom} onToggle={toggleCustomField} />
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-start">
+                <DateRangeSelect label="Created" from={filters.createdFrom} to={filters.createdTo}
+                  onChange={(createdFrom, createdTo) => setFilters(f => ({ ...f, createdFrom, createdTo }))} />
+                <DateRangeSelect label="Modified" from={filters.modifiedFrom} to={filters.modifiedTo}
+                  onChange={(modifiedFrom, modifiedTo) => setFilters(f => ({ ...f, modifiedFrom, modifiedTo }))} />
+
+                {activeCustom.map(colId => {
+                  const fld = contactModuleFields.find(f => f.colId === colId)
+                  if (!fld) return null
+                  if (fld.type === 'select' || fld.type === 'boolean') {
+                    return <MultiSelect key={colId} label={fld.label}
+                      options={opts(fld.type === 'boolean' ? ['Yes', 'No'] : fld.options)}
+                      selected={filters.custom[colId] || []} onChange={v => setCustom(colId, v)} />
+                  }
+                  return (
+                    <div key={colId} className="relative">
+                      <input value={filters.custom[colId] || ''} onChange={e => setCustom(colId, e.target.value)}
+                        placeholder={fld.label}
+                        className="w-full px-2.5 py-1.5 pr-6 text-xs rounded-lg border border-(--color-border) outline-none"
+                        style={{ background: 'var(--color-surface)', color: 'var(--color-text-primary)' }} />
+                      <button type="button" onClick={() => toggleCustomField(colId)} className="absolute right-1.5 top-1/2 -translate-y-1/2" title="Remove filter">
+                        <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-(--color-border)">
+              {hasFilters ? (
+                <button onClick={clearFilters} className="btn btn-danger btn-sm">
+                  <X size={12} /> Clear all
+                </button>
+              ) : <span />}
+              <button onClick={() => setFiltersOpen(false)} className="btn btn-primary btn-sm">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bulk action bar (shown only when rows are selected) */}
@@ -734,80 +807,150 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — same design as the Leads table */}
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner size={28} /></div>
-      ) : sortedFiltered.length === 0 ? (
-        <div className="py-24 text-center border border-dashed rounded-2xl border-(--color-border)">
-          <Users size={32} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-500" style={{ color: 'var(--color-text-muted)' }}>
-            {search || hasFilters ? 'No contacts match your filters.' : 'No leads or patients yet.'}
-          </p>
-          {!search && !hasFilters && (
-            <Link href="/leads/new" className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg text-xs font-600 transition-colors hover:opacity-90"
-              style={{ background: 'var(--color-brand)', color: 'white' }}>
-              <Plus size={13} /> Add your first contact
-            </Link>
-          )}
+        <div className="flex items-center justify-center py-24">
+          <Spinner size={32} />
         </div>
       ) : (
-        <div className="rounded-2xl border border-(--color-border) overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+        <div style={{ border: '1px solid #dde1e7', borderRadius: 4, background: '#fff', overflow: 'hidden' }}>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="border-collapse" style={{ fontSize: 15, tableLayout: 'fixed', width: 'max-content', minWidth: '100%' }}>
+              <colgroup>
+                <col style={{ width: 40 }} />
+                {visibleCols.map(c => <col key={c.key} style={{ width: getW(c.key) }} />)}
+              </colgroup>
               <thead>
-                <tr style={{ background: 'var(--color-surface-2)' }}>
-                  <th className="w-10 px-4 py-2.5 border-b border-(--color-border)">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} />
+                <tr style={{ background: '#f3f4f6', borderBottom: '1px solid #dde1e7' }}>
+                  {/* Select-all */}
+                  <th className="sticky left-0 z-20 text-left" style={{ width: 40, padding: '0 0 0 14px', background: '#f3f4f6', borderRight: '1px solid #dde1e7' }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = selected.size > 0 && !allSelected }}
+                      onChange={toggleAll}
+                      className="w-3.5 h-3.5 cursor-pointer"
+                      style={{ accentColor: 'var(--color-brand)' }}
+                    />
                   </th>
                   {visibleCols.map(c => {
-                    const sortable = c.key === 'name' || c.key === 'created' || c.key === 'modified'
+                    const sortable  = c.key === 'name' || c.key === 'created' || c.key === 'modified'
                     const sortField = c.key === 'modified' ? 'modified' : c.key === 'name' ? 'name' : 'created'
+                    const ColIcon   = c.icon || Hash
                     return (
-                      <th key={c.key} className="text-left px-4 py-2.5 border-b border-(--color-border) whitespace-nowrap">
+                      <th key={c.key} className="text-left" style={{ width: getW(c.key), padding: '9px 14px', fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#6b7280', borderRight: '1px solid #dde1e7', position: 'relative', userSelect: 'none', overflow: 'hidden' }}>
                         {sortable ? (
-                          <button type="button" onClick={() => toggleSort(sortField)}
-                            className="flex items-center gap-1.5 text-[10px] font-700 uppercase tracking-widest transition-colors hover:opacity-80"
-                            style={{ color: 'var(--color-text-muted)' }}>
-                            {c.label}<SortIcon field={sortField} />
+                          <button type="button" onClick={() => toggleSort(sortField)} className="inline-flex items-center gap-1.5" title="Sort">
+                            <ColIcon size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                            {c.label}
+                            <SortIcon field={sortField} />
                           </button>
                         ) : (
-                          <span className="text-[10px] font-700 uppercase tracking-widest" style={{ color: 'var(--color-text-muted)' }}>{c.label}</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <ColIcon size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                            {c.label}
+                          </span>
                         )}
+                        <div onMouseDown={e => startResize(c.key, e)} style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: 5, cursor: 'col-resize', zIndex: 1 }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--color-brand)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />
                       </th>
                     )
                   })}
-                  <th className="w-10 border-b border-(--color-border)" />
                 </tr>
               </thead>
               <tbody>
-                {sortedFiltered.map((r, i) => {
-                  const sel = selected.has(rowKey(r))
+                {sortedFiltered.length === 0 ? (
+                  <tr>
+                    <td colSpan={visibleCols.length + 1} className="text-center" style={{ padding: '56px 16px', fontSize: 15, color: '#9ca3af' }}>
+                      {search || hasFilters ? 'No contacts match your filters.' : 'No leads or patients yet.'}
+                    </td>
+                  </tr>
+                ) : pagedRows.map((r, idx) => {
+                  const sel   = selected.has(rowKey(r))
+                  const rowBg = sel ? '#eef3ff' : '#fff'
                   return (
-                    <tr key={rowKey(r)} className="group transition-colors hover:bg-(--color-surface-2)"
-                      style={{ borderBottom: i === sortedFiltered.length - 1 ? 'none' : '1px solid var(--color-border)', background: sel ? 'var(--color-brand-50)' : undefined }}>
-                      <td className="px-4 py-3">
+                    <tr
+                      key={rowKey(r)}
+                      className="group"
+                      style={{ background: rowBg, borderBottom: idx === pagedRows.length - 1 ? 'none' : '1px solid #f0f0f0' }}
+                      onMouseEnter={e => { if (!sel) e.currentTarget.style.background = '#f5f8ff' }}
+                      onMouseLeave={e => { if (!sel) e.currentTarget.style.background = '#fff' }}
+                    >
+                      {/* Checkbox */}
+                      <td className="sticky left-0 z-10" style={{ width: 40, padding: '0 0 0 14px', background: rowBg, borderRight: '1px solid #f0f0f0' }} onClick={e => e.stopPropagation()}>
                         <input type="checkbox" checked={sel} onChange={() => toggleRow(r)} className="w-3.5 h-3.5 cursor-pointer" style={{ accentColor: 'var(--color-brand)' }} />
                       </td>
-                      {visibleCols.map(c => (
-                        <td key={c.key} className="px-4 py-3 max-w-0">
-                          <Link href={r.href} className="block truncate">{renderCell(r, c)}</Link>
+                      {/* Data cells */}
+                      {visibleCols.map((c, ci) => (
+                        <td key={c.key}
+                          className="cursor-pointer"
+                          style={{ padding: '8px 14px', borderRight: ci === visibleCols.length - 1 ? 'none' : '1px solid #f0f0f0', verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          onClick={() => router.push(r.href)}>
+                          {renderCell(r, c)}
                         </td>
                       ))}
-                      <td className="px-4 py-3">
-                        <Link href={r.href}>
-                          <ArrowRight size={14} className="opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: 'var(--color-text-muted)' }} />
-                        </Link>
-                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2.5 border-t border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
-            <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-              {sortedFiltered.length} of {rows.length} contact{rows.length !== 1 ? 's' : ''}{hasFilters ? ' (filtered)' : ''}
-            </p>
+
+          {/* Pagination footer */}
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #dde1e7', background: '#f9fafb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            {/* Left: count + page-size selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#6b7280' }}>
+              <span>
+                {sortedFiltered.length === 0 ? '0 contacts' : <>
+                  <strong style={{ color: '#374151' }}>{(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, sortedFiltered.length)}</strong>
+                  {' of '}
+                  <strong style={{ color: '#374151' }}>{sortedFiltered.length}</strong>
+                  {hasFilters ? ' (filtered)' : ''}
+                </>}
+              </span>
+              <span style={{ color: '#d1d5db' }}>|</span>
+              <span>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                style={{ fontSize: 12, padding: '2px 6px', border: '1px solid #dde1e7', borderRadius: 4, background: '#fff', color: '#374151', cursor: 'pointer' }}
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            {/* Right: pagination controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #dde1e7', borderRadius: 4, background: safePage === 1 ? '#f9fafb' : '#fff', color: safePage === 1 ? '#d1d5db' : '#374151', cursor: safePage === 1 ? 'default' : 'pointer' }}
+              >‹ Prev</button>
+
+              {/* Page number pills */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(n => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                .reduce((acc, n, i, arr) => {
+                  if (i > 0 && n - arr[i - 1] > 1) acc.push('…')
+                  acc.push(n)
+                  return acc
+                }, [])
+                .map((n, i) => n === '…'
+                  ? <span key={`ellipsis-${i}`} style={{ padding: '3px 6px', fontSize: 12, color: '#9ca3af' }}>…</span>
+                  : <button key={n} onClick={() => setPage(n)}
+                      style={{ minWidth: 28, padding: '3px 6px', fontSize: 12, border: '1px solid', borderRadius: 4, cursor: 'pointer', fontWeight: n === safePage ? 600 : 400, borderColor: n === safePage ? 'var(--color-brand)' : '#dde1e7', background: n === safePage ? 'var(--color-brand)' : '#fff', color: n === safePage ? '#fff' : '#374151' }}
+                    >{n}</button>
+                )}
+
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #dde1e7', borderRadius: 4, background: safePage === totalPages ? '#f9fafb' : '#fff', color: safePage === totalPages ? '#d1d5db' : '#374151', cursor: safePage === totalPages ? 'default' : 'pointer' }}
+              >Next ›</button>
+            </div>
           </div>
         </div>
       )}

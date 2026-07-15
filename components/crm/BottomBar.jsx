@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { LifeBuoy, Sparkles } from 'lucide-react'
+import { LifeBuoy, Sparkles, MessageSquare, Radio } from 'lucide-react'
 import { useSidebar } from '@/lib/context/SidebarContext'
 import { useAIPanel } from '@/lib/context/AIPanelContext'
 import ZeoPanel from '@/components/crm/ZeoPanel'
@@ -23,9 +23,20 @@ export default function BottomBar() {
           transition: 'left 300ms ease-in-out, right 300ms ease-in-out',
         }}
       >
-        <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-          © {new Date().getFullYear()} HealthCRM
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+            © {new Date().getFullYear()} HealthCRM
+          </span>
+          <Link
+            href="/status"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:flex items-center gap-1 text-[11px] font-500 transition-colors hover:text-(--color-text-secondary)"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            <Radio size={12} /> System Status
+          </Link>
+        </div>
 
         <div className="flex items-center gap-2.5">
           {/* Ask Zeo — animated outline button */}
@@ -47,6 +58,16 @@ export default function BottomBar() {
               <span style={{ filter: 'drop-shadow(0 0 5px rgba(255,255,255,0.7))' }}>Ask Zeo</span>
             </button>
           </span>
+
+          <Link
+            href="/feedback"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-600 border border-(--color-border) transition-colors hover:bg-(--color-surface-2)"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <MessageSquare size={13} /> Feedback
+          </Link>
 
           <Link
             href="/tickets/new"
