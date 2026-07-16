@@ -141,7 +141,10 @@ function UserMenu() {
 export default function TopBar() {
   const { collapsed } = useSidebar()
   const { open } = useAIPanel()
+  const { hasPermission } = useOrg()
+  const pathname = usePathname()
   const crumbs = useBreadcrumb()
+  const settingsActive = pathname === '/settings' || pathname.startsWith('/settings/')
 
   return (
     <header
@@ -179,6 +182,17 @@ export default function TopBar() {
       {/* Right cluster */}
       <div className="flex items-center gap-1.5 shrink-0">
         <NotificationBell />
+        {hasPermission('settings') && (
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            title="Settings"
+            className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-(--color-surface-2)"
+            style={{ color: settingsActive ? 'var(--color-brand)' : 'var(--color-text-secondary)' }}
+          >
+            <Settings size={15} />
+          </Link>
+        )}
         <div className="w-px h-5 mx-1" style={{ background: 'var(--color-border)' }} />
         <UserMenu />
       </div>

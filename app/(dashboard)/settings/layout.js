@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText,
   ClipboardList, Stethoscope, Network, ShieldCheck, FileText, CreditCard, Code2, Hash,
-  ChevronDown,
+  ChevronDown, Zap,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -46,6 +46,7 @@ const GROUPS = [
   {
     label: 'Automation', icon: Workflow,
     children: [
+      { href: '/automation',             label: 'Automation',     icon: Zap,      permission: 'automation' },
       { href: '/settings/rules',         label: 'Workflow Rules', icon: Workflow, permission: 'settings.rules' },
       { href: '/settings/configuration', label: 'Integrations',   icon: Plug,     permission: 'settings.configuration' },
       { href: '/settings/developer',     label: 'Developer Hub',  icon: Code2,    permission: 'settings.configuration' },

@@ -17,7 +17,6 @@ import {
   CreditCard,
   Landmark,
   ArrowLeftRight,
-  Zap,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -25,7 +24,6 @@ import {
   Stethoscope,
   Pill,
   BarChart3,
-  BellRing,
   Search,
   Radio,
   Plus,
@@ -41,7 +39,6 @@ const navGroups = [
     label: "Overview",
     items: [
       { href: "/dashboard",      icon: LayoutDashboard, label: "Dashboard",     permission: "dashboard" },
-      { href: "/notifications",  icon: BellRing,        label: "Notifications", permission: "notifications" },
       { href: "/reports",        icon: BarChart3,        label: "Reports",       permission: "reports" },
     ],
   },
@@ -68,10 +65,6 @@ const navGroups = [
       { type: "billing",   permission: "billing" },
       { href: "/pharmacy", icon: Pill,        label: "Pharmacy",          permission: "pharmacy" },
     ],
-  },
-  {
-    label: "Tools",
-    items: [{ href: "/automation", icon: Zap, label: "Automation", permission: "automation" }],
   },
 ];
 
@@ -479,21 +472,6 @@ function SidebarContent({ pathname, setMobileOpen, forceExpanded = false }) {
         })}
       </nav>
 
-      {/* Bottom: settings */}
-      {hasPermission("settings") && (
-        <div className="px-2 pb-4 border-t border-(--color-border) pt-3">
-          <Link
-            href="/settings"
-            onClick={() => setMobileOpen(false)}
-            title={collapsed ? "Settings" : undefined}
-            className={navLinkClass(isActive("/settings"))}
-            style={navLinkStyle(isActive("/settings"))}
-          >
-            <Settings size={16} />
-            {!collapsed && "Settings"}
-          </Link>
-        </div>
-      )}
     </div>
   );
 }
