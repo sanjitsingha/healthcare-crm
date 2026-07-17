@@ -3,18 +3,23 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   UserRound, LogOut, Shield, Clock, Monitor,
-  Mail, CheckCircle, XCircle, Key, Activity, Palette, Check,
-  MapPin, Wifi, Crosshair, Timer,
+  Mail, CheckCircle, XCircle, Key, Activity,
+  MapPin, Wifi, Crosshair, Timer, CreditCard,
 } from 'lucide-react'
 import { Card, Avatar } from '@/components/ui'
 import { useOrg } from '@/lib/context/OrgContext'
 import { createClient } from '@/lib/supabase/client'
-import { updateOrganization } from '@/lib/supabase/queries'
 import { logAudit, AUDIT } from '@/lib/audit'
-import { THEMES, applyTheme, DEFAULT_THEME } from '@/lib/theme'
 import { getPref, setPref } from '@/lib/prefs'
 import TwoFactorSettings from '@/components/crm/TwoFactorSettings'
+import SubscriptionPanel from '@/components/crm/SubscriptionPanel'
 import { format, formatDistanceToNow, subDays, isToday, isYesterday } from 'date-fns'
+
+const TABS = [
+  { key: 'profile',      label: 'Profile',            icon: UserRound },
+  { key: 'privacy',      label: 'Privacy & Security', icon: Shield },
+  { key: 'subscription', label: 'Subscription',       icon: CreditCard },
+]
 
 const TIMEOUT_OPTIONS = [
   { label: '5 min',  value: 5 },
@@ -85,19 +90,14 @@ function getDayLabel(date) {
 export default function AccountPage() {
   const { user, org, orgId } = useOrg()
   const router    = useRouter()
+  const [tab,             setTab]             = useState('profile')
   const [deviceInfo,      setDeviceInfo]      = useState('')
   const [sessionLog,      setSessionLog]      = useState([])
   const [signingOut,      setSigningOut]      = useState(false)
-  const [theme,           setTheme]           = useState(DEFAULT_THEME)
   const [net,             setNet]             = useState(null)
   const [geoStatus,       setGeoStatus]       = useState('idle')
   const [inactivityOn,    setInactivityOn]    = useState(false)
   const [inactivityMins,  setInactivityMins]  = useState(30)
-
-  useEffect(() => {
-    const stored = getPref('app_theme')
-    setTheme(stored || org?.settings?.theme || DEFAULT_THEME)
-  }, [org])
 
   // Load inactivity prefs on mount
   useEffect(() => {
@@ -116,16 +116,6 @@ export default function AccountPage() {
       ? `Session timeout enabled — auto-logout after ${TIMEOUT_OPTIONS.find(o => o.value === mins)?.label || `${mins} min`}`
       : 'Session timeout disabled'
     logAudit({ action: AUDIT.SETTINGS_CHANGE, description: desc, metadata: { setting: 'session_timeout', enabled, duration_mins: mins } })
-  }
-
-  const chooseTheme = async (key) => {
-    setTheme(key)
-    applyTheme(key)
-    setPref('app_theme', key)
-    logAudit({ action: AUDIT.SETTINGS_CHANGE, description: `Changed app theme to "${key}"`, metadata: { setting: 'theme', value: key } })
-    if (orgId) {
-      try { await updateOrganization(orgId, { settings: { ...(org?.settings || {}), theme: key } }) } catch {}
-    }
   }
 
   const displayName  = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'
@@ -248,6 +238,31 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-4">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-(--color-border) overflow-x-auto">
+        {TABS.map(t => {
+          const active = tab === t.key
+          const Icon = t.icon
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-600 border-b-2 -mb-px whitespace-nowrap transition-colors"
+              style={active
+                ? { borderColor: 'var(--color-brand)', color: 'var(--color-brand)' }
+                : { borderColor: 'transparent', color: 'var(--color-text-muted)' }}
+            >
+              <Icon size={15} />
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ══ PROFILE TAB ══ */}
+      {tab === 'profile' && (
+      <div className="space-y-4">
 
       {/* ── Profile + Sign Out ── */}
       <Card className="p-5">
@@ -313,6 +328,13 @@ export default function AccountPage() {
         </div>
       </Card>
 
+      </div>
+      )}
+
+      {/* ══ PRIVACY & SECURITY TAB ══ */}
+      {tab === 'privacy' && (
+      <div className="space-y-4">
+
       {/* ── Session Timeout ── */}
       <Card className="p-5">
         <SectionHead
@@ -371,35 +393,6 @@ export default function AccountPage() {
             </div>
           </div>
         )}
-      </Card>
-
-      {/* ── Appearance / Theme ── */}
-      <Card className="p-5">
-        <SectionHead icon={Palette} title="Appearance" description="Choose the app's accent color" />
-        <div className="flex flex-wrap gap-3">
-          {Object.values(THEMES).map(t => {
-            const active = theme === t.key
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => chooseTheme(t.key)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all"
-                style={active
-                  ? { borderColor: t.brand, background: t.tint }
-                  : { borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
-              >
-                <span className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center" style={{ background: t.brand }}>
-                  {active && <Check size={14} className="text-white" />}
-                </span>
-                <div className="text-left">
-                  <p className="text-sm font-600" style={{ color: 'var(--color-text-primary)' }}>{t.name}</p>
-                  <p className="text-[10px] font-mono" style={{ color: 'var(--color-text-muted)' }}>{t.brand}</p>
-                </div>
-              </button>
-            )
-          })}
-        </div>
       </Card>
 
       {/* ── Two-Factor Authentication ── */}
@@ -514,6 +507,16 @@ export default function AccountPage() {
           History is stored locally on this device. Entries older than 30 days are automatically removed.
         </p>
       </Card>
+
+      </div>
+      )}
+
+      {/* ══ SUBSCRIPTION TAB ══ */}
+      {tab === 'subscription' && (
+      <div className="space-y-4">
+        <SubscriptionPanel />
+      </div>
+      )}
 
     </div>
   )

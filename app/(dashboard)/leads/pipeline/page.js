@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui'
 import clsx from 'clsx'
 
 const DEFAULT_LEAD_STAGES = [
-  { name: 'New',        color: '#135BFB' },
+  { name: 'New',        color: '#393E9A' },
   { name: 'Contacted',  color: '#0ea5e9' },
   { name: 'Interested', color: '#f59e0b' },
   { name: 'Follow-up',  color: '#8b5cf6' },
@@ -361,7 +361,7 @@ export default function LeadPipelinePage() {
   const [dragOver, setDragOver] = useState(null)
 
   const stages = (org?.settings?.lead_stages || DEFAULT_LEAD_STAGES).map(s =>
-    typeof s === 'string' ? { name: s, color: '#135BFB' } : s
+    typeof s === 'string' ? { name: s, color: '#393E9A' } : s
   )
   const stageNames = new Set(stages.map(s => s.name))
   const staffMembers = org?.settings?.staff_members || []

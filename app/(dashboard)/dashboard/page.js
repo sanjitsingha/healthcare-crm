@@ -17,7 +17,7 @@ const STAGE_BAR_COLOR = {
   'Follow-up': '#f97316', Converted: '#10b981', Lost: '#ef4444',
 }
 
-const SRC_COLORS = ['#135BFB', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
+const SRC_COLORS = ['#393E9A', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
 
 function formatCurrency(n) {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`

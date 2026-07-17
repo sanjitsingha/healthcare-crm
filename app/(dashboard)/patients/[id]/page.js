@@ -77,7 +77,7 @@ export default function PatientDetailPage({ params }) {
   const { id } = use(params)
   const router = useRouter()
   const { orgId, org, hasPermission } = useOrg()
-  const patientStatuses = (org?.settings?.patient_statuses || DEFAULT_PATIENT_STATUSES).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
+  const patientStatuses = (org?.settings?.patient_statuses || DEFAULT_PATIENT_STATUSES).map(s => typeof s === 'string' ? { name: s, color: '#393E9A' } : s)
   const STATUS_STYLE = Object.fromEntries(patientStatuses.map(s => [s.name, { bg: s.color + '20', color: s.color }]))
   const [patient, setPatient] = useState(null)
   const [activities, setActivities] = useState([])
@@ -830,7 +830,7 @@ export default function PatientDetailPage({ params }) {
                   <div className="mb-4">
                     <div className="flex flex-wrap items-center gap-1.5">
                       {(patient.tags || []).map(t => t.tags).filter(Boolean).map(tag => {
-                        const tc = tag.color || '#135BFB'
+                        const tc = tag.color || '#393E9A'
                         return (
                           <span key={tag.id}
                             className="relative inline-flex items-center gap-1.5 pl-4 pr-2.5 py-1 text-xs font-600"

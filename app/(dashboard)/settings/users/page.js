@@ -9,7 +9,7 @@ import { logAudit, AUDIT } from '@/lib/audit'
 import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 
-const EMPTY_FORM = { name: '', designation: '', description: '', phone: '', email: '', roleId: '' }
+const EMPTY_FORM = { name: '', designation: '', description: '', phone: '', email: '', roleId: '', zeoAccess: false }
 
 export default function UsersPage() {
   const { org, orgId } = useOrg()
@@ -59,6 +59,7 @@ export default function UsersPage() {
           phone: form.phone.trim(),
           email: form.email.trim(),
           roleId: form.roleId || null,
+          zeoAccess: form.zeoAccess,
           orgId,
         }),
       })
@@ -83,6 +84,7 @@ export default function UsersPage() {
         status: 'invited',
         role_id: form.roleId || null,
         role_name: roleName,
+        zeo_access: form.zeoAccess,
       }
       setStaff(prev => [...prev, newMember])
       setSuccess(`Invitation sent to ${form.email}`)
@@ -249,6 +251,19 @@ export default function UsersPage() {
                   ))}
                 </select>
               </div>
+
+              <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-(--color-border) cursor-pointer" style={{ background: 'var(--color-surface)' }}>
+                <input
+                  type="checkbox"
+                  checked={form.zeoAccess}
+                  onChange={e => setForm(f => ({ ...f, zeoAccess: e.target.checked }))}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-xs font-600" style={{ color: 'var(--color-text-primary)' }}>Can use Zeo (AI assistant)</span>
+                  <span className="block text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Let this member ask Zeo about your CRM data. You can only set this when inviting.</span>
+                </span>
+              </label>
 
               <div className="flex justify-end gap-2 pt-1 border-t border-(--color-border)">
                 <Button variant="secondary" size="sm" type="button" onClick={resetForm}>Cancel</Button>

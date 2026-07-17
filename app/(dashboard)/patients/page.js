@@ -301,7 +301,7 @@ function ColumnToggle({ allColumns, visible, setVisible }) {
 // ── Main Page ──────────────────────────────────────────────────
 export default function PatientsPage() {
   const { orgId, org, hasPermission } = useOrg()
-  const patientStatuses = (org?.settings?.patient_statuses || DEFAULT_STATUSES).map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
+  const patientStatuses = (org?.settings?.patient_statuses || DEFAULT_STATUSES).map(s => typeof s === 'string' ? { name: s, color: '#393E9A' } : s)
   const STATUSES = patientStatuses.map(s => s.name)
   const STATUS_STYLE = Object.fromEntries(patientStatuses.map(s => [s.name, { bg: s.color + '20', color: s.color }]))
   const router = useRouter()
@@ -654,7 +654,7 @@ export default function PatientsPage() {
                         return (
                           <div className="flex flex-wrap items-center gap-1 max-w-60">
                             {pTags.map(tag => {
-                              const tc = tag.color || '#135BFB'
+                              const tc = tag.color || '#393E9A'
                               return (
                                 <span key={tag.id} className="relative inline-flex items-center pl-2.5 pr-2 py-0.5 text-[10px] font-600 whitespace-nowrap"
                                   style={{ background: tc, color: 'white', clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>

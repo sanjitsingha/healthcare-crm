@@ -14,7 +14,7 @@ export async function POST(req) {
     return json({ error: 'Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY is not set.' }, 500)
   }
 
-  const { userId, email, password, name, designation, description, phone, orgId } = await req.json()
+  const { userId, email, password, name, designation, description, phone, orgId, zeoAccess } = await req.json()
   if (!userId || !email || !password || !name || !orgId) {
     return json({ error: 'Missing required fields' }, 400)
   }
@@ -32,7 +32,7 @@ export async function POST(req) {
   // Set their password and profile metadata now.
   const { data, error } = await adminClient.auth.admin.updateUserById(userId, {
     password,
-    user_metadata: { name, designation, description: description || null, phone: phone || null, org_id: orgId, role: 'member' },
+    user_metadata: { name, designation, description: description || null, phone: phone || null, org_id: orgId, role: 'member', zeo_access: !!zeoAccess },
   })
 
   if (error) return json({ error: error.message }, 400)

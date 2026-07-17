@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 const STAGES = [
-  { label: 'New',        color: '#135BFB' },
+  { label: 'New',        color: '#393E9A' },
   { label: 'Contacted',  color: '#0ea5e9' },
   { label: 'Interested', color: '#f59e0b' },
   { label: 'Follow-up',  color: '#8b5cf6' },

@@ -55,8 +55,8 @@ export default function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="fixed bottom-12 right-4 z-50 w-96 max-w-[90vw] rounded-2xl border border-(--color-border) overflow-hidden"
-            style={{ background: 'var(--color-surface)', boxShadow: '0 16px 40px rgba(13,31,26,0.20)', animation: 'panelUp 0.22s cubic-bezier(0.22,1,0.36,1)' }}>
+          <div className="fixed top-15 right-3 z-50 w-96 max-w-[90vw] rounded-2xl border border-(--color-border) overflow-hidden"
+            style={{ background: 'var(--color-surface)', boxShadow: '0 16px 40px rgba(13,31,26,0.20)', animation: 'panelDown 0.22s cubic-bezier(0.22,1,0.36,1)' }}>
             {/* Header — title + (small) See all */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-(--color-border)" style={{ background: 'var(--color-surface-2)' }}>
               <p className="text-sm font-700" style={{ color: 'var(--color-text-primary)' }}>

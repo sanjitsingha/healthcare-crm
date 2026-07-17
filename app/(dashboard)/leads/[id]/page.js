@@ -1486,9 +1486,9 @@ export default function LeadDetailPage({ params }) {
   const displayAddr = lead.address || pat?.address || null;
 
   const stages = (org?.settings?.lead_stages || []).map((s) =>
-    typeof s === "string" ? { name: s, color: "#135BFB" } : s,
+    typeof s === "string" ? { name: s, color: "#393E9A" } : s,
   );
-  const stageC = stages.find((s) => s.name === lead.stage)?.color || "#135BFB";
+  const stageC = stages.find((s) => s.name === lead.stage)?.color || "#393E9A";
   const staffMembers = org?.settings?.staff_members || [];
   const doctors = org?.settings?.doctors || [];
   const assignee = lead.assigned_to
@@ -2131,7 +2131,7 @@ export default function LeadDetailPage({ params }) {
                         .map((t) => t.tags)
                         .filter(Boolean)
                         .map((tag) => {
-                          const tc = tag.color || "#135BFB";
+                          const tc = tag.color || "#393E9A";
                           return (
                             <span
                               key={tag.id}

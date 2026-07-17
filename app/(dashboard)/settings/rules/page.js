@@ -40,9 +40,9 @@ const ACTION_ICON = {
 // Color per action kind — used for left-border accent on action cards
 const KIND_COLOR = {
   stage: '#7c3aed', status: '#7c3aed', priority: '#f59e0b', source: '#0891b2',
-  tag: '#8b5cf6', staff: '#10b981', number: '#135BFB', text: '#64748b',
+  tag: '#8b5cf6', staff: '#10b981', number: '#393E9A', text: '#64748b',
   task: '#2563eb', followup: '#0891b2', notify: '#ea580c',
-  field: '#135BFB', custom: '#0891b2', convert: '#15803d',
+  field: '#393E9A', custom: '#0891b2', convert: '#15803d',
 }
 
 const blankCond   = ()       => ({ id: uid(), field: '', op: '==', value: '' })

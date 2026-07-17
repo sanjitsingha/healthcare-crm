@@ -11,7 +11,7 @@ import { toast } from '@/lib/toast'
 import { showConfirm } from '@/lib/confirm'
 
 const DEFAULT_LEAD_STAGES = [
-  { name: 'New',        color: '#135BFB' },
+  { name: 'New',        color: '#393E9A' },
   { name: 'Contacted',  color: '#0ea5e9' },
   { name: 'Interested', color: '#f59e0b' },
   { name: 'Follow-up',  color: '#8b5cf6' },
@@ -33,7 +33,7 @@ const STAGE_ICONS = {
   'Lost':       XCircle,
 }
 
-const PRESET_COLORS = ['#135BFB', '#0f6e56', '#1d4ed8', '#7c3aed', '#b45309', '#be185d', '#ef4444', '#f59e0b', '#10b981']
+const PRESET_COLORS = ['#393E9A', '#0f6e56', '#1d4ed8', '#7c3aed', '#b45309', '#be185d', '#ef4444', '#f59e0b', '#10b981']
 
 export default function TagsPage() {
   const { org, orgId } = useOrg()
@@ -42,20 +42,20 @@ export default function TagsPage() {
   const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [newTag, setNewTag] = useState({ name: '', color: '#135BFB', page: 'patients' })
+  const [newTag, setNewTag] = useState({ name: '', color: '#393E9A', page: 'patients' })
   const [saving, setSaving] = useState(false)
 
   // ── Stages ──
   const rawStages = org?.settings?.lead_stages || DEFAULT_LEAD_STAGES
   const [stages, setStages] = useState(() =>
-    rawStages.map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s)
+    rawStages.map(s => typeof s === 'string' ? { name: s, color: '#393E9A' } : s)
   )
   const [newStage, setNewStage] = useState('')
-  const [newStageColor, setNewStageColor] = useState('#135BFB')
+  const [newStageColor, setNewStageColor] = useState('#393E9A')
   const [savingStages, setSavingStages] = useState(false)
   const [showStageForm, setShowStageForm] = useState(false)
   const rawPatientStatuses = org?.settings?.patient_statuses || DEFAULT_PATIENT_STATUSES
-  const [patientStatuses, setPatientStatuses] = useState(() => rawPatientStatuses.map(s => typeof s === 'string' ? { name: s, color: '#135BFB' } : s))
+  const [patientStatuses, setPatientStatuses] = useState(() => rawPatientStatuses.map(s => typeof s === 'string' ? { name: s, color: '#393E9A' } : s))
   const [newPatientStatus, setNewPatientStatus] = useState('')
   const [newPatientStatusColor, setNewPatientStatusColor] = useState('#10b981')
   const [savingPatientStatuses, setSavingPatientStatuses] = useState(false)
@@ -77,7 +77,7 @@ export default function TagsPage() {
     if (!trimmed || stages.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) return
     await persistStages([...stages, { name: trimmed, color: newStageColor }])
     setNewStage('')
-    setNewStageColor('#135BFB')
+    setNewStageColor('#393E9A')
     setShowStageForm(false)
   }
 
@@ -113,7 +113,7 @@ export default function TagsPage() {
 
   useEffect(() => { loadTags() }, [orgId])
 
-  const resetForm = () => { setNewTag({ name: '', color: '#135BFB', page: 'patients' }); setShowForm(false) }
+  const resetForm = () => { setNewTag({ name: '', color: '#393E9A', page: 'patients' }); setShowForm(false) }
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -329,7 +329,7 @@ export default function TagsPage() {
           <div className="flex-1 min-w-40"><Input label="Stage Name *" placeholder="e.g. Negotiation" value={newStage} onChange={e => setNewStage(e.target.value)} required /></div>
           <div className="space-y-1.5"><label className="block text-xs font-500" style={{ color: 'var(--color-text-secondary)' }}>Color</label><div className="flex items-center gap-2"><div className="flex gap-1.5 flex-wrap">{PRESET_COLORS.map(c => <button key={c} type="button" onClick={() => setNewStageColor(c)} className="w-5 h-5 rounded-full border-2" style={{ background: c, borderColor: newStageColor === c ? 'white' : 'transparent', outline: newStageColor === c ? `2px solid ${c}` : 'none' }} />)}</div><input type="color" value={newStageColor} onChange={e => setNewStageColor(e.target.value)} className="w-7 h-7 rounded border border-(--color-border) p-0.5" /></div></div>
           <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-600 self-end mb-0.5" style={{ background: newStageColor + '15', borderColor: newStageColor + '50', color: newStageColor }}>{(() => { const I = STAGE_ICONS[newStage.trim()] || TrendingUp; return <I size={13} /> })()}{newStage || 'Preview'}</div>
-          <div className="flex gap-2 self-end mb-0.5"><Button type="submit" size="sm" disabled={savingStages || !newStage.trim()}>{savingStages ? 'Creating...' : 'Create'}</Button><button type="button" onClick={() => { setNewStage(''); setNewStageColor('#135BFB'); setShowStageForm(false) }} className="btn btn-secondary btn-icon"><X size={15} /></button></div>
+          <div className="flex gap-2 self-end mb-0.5"><Button type="submit" size="sm" disabled={savingStages || !newStage.trim()}>{savingStages ? 'Creating...' : 'Create'}</Button><button type="button" onClick={() => { setNewStage(''); setNewStageColor('#393E9A'); setShowStageForm(false) }} className="btn btn-secondary btn-icon"><X size={15} /></button></div>
         </form>}
       </Card>
 

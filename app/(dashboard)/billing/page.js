@@ -67,7 +67,7 @@ function printInvoice(inv, org) {
       ${org?.phone ? `<div style="font-size:12px;color:#6b7280">${org.phone}${org?.email ? ' · ' + org.email : ''}</div>` : ''}
     </div>
     <div style="text-align:right">
-      <div style="font-size:30px;font-weight:900;letter-spacing:3px;color:#135BFB">INVOICE</div>
+      <div style="font-size:30px;font-weight:900;letter-spacing:3px;color:#393E9A">INVOICE</div>
       <div style="font-size:13px;color:#374151;margin-top:2px">${inv.invoice_number}</div>
     </div>
   </div>

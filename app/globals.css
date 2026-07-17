@@ -16,9 +16,10 @@
 
 :root {
   --font-sans: 'DM Sans', system-ui, sans-serif;
-  --color-brand: #135BFB;
-  --color-brand-light: #3d78fc;
-  --color-brand-50: #e8effe;
+  --color-brand: #393E9A;
+  --color-brand-light: #5A60BE;
+  --color-brand-50: #ECECF6;
+  --color-bg: #ffffff;
   --color-surface: #ffffff;
   --color-surface-2: #f0f4f2;
   --color-border: #dce8e3;
@@ -32,7 +33,7 @@
    text-* utilities, .btn labels, headings, etc.) reads slightly larger app-wide.
    Bump this one value to scale everything proportionally. */
 html { font-size: 106.25%; } /* 17px base, up from the browser default 16px */
-body { font-family: var(--font-sans); background: var(--color-surface-2); color: var(--color-text-primary); }
+body { font-family: var(--font-sans); background: var(--color-surface); color: var(--color-text-primary); }
 
 .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
@@ -64,9 +65,9 @@ body { font-family: var(--font-sans); background: var(--color-surface-2); color:
   to   { transform: translateX(120%); opacity: 0; }
 }
 
-/* Notification panel: slide up from the bottom bar */
-@keyframes panelUp {
-  from { transform: translateY(8px); opacity: 0; }
+/* Notification panel: drop down from the top bar */
+@keyframes panelDown {
+  from { transform: translateY(-8px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
 

@@ -59,19 +59,34 @@ export default function ZeoPanel() {
     return () => window.removeEventListener('keydown', h)
   }, [open])
 
-  const send = (text) => {
+  const send = async (text) => {
     const q = (text ?? input).trim()
     if (!q || thinking) return
-    setMessages(m => [...m, { role: 'user', content: q }])
+
+    // Optimistic: show the user turn immediately. Build the transcript we POST
+    // from the previous messages + this turn (state updates are async).
+    const priorMessages = messages
+    const nextMessages = [...priorMessages, { role: 'user', content: q }]
+    setMessages(nextMessages)
     setInput('')
     setThinking(true)
-    setTimeout(() => {
+
+    try {
+      const res = await fetch('/api/ai/agent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          messages: nextMessages.map(m => ({ role: m.role, content: m.content })),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Zeo could not answer that.')
+      setMessages(m => [...m, { role: 'assistant', content: data.reply }])
+    } catch (err) {
+      setMessages(m => [...m, { role: 'assistant', content: `⚠️ ${err.message}`, error: true }])
+    } finally {
       setThinking(false)
-      setMessages(m => [...m, {
-        role: 'assistant',
-        content: "I'm Zeo — your CRM assistant. I'm not connected to your data yet, but soon I'll answer questions about your leads, patients, appointments and more.",
-      }])
-    }, 900)
+    }
   }
 
   const newChat = () => { setMessages([]); setInput(''); setThinking(false) }
@@ -100,7 +115,7 @@ export default function ZeoPanel() {
         {/* Header */}
         <div
           className="flex items-center gap-2.5 px-4 h-14 border-b border-(--color-border) shrink-0"
-          style={{ background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-light, #3a43b5))' }}
+          style={{ background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-light, #5A60BE))' }}
         >
           <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
             <Sparkles size={17} className="text-white" />
@@ -176,7 +191,7 @@ export default function ZeoPanel() {
             </button>
           </form>
           <p className="text-[10px] mt-1.5 text-center" style={{ color: 'var(--color-text-muted)' }}>
-            Zeo can make mistakes. Not connected to live data yet.
+            Zeo can make mistakes and only reads your data. Double-check important details.
           </p>
         </div>
       </aside>

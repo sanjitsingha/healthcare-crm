@@ -13,7 +13,7 @@ export async function POST(req) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!serviceRoleKey) return json({ error: 'Server misconfiguration: SUPABASE_SERVICE_ROLE_KEY is not set.' }, 500)
 
-  const { name, designation, description, phone, email, roleId, orgId } = await req.json()
+  const { name, designation, description, phone, email, roleId, orgId, zeoAccess } = await req.json()
   if (!name || !email || !orgId) return json({ error: 'Missing required fields' }, 400)
 
   const origin = req.headers.get('origin') || 'http://localhost:3000'
@@ -33,7 +33,7 @@ export async function POST(req) {
   }
 
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    data: { name, designation: designation || '', org_id: orgId, role_id: roleId || null },
+    data: { name, designation: designation || '', org_id: orgId, role_id: roleId || null, zeo_access: !!zeoAccess },
     redirectTo: `${origin}/auth/accept-invite`,
   })
 
@@ -76,6 +76,7 @@ export async function POST(req) {
                 has_login: true,
                 status: 'invited',
                 role_id: roleId || null,
+                zeo_access: !!zeoAccess,
               },
             ],
           },

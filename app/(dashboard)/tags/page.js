@@ -8,7 +8,7 @@ export default function TagsPage() {
   const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
-  const [newTag, setNewTag] = useState({ name: '', color: '#135BFB' })
+  const [newTag, setNewTag] = useState({ name: '', color: '#393E9A' })
   const [saving, setSaving] = useState(false)
 
   const loadTags = async () => {
@@ -39,7 +39,7 @@ export default function TagsPage() {
       })
       await loadTags()
       setCreateOpen(false)
-      setNewTag({ name: '', color: '#135BFB' })
+      setNewTag({ name: '', color: '#393E9A' })
     } catch (err) {
       alert(err.message)
     } finally {

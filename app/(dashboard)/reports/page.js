@@ -26,7 +26,7 @@ const STAGE_COLOR = {
   'Follow-up': '#ec4899', Converted: '#10b981', Lost: '#ef4444',
 }
 const APPT_COLOR = { booked: '#3b82f6', confirmed: '#10b981', completed: '#6b7280', cancelled: '#ef4444' }
-const PALETTE = ['#135BFB', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#64748b']
+const PALETTE = ['#393E9A', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#64748b']
 
 const RANGES = [
   { key: '7',   label: 'Last 7 days',  days: 7 },

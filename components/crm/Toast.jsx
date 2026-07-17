@@ -14,7 +14,7 @@ export const NOTIF_STYLE = {
   followup:        { icon: PhoneCall,   color: '#0ea5e9' },
   task:            { icon: CheckSquare, color: '#f59e0b' },
   consultation:    { icon: Stethoscope, color: '#ec4899' },
-  default:         { icon: Bell,        color: '#21297E' },
+  default:         { icon: Bell,        color: '#393E9A' },
 }
 
 // Presentational toast card — rectangle, icon on the left, title + info on the

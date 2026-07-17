@@ -1366,7 +1366,7 @@ export default function LeadsPage() {
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {leadTags.map(tag => {
-                              const tc = tag.color || '#135BFB'
+                              const tc = tag.color || '#393E9A'
                               return (
                                 <span key={tag.id} className="relative inline-flex items-center pl-2.5 pr-2 py-0.5 text-[12px] font-600 whitespace-nowrap"
                                   style={{ background: tc, color: 'white', clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%)' }}>

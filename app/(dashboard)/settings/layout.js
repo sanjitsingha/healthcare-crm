@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Building2, Users, Tags, LayoutGrid, UserRound, Plug, Workflow, ScrollText,
-  ClipboardList, Stethoscope, Network, ShieldCheck, FileText, CreditCard, Code2, Hash,
-  ChevronDown, Zap,
+  ClipboardList, ShieldCheck, FileText, Code2,
+  ChevronDown, Zap, Sparkles,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useOrg } from '@/lib/context/OrgContext'
@@ -13,20 +13,11 @@ import { useOrg } from '@/lib/context/OrgContext'
 // Top-level items (personal) — always shown, no group. permission: null = always visible.
 const TOP_ITEMS = [
   { href: '/settings/account',      label: 'Account',      icon: UserRound,  permission: null },
-  { href: '/settings/subscription', label: 'Subscription', icon: CreditCard, permission: null },
+  { href: '/settings/organization', label: 'Organization', icon: Building2,   permission: 'settings.organization' },
 ]
 
 // Grouped items — each parent holds related children.
 const GROUPS = [
-  {
-    label: 'Organization', icon: Building2,
-    children: [
-      { href: '/settings/organization', label: 'Organization', icon: Building2,   permission: 'settings.organization' },
-      { href: '/settings/departments',  label: 'Departments',  icon: Network,     permission: 'settings.departments' },
-      { href: '/settings/doctors',      label: 'Doctors',      icon: Stethoscope, permission: 'settings.doctors' },
-      { href: '/settings/id-formats',   label: 'ID Formats',   icon: Hash,        permission: 'settings.organization' },
-    ],
-  },
   {
     label: 'Users & Access', icon: ShieldCheck,
     children: [
@@ -49,6 +40,7 @@ const GROUPS = [
       { href: '/automation',             label: 'Automation',     icon: Zap,      permission: 'automation' },
       { href: '/settings/rules',         label: 'Workflow Rules', icon: Workflow, permission: 'settings.rules' },
       { href: '/settings/configuration', label: 'Integrations',   icon: Plug,     permission: 'settings.configuration' },
+      { href: '/settings/zeo',           label: 'Zeo AI',         icon: Sparkles, permission: 'settings.configuration' },
       { href: '/settings/developer',     label: 'Developer Hub',  icon: Code2,    permission: 'settings.configuration' },
     ],
   },
